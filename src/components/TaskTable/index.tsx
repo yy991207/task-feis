@@ -21,6 +21,7 @@ import {
   SortAscendingOutlined,
   SettingOutlined,
   EyeOutlined,
+  EditOutlined,
   CaretDownOutlined,
   CaretRightOutlined,
   UserOutlined,
@@ -59,6 +60,9 @@ import {
   updateTaskApi,
   patchTaskStatus,
   patchTaskAssignee,
+  addParticipants,
+  removeParticipant,
+  getTask,
   apiTaskToTask,
   toPriorityString,
   listSubtasks,
@@ -76,6 +80,13 @@ import {
 } from '@/services/sectionService'
 import type { ViewConfig, ColumnKey } from '@/config/viewConfig'
 import EditableInput from '@/components/EditableInput'
+import CustomFieldsModal from '@/components/CustomFieldsModal'
+import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
+import {
+  listCustomFields,
+  type ApiCustomField,
+  type CustomFieldType as ApiCustomFieldType,
+} from '@/services/customFieldService'
 import './index.less'
 
 const { Title } = Typography
@@ -149,6 +160,13 @@ type GroupModeKey = 'section' | 'none'
 type DateFieldKey = 'start' | 'due'
 type CalendarViewMode = 'month' | 'year'
 
+const INLINE_CREATE_FLOATING_SELECTOR = [
+  '.ant-popover',
+  '.ant-select-dropdown',
+  '.ant-picker-dropdown',
+  '.ant-tooltip',
+].join(',')
+
 const statusFilterLabelMap: Record<StatusFilterKey, string> = {
   all: '全部任务',
   todo: '未完成',
@@ -173,6 +191,12 @@ interface TaskTableProps {
   sections?: Section[]
   tasklist?: Tasklist
   selectedTaskGuid?: string
+  statusFilter?: StatusFilterKey
+  sortMode?: SortModeKey
+  mineOnly?: boolean
+  onStatusFilterChange?: (v: StatusFilterKey) => void
+  onSortModeChange?: (v: SortModeKey) => void
+  onMineOnlyChange?: (v: boolean) => void
   onTaskClick: (task: Task) => void
   onRefresh: () => void
   onTaskCreated?: (task: Task, section?: Section) => void
@@ -433,12 +457,22 @@ function DateConfigPanel({
   )
 }
 
+function isInlineCreateFloatingTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(INLINE_CREATE_FLOATING_SELECTOR))
+}
+
 export default function TaskTable({
   config,
   tasks,
   sections,
   tasklist,
   selectedTaskGuid,
+  statusFilter: controlledStatusFilter,
+  sortMode: controlledSortMode,
+  mineOnly: controlledMineOnly,
+  onStatusFilterChange,
+  onSortModeChange,
+  onMineOnlyChange,
   onTaskClick,
   onRefresh,
   onTaskCreated,
@@ -465,19 +499,37 @@ export default function TaskTable({
   const [submittingSectionGuid, setSubmittingSectionGuid] = useState<string | null>(null)
   const [animatedTaskGuid, setAnimatedTaskGuid] = useState<string | null>(null)
   const [animatedSectionGuid, setAnimatedSectionGuid] = useState<string | null>(null)
+  const inlineCreateRowRef = useRef<HTMLDivElement | null>(null)
+  const inlineCreateSubmittingRef = useRef<string | null>(null)
+  const inlineCreateSubmitRef = useRef<(sectionGuid?: string) => void>(() => undefined)
   const [inlineCreateFocusedField, setInlineCreateFocusedField] = useState<
-    'title' | 'assignee' | 'start' | 'due' | null
+    'title' | 'assignee' | 'priority' | 'start' | 'due' | null
   >(null)
-  const [statusFilter, setStatusFilter] = useState<StatusFilterKey>(
+  const [internalStatusFilter, setInternalStatusFilter] = useState<StatusFilterKey>(
     config.toolbar.statusFilterLabel === '未完成' ? 'todo' : 'all',
   )
-  const [sortMode, setSortMode] = useState<SortModeKey>(
+  const [internalSortMode, setInternalSortMode] = useState<SortModeKey>(
     config.toolbar.sortLabel === '截止时间' ? 'due' : 'custom',
   )
+  const statusFilter = controlledStatusFilter ?? internalStatusFilter
+  const sortMode = controlledSortMode ?? internalSortMode
+  const setStatusFilter = (v: StatusFilterKey) => {
+    setInternalStatusFilter(v)
+    onStatusFilterChange?.(v)
+  }
+  const setSortMode = (v: SortModeKey) => {
+    setInternalSortMode(v)
+    onSortModeChange?.(v)
+  }
   const [groupMode, setGroupMode] = useState<GroupModeKey>(
     config.groupBySection ? 'section' : 'none',
   )
-  const [mineOnlyFilter, setMineOnlyFilter] = useState(false)
+  const [internalMineOnly, setInternalMineOnly] = useState(false)
+  const mineOnlyFilter = controlledMineOnly ?? internalMineOnly
+  const setMineOnlyFilter = (v: boolean) => {
+    setInternalMineOnly(v)
+    onMineOnlyChange?.(v)
+  }
   const [hasDueFilter, setHasDueFilter] = useState(false)
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ExtendedColumnKey[]>(config.columns)
   const [localSections, setLocalSections] = useState<Section[]>(sections ?? [])
@@ -529,6 +581,63 @@ export default function TaskTable({
     }
   }, [subtasksByGuid])
   const [creatingCustomField, setCreatingCustomField] = useState(false)
+  const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorInitialType, setEditorInitialType] = useState<ApiCustomFieldType>('text')
+  const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
+  const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
+  void creatingCustomField
+  void setCreatingCustomField
+
+  const apiToCustomFieldDef = (f: ApiCustomField): CustomFieldDef => ({
+    guid: f.field_id,
+    name: f.name,
+    type:
+      f.field_type === 'select'
+        ? 'single_select'
+        : f.field_type === 'date'
+          ? 'datetime'
+          : (f.field_type as CustomFieldDef['type']),
+    options: (f.options ?? []).map((o) => ({ guid: o.value, name: o.label })),
+  })
+
+  // 加载项目自定义字段
+  useEffect(() => {
+    if (!tasklist) return
+    let cancelled = false
+    void listCustomFields(tasklist.guid)
+      .then((list) => {
+        if (cancelled) return
+        setRawCustomFields(list)
+        const defs = list.map(apiToCustomFieldDef)
+        const prev = tasklist.custom_fields ?? []
+        const changed =
+          prev.length !== defs.length ||
+          prev.some((p, i) => p.guid !== defs[i]?.guid || p.name !== defs[i]?.name)
+        if (changed) {
+          onTasklistUpdated?.({ ...tasklist, custom_fields: defs })
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasklist?.guid])
+
+  const reloadCustomFields = async () => {
+    if (!tasklist) return
+    try {
+      const list = await listCustomFields(tasklist.guid)
+      setRawCustomFields(list)
+      onTasklistUpdated?.({
+        ...tasklist,
+        custom_fields: list.map(apiToCustomFieldDef),
+      })
+    } catch {
+      // ignore
+    }
+  }
   const animationTimerRef = useRef<number | null>(null)
   const inlineCreateInteractingRef = useRef(false)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -578,7 +687,8 @@ export default function TaskTable({
   }, [])
 
   const handleInlineCreate = async (sectionGuid?: string) => {
-    if (submittingSectionGuid === sectionGuid) {
+    const submittingKey = sectionGuid ?? '__default__'
+    if (inlineCreateSubmittingRef.current === submittingKey || submittingSectionGuid === sectionGuid) {
       return
     }
     const summary = newTaskTitle.trim()
@@ -586,6 +696,7 @@ export default function TaskTable({
       resetInlineCreate()
       return
     }
+    inlineCreateSubmittingRef.current = submittingKey
     setSubmittingSectionGuid(sectionGuid ?? null)
     try {
       const assigneeId = newTaskAssigneeIds.length > 0
@@ -641,9 +752,37 @@ export default function TaskTable({
         duration: 3,
       })
     } finally {
+      inlineCreateSubmittingRef.current = null
       setSubmittingSectionGuid(null)
     }
   }
+
+  inlineCreateSubmitRef.current = (sectionGuid?: string) => {
+    void handleInlineCreate(sectionGuid)
+  }
+
+  useEffect(() => {
+    if (!creatingInSection) {
+      return undefined
+    }
+
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      const row = inlineCreateRowRef.current
+      if (!row || !(target instanceof Node)) {
+        return
+      }
+      if (row.contains(target) || isInlineCreateFloatingTarget(target)) {
+        return
+      }
+
+      // 行内新建任务要支持“点空白保存”，但点负责人、日期等浮层不能误提交。
+      inlineCreateSubmitRef.current(creatingInSection)
+    }
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  }, [creatingInSection])
 
   const resetInlineCreate = () => {
     setCreatingInSection(null)
@@ -792,6 +931,7 @@ export default function TaskTable({
   }
 
   const [editingSectionGuid, setEditingSectionGuid] = useState<string | null>(null)
+
   const [editingSectionName, setEditingSectionName] = useState('')
 
   const handleStartCreateSection = async () => {
@@ -1135,30 +1275,6 @@ export default function TaskTable({
     setVisibleColumnKeys((prev) => prev.filter((item) => item !== column))
   }
 
-  const handleCreateCustomTextField = async () => {
-    if (!tasklist || creatingCustomField) {
-      return
-    }
-
-    setCreatingCustomField(true)
-    const nextIndex = tasklist.custom_fields.filter((field) => field.type === 'text').length + 1
-    const nextField: CustomFieldDef = {
-      guid: `cf_${Date.now().toString(36)}`,
-      name: `文字字段${nextIndex}`,
-      type: 'text',
-    }
-
-    try {
-      const nextTasklist = { ...tasklist, custom_fields: [...tasklist.custom_fields, nextField] }
-      onTasklistUpdated?.(nextTasklist)
-      handleAddVisibleColumn(toCustomFieldColumnKey(nextField.guid))
-    } catch {
-      message.error('新增字段失败')
-    } finally {
-      setCreatingCustomField(false)
-    }
-  }
-
   const handleRenameTasklist = async (rawName: string) => {
     setEditingTitle(false)
     if (!tasklist) return
@@ -1237,61 +1353,126 @@ export default function TaskTable({
     </div>
   )
 
+  const customFieldTypeMenuItems = [
+    { key: 'text', label: '文本', type: 'text' as ApiCustomFieldType },
+    { key: 'number', label: '数字', type: 'number' as ApiCustomFieldType },
+    { key: 'date', label: '日期', type: 'date' as ApiCustomFieldType },
+    { key: 'select', label: '单选', type: 'select' as ApiCustomFieldType },
+    { key: 'multi_select', label: '多选', type: 'multi_select' as ApiCustomFieldType },
+    { key: 'member', label: '成员', type: 'member' as ApiCustomFieldType },
+  ]
+
+  const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
+  const [headerAddOpen, setHeaderAddOpen] = useState(false)
+
+  const closeFieldConfig = () => {
+    setFieldConfigOpen(false)
+    setHeaderAddOpen(false)
+  }
+
+  const handlePickType = (t: ApiCustomFieldType) => {
+    closeFieldConfig()
+    setEditorField(null)
+    setEditorInitialType(t)
+    setEditorOpen(true)
+  }
+
+  const handleEditField = (field: ApiCustomField) => {
+    closeFieldConfig()
+    setEditorField(field)
+    setEditorInitialType(field.field_type)
+    setEditorOpen(true)
+  }
+
   const fieldConfigPanel = (
     <div className="toolbar-popover-panel field-config-panel">
       <Typography.Text strong className="popover-title">
         字段配置
       </Typography.Text>
       {isTasklistView && (
-        <Button
-          type="text"
-          size="small"
-          className="field-config-create-btn"
-          icon={<PlusOutlined />}
-          loading={creatingCustomField}
-          onClick={() => void handleCreateCustomTextField()}
+        <Dropdown
+          trigger={['hover']}
+          placement="rightTop"
+          menu={{
+            items: customFieldTypeMenuItems.map((it) => ({
+              key: it.key,
+              label: it.label,
+              onClick: () => handlePickType(it.type),
+            })),
+          }}
         >
-          添加自定义文字字段
-        </Button>
+          <Button
+            type="text"
+            size="small"
+            className="field-config-create-btn"
+            icon={<PlusOutlined />}
+          >
+            新建自定义字段
+          </Button>
+        </Dropdown>
       )}
       <div className="field-config-list">
-        {allFieldOptions.map((field) => (
-          <div
-            key={field.key}
-            className={`field-config-row${field.isVisible ? ' is-visible' : ''}`}
-          >
-            <button
-              type="button"
-              className="field-config-row-main"
-              onClick={() => handleAddVisibleColumn(field.key)}
+        {allFieldOptions.map((field) => {
+          const cfGuid =
+            typeof field.key === 'string' && field.key.startsWith('custom:')
+              ? field.key.slice(7)
+              : null
+          const cfRaw = cfGuid
+            ? rawCustomFields.find((r) => r.field_id === cfGuid)
+            : null
+          return (
+            <div
+              key={field.key}
+              className={`field-config-row${field.isVisible ? ' is-visible' : ''}`}
             >
-              <span className="field-config-row-label">{field.label}</span>
-            </button>
-            {field.isVisible ? (
-              <Button
-                type="text"
-                size="small"
-                className="field-config-row-action"
-                icon={<EyeOutlined />}
-                onClick={() => handleRemoveVisibleColumn(field.key)}
-              />
-            ) : (
-              <Button
-                type="text"
-                size="small"
-                className="field-config-row-action"
-                icon={<PlusOutlined />}
+              <button
+                type="button"
+                className="field-config-row-main"
                 onClick={() => handleAddVisibleColumn(field.key)}
-              />
-            )}
-          </div>
-        ))}
+              >
+                <span className="field-config-row-label">{field.label}</span>
+              </button>
+              {cfRaw && (
+                <Button
+                  type="text"
+                  size="small"
+                  className="field-config-row-action"
+                  icon={<EditOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleEditField(cfRaw)
+                  }}
+                />
+              )}
+              {field.isVisible ? (
+                <Button
+                  type="text"
+                  size="small"
+                  className="field-config-row-action"
+                  icon={<EyeOutlined />}
+                  onClick={() => handleRemoveVisibleColumn(field.key)}
+                />
+              ) : (
+                <Button
+                  type="text"
+                  size="small"
+                  className="field-config-row-action"
+                  icon={<PlusOutlined />}
+                  onClick={() => handleAddVisibleColumn(field.key)}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 
   const createTaskInlineRow = (sectionGuid: string) => (
-    <div className="task-row creating task-row-enter inline-create-row">
+    <div
+      ref={inlineCreateRowRef}
+      className="task-row creating task-row-enter inline-create-row"
+    >
       <div className="cell cell-checkbox">
         <Checkbox disabled />
       </div>
@@ -1322,12 +1503,19 @@ export default function TaskTable({
         </div>
       )}
       {showColumn('priority') && (
-        <div className="cell cell-priority">
+        <div
+          className="cell cell-priority"
+          onMouseDownCapture={markInlineCreateInteracting}
+        >
           <Select
             size="small"
             variant="borderless"
             value={newTaskPriority}
             onChange={(value) => setNewTaskPriority(value)}
+            onDropdownVisibleChange={(open) => {
+              if (open) markInlineCreateInteracting()
+              setInlineCreateFocusedField(open ? 'priority' : null)
+            }}
             style={{ width: '100%' }}
             options={[
               { label: '无优先级', value: Priority.None },
@@ -1472,13 +1660,6 @@ export default function TaskTable({
         {isTasklistView ? (
           <>
             <div className="toolbar-left-actions">
-              {config.toolbar.showCreate && (
-                <Dropdown menu={createMenuItems}>
-                  <Button size="small" icon={<PlusOutlined />} className="toolbar-create-btn">
-                    新建任务 <DownOutlined style={{ fontSize: 10, marginLeft: 2 }} />
-                  </Button>
-                </Dropdown>
-              )}
               <Dropdown menu={statusMenu} trigger={['click']}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<CheckCircleOutlined />}>
                   {statusFilterLabelMap[statusFilter]}
@@ -1506,7 +1687,7 @@ export default function TaskTable({
                   分组: {groupLabelMap[groupMode]}
                 </Button>
               </Dropdown>
-              <Popover trigger="click" placement="bottomRight" content={fieldConfigPanel}>
+              <Popover trigger="click" placement="bottomRight" open={fieldConfigOpen} onOpenChange={setFieldConfigOpen} content={fieldConfigPanel}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<SettingOutlined />}>
                   字段配置
                 </Button>
@@ -1551,7 +1732,7 @@ export default function TaskTable({
                 </Button>
               )}
               {config.toolbar.showFieldConfig && (
-                <Popover trigger="click" placement="bottomRight" content={fieldConfigPanel}>
+                <Popover trigger="click" placement="bottomRight" open={fieldConfigOpen} onOpenChange={setFieldConfigOpen} content={fieldConfigPanel}>
                   <Button size="small" type="text" icon={<SettingOutlined />}>
                     字段配置
                   </Button>
@@ -1652,7 +1833,7 @@ export default function TaskTable({
               <span>{field.name}</span>
             </div>
           ))}
-          <Popover trigger="click" placement="bottomRight" content={fieldConfigPanel}>
+          <Popover trigger="click" placement="bottomRight" open={headerAddOpen} onOpenChange={setHeaderAddOpen} content={fieldConfigPanel}>
             <div className="col col-add">
               <PlusOutlined />
             </div>
@@ -1865,6 +2046,30 @@ export default function TaskTable({
           )}
         </>
       </div>
+      {tasklist && (
+        <CustomFieldsModal
+          open={customFieldsModalOpen}
+          projectId={tasklist.guid}
+          onClose={() => setCustomFieldsModalOpen(false)}
+          onChanged={() => void reloadCustomFields()}
+        />
+      )}
+      {tasklist && (
+        <CustomFieldEditorModal
+          open={editorOpen}
+          projectId={tasklist.guid}
+          initialType={editorInitialType}
+          field={editorField}
+          existingFields={rawCustomFields}
+          onClose={() => setEditorOpen(false)}
+          onSaved={() => void reloadCustomFields()}
+          onDeleted={() => void reloadCustomFields()}
+          onPickExisting={(f) => {
+            // 直接把字段列设为可见
+            handleAddVisibleColumn(toCustomFieldColumnKey(f.field_id))
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1930,7 +2135,33 @@ function TaskRow({
     }
   }
 
+  const handlePriorityChange = async (nextPriority: Priority) => {
+    if (nextPriority === task.priority) return
+    const prev = task
+    onUpdate({ ...task, priority: nextPriority })
+    try {
+      const apiTask = await updateTaskApi(task.guid, {
+        priority: toPriorityString(nextPriority),
+      })
+      onUpdate(apiTaskToTask(apiTask))
+    } catch {
+      onUpdate(prev)
+      message.error('更新优先级失败')
+    }
+  }
+
   const handleAssigneeChange = async (values: string[]) => {
+    const currentAssignees = task.members
+      .filter((m) => m.role === 'assignee')
+      .map((m) => m.id)
+    const currentPrimary = currentAssignees[0] ?? null
+    const desiredPrimary = values[0] ?? null
+
+    const toAdd = values.slice(1).filter((id) => !currentAssignees.includes(id))
+    const toRemove = currentAssignees
+      .slice(1)
+      .filter((id) => !values.includes(id))
+
     const newMembers = [
       ...values.map((id) => ({
         id,
@@ -1942,8 +2173,17 @@ function TaskRow({
     ]
     onUpdate({ ...task, members: newMembers })
     try {
-      const apiTask = await patchTaskAssignee(task.guid, values[0] ?? null)
-      onUpdate(apiTaskToTask(apiTask))
+      if (desiredPrimary !== currentPrimary) {
+        await patchTaskAssignee(task.guid, desiredPrimary)
+      }
+      if (toAdd.length > 0) {
+        await addParticipants(task.guid, toAdd)
+      }
+      for (const uid of toRemove) {
+        await removeParticipant(task.guid, uid)
+      }
+      const fresh = await getTask(task.guid)
+      onUpdate(apiTaskToTask(fresh))
     } catch {
       onUpdate(task)
       message.error('更新负责人失败')
@@ -2040,22 +2280,46 @@ function TaskRow({
         </div>
       )}
       {has('priority') && (
-        <div className="cell cell-priority">
-          {showPriority ? (
-            <Tag
-              variant="filled"
-              className="priority-tag"
-              style={{
-                color: PriorityColor[task.priority],
-                backgroundColor: `${PriorityColor[task.priority]}1a`,
-              }}
-            >
-              <FlagFilled />
-              <span>{PriorityLabel[task.priority]}</span>
-            </Tag>
-          ) : (
-            <span className="priority-placeholder">-</span>
-          )}
+        <div className="cell cell-priority" onClick={(e) => e.stopPropagation()}>
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              selectable: true,
+              selectedKeys: [String(task.priority)],
+              items: [
+                { key: String(Priority.None), label: '无优先级' },
+                { key: String(Priority.Low), label: '低' },
+                { key: String(Priority.Medium), label: '中' },
+                { key: String(Priority.High), label: '高' },
+                { key: String(Priority.Urgent), label: '紧急' },
+              ],
+              onClick: ({ key }) => {
+                void handlePriorityChange(Number(key) as Priority)
+              },
+            }}
+          >
+            {showPriority ? (
+              <Tag
+                variant="filled"
+                className="priority-tag priority-tag-editable"
+                style={{
+                  color: PriorityColor[task.priority],
+                  backgroundColor: `${PriorityColor[task.priority]}1a`,
+                  cursor: 'pointer',
+                }}
+              >
+                <FlagFilled />
+                <span>{PriorityLabel[task.priority]}</span>
+              </Tag>
+            ) : (
+              <span
+                className="priority-placeholder"
+                style={{ cursor: 'pointer', display: 'inline-block', minWidth: 24 }}
+              >
+                -
+              </span>
+            )}
+          </Dropdown>
         </div>
       )}
       {has('assignee') && (

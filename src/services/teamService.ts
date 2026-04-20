@@ -8,15 +8,17 @@ export interface TeamMember {
   joined_at: string
 }
 
-export function listMembers(): Promise<TeamMember[]> {
+const currentTeamId = (teamId?: string) => encodeURIComponent(teamId || appConfig.team_id)
+
+export function listMembers(teamId?: string): Promise<TeamMember[]> {
   return request<TeamMember[]>(
-    `api/v1/task-center/teams/${appConfig.team_id}/members?user_id=${encodeURIComponent(appConfig.user_id)}`,
+    `api/v1/task-center/teams/${currentTeamId(teamId)}/members?user_id=${encodeURIComponent(appConfig.user_id)}`,
   )
 }
 
-export function addMembers(userIds: string[]): Promise<void> {
+export function addMembers(userIds: string[], teamId?: string): Promise<void> {
   return request<void>(
-    `api/v1/task-center/teams/${appConfig.team_id}/members`,
+    `api/v1/task-center/teams/${currentTeamId(teamId)}/members`,
     {
       method: 'POST',
       body: JSON.stringify({ user_id: appConfig.user_id, user_ids: userIds }),
@@ -24,9 +26,9 @@ export function addMembers(userIds: string[]): Promise<void> {
   )
 }
 
-export function removeMember(targetUserId: string): Promise<void> {
+export function removeMember(targetUserId: string, teamId?: string): Promise<void> {
   return request<void>(
-    `api/v1/task-center/teams/${appConfig.team_id}/members/${targetUserId}?user_id=${encodeURIComponent(appConfig.user_id)}`,
+    `api/v1/task-center/teams/${currentTeamId(teamId)}/members/${encodeURIComponent(targetUserId)}?user_id=${encodeURIComponent(appConfig.user_id)}`,
     { method: 'DELETE' },
   )
 }
@@ -34,9 +36,10 @@ export function removeMember(targetUserId: string): Promise<void> {
 export function updateMemberRole(
   targetUserId: string,
   role: 'admin' | 'member',
+  teamId?: string,
 ): Promise<void> {
   return request<void>(
-    `api/v1/task-center/teams/${appConfig.team_id}/members/${targetUserId}`,
+    `api/v1/task-center/teams/${currentTeamId(teamId)}/members/${encodeURIComponent(targetUserId)}`,
     {
       method: 'PUT',
       body: JSON.stringify({ user_id: appConfig.user_id, role }),
@@ -44,9 +47,9 @@ export function updateMemberRole(
   )
 }
 
-export function transferOwner(newOwnerId: string): Promise<void> {
+export function transferOwner(newOwnerId: string, teamId?: string): Promise<void> {
   return request<void>(
-    `api/v1/task-center/teams/${appConfig.team_id}/transfer`,
+    `api/v1/task-center/teams/${currentTeamId(teamId)}/transfer`,
     {
       method: 'POST',
       body: JSON.stringify({

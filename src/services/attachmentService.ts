@@ -14,6 +14,17 @@ export interface ApiAttachment {
   is_deleted?: boolean
 }
 
+export interface PresignAttachmentResponse {
+  attachment_id: string
+  upload_url: string
+  upload_headers: Record<string, string>
+  oss_key: string
+  expires_in: number
+  final_url: string
+}
+
+export type AttachmentOwnerType = 'task' | 'comment'
+
 const uid = () => encodeURIComponent(appConfig.user_id)
 
 export async function listAttachments(taskId: string): Promise<ApiAttachment[]> {
@@ -28,16 +39,76 @@ export async function getAttachment(attachmentId: string): Promise<ApiAttachment
   )
 }
 
+export async function presignAttachment(
+  taskId: string,
+  file: File,
+  ownerType: AttachmentOwnerType = 'task',
+): Promise<PresignAttachmentResponse> {
+  return request<PresignAttachmentResponse>(
+    `api/v1/task-center/tasks/${taskId}/attachments/presign`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: appConfig.user_id,
+        file_name: file.name,
+        file_size: file.size,
+        content_type: file.type || undefined,
+        owner_type: ownerType,
+      }),
+    },
+  )
+}
+
+export async function completeAttachment(
+  attachmentId: string,
+): Promise<ApiAttachment> {
+  return request<ApiAttachment>(
+    `api/v1/task-center/attachments/${attachmentId}/complete?user_id=${uid()}`,
+    { method: 'POST' },
+  )
+}
+
+async function putFileToOss(
+  file: File,
+  uploadUrl: string,
+  uploadHeaders: Record<string, string>,
+  onProgress?: (percent: number) => void,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    Object.entries(uploadHeaders ?? {}).forEach(([k, v]) => {
+      xhr.setRequestHeader(k, v)
+    })
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100))
+      }
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error(`OSS 上传失败 (HTTP ${xhr.status})`))
+    }
+    xhr.onerror = () => reject(new Error('OSS 上传网络错误'))
+    xhr.send(file)
+  })
+}
+
+/**
+ * 三步上传：presign -> PUT OSS -> complete
+ */
 export async function uploadAttachment(
   taskId: string,
   file: File,
+  options?: {
+    ownerType?: AttachmentOwnerType
+    onProgress?: (percent: number) => void
+  },
 ): Promise<ApiAttachment> {
-  const form = new FormData()
-  form.append('file', file)
-  return request<ApiAttachment>(
-    `api/v1/task-center/tasks/${taskId}/attachments?user_id=${uid()}`,
-    { method: 'POST', body: form },
-  )
+  const ownerType = options?.ownerType ?? 'task'
+  const presigned = await presignAttachment(taskId, file, ownerType)
+  await putFileToOss(file, presigned.upload_url, presigned.upload_headers, options?.onProgress)
+  return completeAttachment(presigned.attachment_id)
 }
 
 export async function deleteAttachment(attachmentId: string): Promise<void> {

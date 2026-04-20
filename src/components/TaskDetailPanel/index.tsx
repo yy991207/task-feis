@@ -24,8 +24,6 @@ import {
   HistoryOutlined,
   NodeIndexOutlined,
   ForkOutlined,
-  ShareAltOutlined,
-  CopyOutlined,
   AlignLeftOutlined,
   SmileOutlined,
   UsergroupAddOutlined,
@@ -50,6 +48,7 @@ import { listMembers } from '@/services/teamService'
 import {
   listAttachments,
   uploadAttachment,
+  getAttachment,
   deleteAttachment,
   downloadAttachment,
   type ApiAttachment,
@@ -62,6 +61,8 @@ import {
   deleteTaskApi,
   patchTaskStatus,
   patchTaskAssignee,
+  addParticipants,
+  removeParticipant,
   listSubtasks,
   getTask,
   apiTaskToTask,
@@ -69,6 +70,16 @@ import {
 import './index.less'
 
 const { Text } = Typography
+
+const SUBTASK_CREATE_FLOATING_SELECTOR = [
+  '.ant-popover',
+  '.ant-select-dropdown',
+  '.ant-picker-dropdown',
+].join(',')
+
+function isSubtaskCreateFloatingTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(SUBTASK_CREATE_FLOATING_SELECTOR))
+}
 
 interface TaskDetailPanelProps {
   task: Task
@@ -107,9 +118,18 @@ export default function TaskDetailPanel({
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
+  const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
+  const subtaskInteractingRef = useRef(false)
+  const subtaskSubmittingRef = useRef(false)
+  const subtaskSubmitRef = useRef<() => void>(() => undefined)
   const [, setAttachmentCount] = useState(0)
   const [attachments, setAttachments] = useState<ApiAttachment[]>([])
   const [attachmentUploading, setAttachmentUploading] = useState(false)
+  const [commentAttachments, setCommentAttachments] = useState<ApiAttachment[]>([])
+  const [commentAttachmentUploading, setCommentAttachmentUploading] = useState(false)
+  const [commentAttachmentMap, setCommentAttachmentMap] = useState<
+    Record<string, ApiAttachment>
+  >({})
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
@@ -240,9 +260,29 @@ export default function TaskDetailPanel({
   }
 
   const handleAssigneeChange = async (values: string[]) => {
+    const currentAssignees = task.members
+      .filter((m) => m.role === 'assignee')
+      .map((m) => m.id)
+    const currentPrimary = currentAssignees[0] ?? null
+    const desiredPrimary = values[0] ?? null
+
+    const toAdd = values.slice(1).filter((id) => !currentAssignees.includes(id))
+    const toRemove = currentAssignees
+      .slice(1)
+      .filter((id) => !values.includes(id))
+
     try {
-      const apiTask = await patchTaskAssignee(task.guid, values[0] ?? null)
-      const nextTask = apiTaskToTask(apiTask)
+      if (desiredPrimary !== currentPrimary) {
+        await patchTaskAssignee(task.guid, desiredPrimary)
+      }
+      if (toAdd.length > 0) {
+        await addParticipants(task.guid, toAdd)
+      }
+      for (const uid of toRemove) {
+        await removeParticipant(task.guid, uid)
+      }
+      const fresh = await getTask(task.guid)
+      const nextTask = apiTaskToTask(fresh)
       onTaskUpdated?.(nextTask)
       if (!onTaskUpdated) onRefresh?.()
     } catch {
@@ -266,7 +306,21 @@ export default function TaskDetailPanel({
   const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
   const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
 
+  const resetSubtaskCreateDraft = () => {
+    setSubtaskTitle('')
+    setSubtaskAssigneeIds([])
+    setSubtaskDue(null)
+  }
+
+  const cancelEmptySubtaskCreate = () => {
+    setSubtaskCreating(false)
+    resetSubtaskCreateDraft()
+  }
+
   const handleAddSubtask = async () => {
+    if (subtaskSubmittingRef.current) {
+      return
+    }
     const summary = subtaskTitle.trim()
     if (!summary) {
       setSubtaskCreating(true)
@@ -277,6 +331,7 @@ export default function TaskDetailPanel({
       return
     }
 
+    subtaskSubmittingRef.current = true
     const tasklistRef = task.tasklists[0]
     // 开始时间默认继承父任务
     const parentStart = task.start?.timestamp
@@ -294,14 +349,71 @@ export default function TaskDetailPanel({
       })
       const createdTask = apiTaskToTask(apiTask)
       setSubtaskDrafts((prev) => [...prev, createdTask])
-      setSubtaskTitle('')
-      setSubtaskAssigneeIds([])
-      setSubtaskDue(null)
+      resetSubtaskCreateDraft()
       setSubtaskCreating(true)
       onSubtaskCreated?.(createdTask)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '创建子任务失败')
+    } finally {
+      subtaskSubmittingRef.current = false
     }
+  }
+
+  subtaskSubmitRef.current = () => {
+    if (!subtaskTitle.trim()) {
+      cancelEmptySubtaskCreate()
+      return
+    }
+    void handleAddSubtask()
+  }
+
+  useEffect(() => {
+    if (!subtaskCreating) {
+      return undefined
+    }
+
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      const row = subtaskCreateRowRef.current
+      if (!row || !(target instanceof Node)) {
+        return
+      }
+      if (row.contains(target) || isSubtaskCreateFloatingTarget(target)) {
+        return
+      }
+
+      // 子任务创建支持点空白保存，但点日期、负责人浮层时不能误提交。
+      subtaskSubmitRef.current()
+    }
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  }, [subtaskCreating])
+
+  const markSubtaskCreateInteracting = () => {
+    subtaskInteractingRef.current = true
+  }
+
+  const handleSubtaskCreateBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (subtaskInteractingRef.current) {
+      subtaskInteractingRef.current = false
+      return
+    }
+
+    const next = e.relatedTarget as HTMLElement | null
+    if (
+      next &&
+      (next.closest('.subtask-suffix-icons') ||
+        isSubtaskCreateFloatingTarget(next))
+    ) {
+      return
+    }
+
+    if (!subtaskTitle.trim()) {
+      cancelEmptySubtaskCreate()
+      return
+    }
+    void handleAddSubtask()
   }
 
   const handleToggleSubtaskStatus = async (subtask: Task) => {
@@ -328,6 +440,30 @@ export default function TaskDetailPanel({
       setAttachmentUploading(false)
     }
     return false
+  }
+
+  const handleCommentAttachmentUpload = async (file: File) => {
+    setCommentAttachmentUploading(true)
+    try {
+      const created = await uploadAttachment(task.guid, file, { ownerType: 'comment' })
+      setCommentAttachments((prev) => [...prev, created])
+      setCommentAttachmentMap((prev) => ({ ...prev, [created.attachment_id]: created }))
+      setAttachments((prev) =>
+        prev.some((a) => a.attachment_id === created.attachment_id)
+          ? prev
+          : [...prev, created],
+      )
+      setAttachmentCount((prev) => prev + 1)
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setCommentAttachmentUploading(false)
+    }
+    return false
+  }
+
+  const handleRemoveCommentAttachment = (attachmentId: string) => {
+    setCommentAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
   }
 
   const handleAttachmentDelete = async (attachmentId: string) => {
@@ -393,15 +529,52 @@ export default function TaskDetailPanel({
     }
   }, [task.guid])
 
+  useEffect(() => {
+    const ids = new Set<string>()
+    comments.forEach((c) => {
+      ;(c.attachment_ids ?? []).forEach((id) => {
+        if (id && !commentAttachmentMap[id]) ids.add(id)
+      })
+    })
+    if (ids.size === 0) return
+    let cancelled = false
+    void Promise.all(
+      Array.from(ids).map((id) =>
+        getAttachment(id)
+          .then((att) => [id, att] as const)
+          .catch(() => null),
+      ),
+    ).then((results) => {
+      if (cancelled) return
+      const next: Record<string, ApiAttachment> = {}
+      results.forEach((r) => {
+        if (r) next[r[0]] = r[1]
+      })
+      if (Object.keys(next).length > 0) {
+        setCommentAttachmentMap((prev) => ({ ...prev, ...next }))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [comments, commentAttachmentMap])
+
   const handleSendComment = async () => {
     const content = commentValue.trim()
-    if (!content) {
+    if (!content && commentAttachments.length === 0) {
       return
     }
     try {
-      const created = await createComment(task.guid, content)
+      const attachmentIds = commentAttachments.map((a) => a.attachment_id)
+      const created = await createComment(
+        task.guid,
+        content,
+        undefined,
+        attachmentIds.length > 0 ? attachmentIds : undefined,
+      )
       setComments((prev) => [...prev, created])
       setCommentValue('')
+      setCommentAttachments([])
     } catch (err) {
       message.error(err instanceof Error ? err.message : '发送失败')
     }
@@ -541,17 +714,6 @@ export default function TaskDetailPanel({
           </Button>
         )}
         <div className="detail-actions">
-          <span className="detail-action-icon detail-action-primary">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="2" y="2" width="12" height="12" rx="2" />
-            </svg>
-          </span>
-          <span className="detail-action-icon">
-            <ShareAltOutlined />
-          </span>
-          <span className="detail-action-icon">
-            <CopyOutlined />
-          </span>
           <Dropdown menu={moreMenu} trigger={['click']} placement="bottomRight">
             <span className="detail-action-icon">
               <MoreOutlined />
@@ -826,7 +988,10 @@ export default function TaskDetailPanel({
                 )
               })}
               {canCreateSubtask && subtaskCreating && (
-                <div className="detail-subtask-row is-creating">
+                <div
+                  ref={subtaskCreateRowRef}
+                  className="detail-subtask-row is-creating"
+                >
                   <span className="subtask-check" />
                   <Input
                     size="small"
@@ -838,9 +1003,7 @@ export default function TaskDetailPanel({
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
                         setSubtaskCreating(false)
-                        setSubtaskTitle('')
-                        setSubtaskAssigneeIds([])
-                        setSubtaskDue(null)
+                        resetSubtaskCreateDraft()
                       }
                     }}
                     style={{ flex: 1 }}
@@ -848,6 +1011,7 @@ export default function TaskDetailPanel({
                       <span
                         className="subtask-suffix-icons"
                         onClick={(e) => e.stopPropagation()}
+                        onMouseDown={markSubtaskCreateInteracting}
                       >
                         <Popover
                           trigger="click"
@@ -855,7 +1019,10 @@ export default function TaskDetailPanel({
                           content={
                             <div
                               style={{ width: 260 }}
-                              onMouseDown={(e) => e.preventDefault()}
+                              onMouseDown={(e) => {
+                                markSubtaskCreateInteracting()
+                                e.preventDefault()
+                              }}
                             >
                               <Calendar
                                 fullscreen={false}
@@ -878,7 +1045,10 @@ export default function TaskDetailPanel({
                           content={
                             <div
                               style={{ width: 200 }}
-                              onMouseDown={(e) => e.preventDefault()}
+                              onMouseDown={(e) => {
+                                markSubtaskCreateInteracting()
+                                e.preventDefault()
+                              }}
                             >
                               <Select
                                 autoFocus
@@ -903,22 +1073,7 @@ export default function TaskDetailPanel({
                         </Popover>
                       </span>
                     }
-                    onBlur={(e) => {
-                      // 如果焦点移到 suffix 图标或它们的 popover，不要关闭
-                      const next = e.relatedTarget as HTMLElement | null
-                      if (
-                        next &&
-                        (next.closest('.subtask-suffix-icons') ||
-                          next.closest('.ant-popover'))
-                      ) {
-                        return
-                      }
-                      if (!subtaskTitle.trim()) {
-                        setSubtaskCreating(false)
-                        setSubtaskAssigneeIds([])
-                        setSubtaskDue(null)
-                      }
-                    }}
+                    onBlur={handleSubtaskCreateBlur}
                   />
                 </div>
               )}
@@ -963,26 +1118,38 @@ export default function TaskDetailPanel({
           {attachments.length > 0 && (
             <div className="detail-field-indent">
               <div className="detail-attachment-list">
-                {attachments.map((att) => (
-                  <div key={att.attachment_id} className="detail-attachment-item">
-                    <PaperClipOutlined style={{ color: '#86909c' }} />
-                    <span
-                      className="detail-attachment-name"
-                      onClick={() => handleAttachmentDownload(att)}
-                      style={{ cursor: 'pointer', flex: 1, marginLeft: 6 }}
-                    >
-                      {att.file_name}
-                    </span>
-                    <Popconfirm
-                      title="确定删除该附件？"
-                      okText="删除"
-                      cancelText="取消"
-                      onConfirm={() => handleAttachmentDelete(att.attachment_id)}
-                    >
-                      <DeleteOutlined style={{ color: '#86909c', cursor: 'pointer' }} />
-                    </Popconfirm>
-                  </div>
-                ))}
+                {attachments.map((att) => {
+                  const ext = (att.file_name.split('.').pop() ?? '').toLowerCase()
+                  const sizeKB = att.file_size / 1024
+                  const sizeLabel =
+                    sizeKB >= 1024
+                      ? `${(sizeKB / 1024).toFixed(1)} MB`
+                      : `${Math.max(1, Math.round(sizeKB))} KB`
+                  return (
+                    <div key={att.attachment_id} className="detail-attachment-card">
+                      <div className="attachment-thumb">
+                        <span className="attachment-ext">{ext || 'FILE'}</span>
+                      </div>
+                      <div
+                        className="attachment-main"
+                        onClick={() => handleAttachmentDownload(att)}
+                      >
+                        <div className="attachment-name" title={att.file_name}>
+                          {att.file_name}
+                        </div>
+                        <div className="attachment-meta">{sizeLabel}</div>
+                      </div>
+                      <Popconfirm
+                        title="确定删除该附件？"
+                        okText="删除"
+                        cancelText="取消"
+                        onConfirm={() => handleAttachmentDelete(att.attachment_id)}
+                      >
+                        <DeleteOutlined className="attachment-delete" />
+                      </Popconfirm>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -1006,54 +1173,121 @@ export default function TaskDetailPanel({
               </div>
             </div>
             {comments.map((comment) => {
-              const isMine = comment.user_id === appConfig.user_id
+              const authorId = comment.author_id ?? comment.user_id ?? ''
+              const isMine = authorId === appConfig.user_id
               const isEditing = editingCommentId === comment.comment_id
               return (
-                <div key={comment.comment_id} className="comment-item">
-                  <span className="comment-dot" />
-                  <div className="comment-content">
-                    <span className="comment-author">{comment.user_id}</span>
-                    {isEditing ? (
-                      <span style={{ display: 'inline-flex', gap: 6, marginLeft: 6 }}>
-                        <Input
-                          size="small"
-                          value={editingCommentValue}
-                          onChange={(e) => setEditingCommentValue(e.target.value)}
-                          onPressEnter={handleSaveEditComment}
-                          style={{ width: 220 }}
-                        />
-                        <Button size="small" type="link" onClick={handleSaveEditComment}>
-                          保存
-                        </Button>
-                        <Button
-                          size="small"
-                          type="link"
-                          onClick={() => {
-                            setEditingCommentId(null)
-                            setEditingCommentValue('')
+                <div key={comment.comment_id} className="comment-card">
+                  <Avatar size={28} style={{ backgroundColor: '#7b67ee' }}>
+                    {(authorId || 'U').slice(0, 1).toUpperCase()}
+                  </Avatar>
+                  <div className="comment-body">
+                    <div className="comment-meta">
+                      <span className="comment-author">{authorId}</span>
+                      <span className="comment-time">
+                        {dayjs(comment.created_at).format('MM-DD HH:mm')}
+                      </span>
+                      {comment.updated_at &&
+                        comment.updated_at !== comment.created_at && (
+                          <span className="comment-edited">（已编辑）</span>
+                        )}
+                      {isMine && !isEditing && (
+                        <Dropdown
+                          trigger={['click']}
+                          placement="bottomRight"
+                          menu={{
+                            items: [
+                              {
+                                key: 'edit',
+                                label: '编辑',
+                                onClick: () => handleStartEditComment(comment),
+                              },
+                              { type: 'divider' as const },
+                              {
+                                key: 'delete',
+                                danger: true,
+                                label: '删除',
+                                onClick: () =>
+                                  void handleDeleteComment(comment.comment_id),
+                              },
+                            ],
                           }}
                         >
-                          取消
-                        </Button>
-                      </span>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<MoreOutlined />}
+                            className="comment-more-btn"
+                          />
+                        </Dropdown>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <div className="comment-edit-wrap">
+                        <Input.TextArea
+                          autoSize={{ minRows: 2, maxRows: 6 }}
+                          value={editingCommentValue}
+                          onChange={(e) => setEditingCommentValue(e.target.value)}
+                        />
+                        <Space size={8} style={{ marginTop: 6 }}>
+                          <Button
+                            size="small"
+                            type="primary"
+                            onClick={handleSaveEditComment}
+                          >
+                            保存
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() => {
+                              setEditingCommentId(null)
+                              setEditingCommentValue('')
+                            }}
+                          >
+                            取消
+                          </Button>
+                        </Space>
+                      </div>
                     ) : (
-                      <span className="comment-text">{`：${comment.content}`}</span>
-                    )}
-                    <span className="comment-time" style={{ marginLeft: 8 }}>
-                      {dayjs(comment.created_at).format('HH:mm')}
-                    </span>
-                    {isMine && !isEditing && (
-                      <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8 }}>
-                        <a onClick={() => handleStartEditComment(comment)}>编辑</a>
-                        <Popconfirm
-                          title="确定删除该评论？"
-                          okText="删除"
-                          cancelText="取消"
-                          onConfirm={() => handleDeleteComment(comment.comment_id)}
-                        >
-                          <a>删除</a>
-                        </Popconfirm>
-                      </span>
+                      <>
+                        {comment.content && (
+                          <div className="comment-text">{comment.content}</div>
+                        )}
+                        {(comment.attachment_ids ?? []).length > 0 && (
+                          <div className="detail-attachment-list comment-attachment-list--posted">
+                            {(comment.attachment_ids ?? []).map((id) => {
+                              const att = commentAttachmentMap[id]
+                              const ext = (att?.file_name.split('.').pop() ?? '').toLowerCase()
+                              const sizeKB = (att?.file_size ?? 0) / 1024
+                              const sizeLabel = att
+                                ? sizeKB >= 1024
+                                  ? `${(sizeKB / 1024).toFixed(1)} MB`
+                                  : `${Math.max(1, Math.round(sizeKB))} KB`
+                                : ''
+                              return (
+                                <div key={id} className="detail-attachment-card">
+                                  <div className="attachment-thumb">
+                                    <span className="attachment-ext">
+                                      {ext || 'FILE'}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className="attachment-main"
+                                    onClick={() => att && handleAttachmentDownload(att)}
+                                  >
+                                    <div className="attachment-name">
+                                      {att?.file_name ?? '附件加载中...'}
+                                    </div>
+                                    {sizeLabel && (
+                                      <div className="attachment-meta">{sizeLabel}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1074,16 +1308,59 @@ export default function TaskDetailPanel({
             onPressEnter={handleSendComment}
             variant="borderless"
           />
+          {commentAttachments.length > 0 && (
+            <div className="detail-attachment-list">
+              {commentAttachments.map((att) => {
+                const ext = (att.file_name.split('.').pop() ?? '').toLowerCase()
+                const sizeKB = att.file_size / 1024
+                const sizeLabel =
+                  sizeKB >= 1024
+                    ? `${(sizeKB / 1024).toFixed(1)} MB`
+                    : `${Math.max(1, Math.round(sizeKB))} KB`
+                return (
+                  <div key={att.attachment_id} className="detail-attachment-card">
+                    <div className="attachment-thumb">
+                      <span className="attachment-ext">{ext || 'FILE'}</span>
+                    </div>
+                    <div className="attachment-main">
+                      <div className="attachment-name" title={att.file_name}>
+                        {att.file_name}
+                      </div>
+                      <div className="attachment-meta">{sizeLabel}</div>
+                    </div>
+                    <DeleteOutlined
+                      className="attachment-delete"
+                      onClick={() => handleRemoveCommentAttachment(att.attachment_id)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )}
           <div className="comment-toolbar">
             <FontSizeOutlined className="toolbar-icon" />
             <SmileOutlined className="toolbar-icon" />
             <UsergroupAddOutlined className="toolbar-icon" />
             <SmileOutlined className="toolbar-icon" />
             <PictureOutlined className="toolbar-icon" />
-            <PaperClipOutlined className="toolbar-icon" />
+            <Upload
+              multiple
+              showUploadList={false}
+              beforeUpload={(file) => {
+                void handleCommentAttachmentUpload(file as File)
+                return false
+              }}
+            >
+              <PaperClipOutlined
+                className="toolbar-icon"
+                style={commentAttachmentUploading ? { opacity: 0.5 } : undefined}
+              />
+            </Upload>
             <span className="toolbar-divider" />
             <SendOutlined
-              className={`toolbar-send ${commentValue.trim() ? 'toolbar-send-active' : ''}`}
+              className={`toolbar-send ${
+                commentValue.trim() || commentAttachments.length > 0 ? 'toolbar-send-active' : ''
+              }`}
               onClick={handleSendComment}
             />
           </div>

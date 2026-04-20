@@ -427,12 +427,13 @@ body.detail-panel-resizing {
 
 .comment-input-wrapper {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   border: 1px solid #e5e6eb;
   border-radius: 8px;
-  padding: 0 4px 0 0;
+  padding: 6px 8px;
   background: #fff;
   transition: border-color 0.2s;
+  gap: 6px;
 
   &:focus-within {
     border-color: #3370ff;
@@ -442,6 +443,8 @@ body.detail-panel-resizing {
     flex: 1;
     font-size: 14px;
     min-width: 0;
+    width: 100%;
+    padding: 4px 0;
   }
 }
 
@@ -450,6 +453,7 @@ body.detail-panel-resizing {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  width: 100%;
 
   .toolbar-icon {
     font-size: 16px;
@@ -468,6 +472,7 @@ body.detail-panel-resizing {
     height: 16px;
     background: #e5e6eb;
     margin: 0 2px;
+    margin-left: auto;
   }
 
   .toolbar-send {
@@ -483,6 +488,34 @@ body.detail-panel-resizing {
       &:hover {
         color: #245bdb;
       }
+    }
+  }
+}
+
+.comment-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+
+  .comment-attachment-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    width: 280px;
+    max-width: 100%;
+    background: #f5f6f7;
+    border: 1px solid #e5e6eb;
+    border-radius: 6px;
+    font-size: 12px;
+
+    .comment-attachment-name {
+      flex: 1;
+      color: #1f2329;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 }
@@ -516,8 +549,80 @@ body.detail-panel-resizing {
 .detail-attachment-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-top: 4px;
+}
+
+.detail-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  width: 280px;
+  max-width: 100%;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    border-color: #c9cdd4;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+
+    .attachment-delete {
+      opacity: 1;
+    }
+  }
+
+  .attachment-thumb {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #e8f0ff 0%, #d6e4ff 100%);
+    color: #3370ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .attachment-main {
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+
+    .attachment-name {
+      font-size: 13px;
+      color: #1d2129;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .attachment-meta {
+      margin-top: 2px;
+      font-size: 12px;
+      color: #86909c;
+    }
+
+    &:hover .attachment-name {
+      color: #3370ff;
+    }
+  }
+
+  .attachment-delete {
+    color: #86909c;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s;
+
+    &:hover {
+      color: #f53f3f;
+    }
+  }
 }
 
 .detail-attachment-item {
@@ -664,4 +769,61 @@ body.detail-panel-resizing {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.comment-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #f7f8fa;
+
+    .comment-more-btn {
+      opacity: 1;
+    }
+  }
+
+  .comment-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #86909c;
+    margin-bottom: 2px;
+
+    .comment-author {
+      color: #1d2129;
+      font-weight: 500;
+    }
+
+    .comment-edited {
+      font-size: 11px;
+    }
+  }
+
+  .comment-more-btn {
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .comment-text {
+    font-size: 13px;
+    color: #1d2129;
+    line-height: 1.5;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .comment-edit-wrap {
+    margin-top: 4px;
+  }
 }

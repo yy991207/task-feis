@@ -5,6 +5,7 @@ import Popover from 'antd/es/popover'
 import List from 'antd/es/list'
 import Typography from 'antd/es/typography'
 import Empty from 'antd/es/empty'
+import Segmented from 'antd/es/segmented'
 import message from 'antd/es/message'
 import Popconfirm from 'antd/es/popconfirm'
 import { BellOutlined, CheckOutlined, DeleteOutlined } from '@ant-design/icons'
@@ -25,6 +26,7 @@ export default function NotificationBell() {
   const [items, setItems] = useState<ApiNotification[]>([])
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'unread'>('all')
 
   const refreshUnread = useCallback(async () => {
     try {
@@ -38,7 +40,10 @@ export default function NotificationBell() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const page = await listNotifications({ pageSize: 30 })
+      const page = await listNotifications({
+        pageSize: 30,
+        isRead: filter === 'unread' ? false : undefined,
+      })
       setItems(page.items ?? [])
       if (typeof page.unread_count === 'number') setUnread(page.unread_count)
     } catch (err) {
@@ -46,7 +51,7 @@ export default function NotificationBell() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filter])
 
   useEffect(() => {
     void refreshUnread()
@@ -62,9 +67,13 @@ export default function NotificationBell() {
     try {
       await markNotificationRead(n.notification_id)
       setItems((prev) =>
-        prev.map((it) =>
-          it.notification_id === n.notification_id ? { ...it, is_read: true } : it,
-        ),
+        filter === 'unread'
+          ? prev.filter((it) => it.notification_id !== n.notification_id)
+          : prev.map((it) =>
+              it.notification_id === n.notification_id
+                ? { ...it, is_read: true }
+                : it,
+            ),
       )
       setUnread((c) => Math.max(0, c - 1))
     } catch (err) {
@@ -75,7 +84,9 @@ export default function NotificationBell() {
   const handleMarkAll = async () => {
     try {
       await markAllNotificationsRead()
-      setItems((prev) => prev.map((it) => ({ ...it, is_read: true })))
+      setItems((prev) =>
+        filter === 'unread' ? [] : prev.map((it) => ({ ...it, is_read: true })),
+      )
       setUnread(0)
       message.success('已全部标记为已读')
     } catch (err) {
@@ -108,6 +119,18 @@ export default function NotificationBell() {
         <Button type="link" size="small" onClick={handleMarkAll} disabled={unread === 0}>
           全部已读
         </Button>
+      </div>
+      <div style={{ padding: '8px 4px' }}>
+        <Segmented
+          size="small"
+          value={filter}
+          onChange={(v) => setFilter(v as 'all' | 'unread')}
+          options={[
+            { label: '全部', value: 'all' },
+            { label: `未读 ${unread > 0 ? `(${unread})` : ''}`, value: 'unread' },
+          ]}
+          block
+        />
       </div>
       {items.length === 0 ? (
         <Empty

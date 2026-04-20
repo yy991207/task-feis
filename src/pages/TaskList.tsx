@@ -19,6 +19,7 @@ import TaskTable from '@/components/TaskTable'
 import ActivityView from '@/components/ActivityView'
 import PlaceholderView from '@/components/PlaceholderView'
 import TaskDetailPanel from '@/components/TaskDetailPanel'
+import TeamsManagerView from '@/components/TeamsManagerView'
 import { getViewConfig } from '@/config/viewConfig'
 import type { Section } from '@/types/task'
 import './TaskList.less'
@@ -49,6 +50,11 @@ export default function TaskListPage() {
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [reloadVersion, setReloadVersion] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
+  const [sortMode, setSortMode] = useState<'custom' | 'due' | 'start' | 'created'>(
+    'custom',
+  )
+  const [mineOnly, setMineOnly] = useState(false)
   const latestRequestIdRef = useRef(0)
 
   const currentUserId = appConfig.user_id
@@ -88,8 +94,23 @@ export default function TaskListPage() {
       }
 
       let nextTasks: Task[] = []
+      const commonParams: Parameters<typeof listTasks>[0] = {
+        page_size: 100,
+      }
+      if (statusFilter !== 'all') {
+        commonParams.status = statusFilter === 'done' ? 'done' : 'todo'
+      }
+      if (sortMode !== 'custom') {
+        const sortMap: Record<string, string> = {
+          due: 'due_date',
+          start: 'start_date',
+          created: 'created_at',
+        }
+        commonParams.sort_by = sortMap[sortMode] ?? 'created_at'
+        commonParams.order = 'desc'
+      }
       if (typeof activeNav === 'string') {
-        const params: Record<string, string> = {}
+        const params: Parameters<typeof listTasks>[0] = { ...commonParams }
         switch (activeNav) {
           case 'my-assigned':
             params.assignee_id = currentUserId
@@ -105,17 +126,19 @@ export default function TaskListPage() {
             break
         }
         try {
-          const { items } = await listTasks({ ...params, page_size: 100 })
+          const { items } = await listTasks(params)
           nextTasks = items.map((t) => apiTaskToTask(t))
         } catch {
           nextTasks = []
         }
       } else if (activeNav.type === 'tasklist') {
         try {
-          const { items } = await listTasks({
+          const params: Parameters<typeof listTasks>[0] = {
+            ...commonParams,
             project_id: activeNav.guid,
-            page_size: 100,
-          })
+          }
+          if (mineOnly) params.assignee_id = currentUserId
+          const { items } = await listTasks(params)
           nextTasks = items.map((t) => apiTaskToTask(t, activeNav.guid))
         } catch {
           nextTasks = []
@@ -132,7 +155,7 @@ export default function TaskListPage() {
     }
 
     void loadData()
-  }, [activeNav, currentUserId, reloadVersion])
+  }, [activeNav, currentUserId, reloadVersion, statusFilter, sortMode, mineOnly])
 
   const activeTasklist =
     typeof activeNav === 'object' && activeNav.type === 'tasklist'
@@ -245,6 +268,10 @@ export default function TaskListPage() {
       )
     }
 
+    if (activeNav === 'settings') {
+      return <TeamsManagerView />
+    }
+
     // 未文档化的视图 → 占位页
     if (activeNav === 'my-assigned-quick' || activeNav === 'done') {
       const titles: Record<string, string> = {
@@ -268,6 +295,12 @@ export default function TaskListPage() {
         sections={activeTasklist?.sections}
         tasklist={activeTasklist}
         selectedTaskGuid={selectedTask?.guid}
+        statusFilter={statusFilter}
+        sortMode={sortMode}
+        mineOnly={mineOnly}
+        onStatusFilterChange={setStatusFilter}
+        onSortModeChange={setSortMode}
+        onMineOnlyChange={setMineOnly}
         onTaskClick={(task) => setSelectedTask(task)}
         onRefresh={refreshData}
         onTaskCreated={handleTaskCreated}

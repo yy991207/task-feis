@@ -56,7 +56,9 @@ export type CustomFieldType =
   | 'number'
   | 'member'
   | 'datetime'
+  | 'date'
   | 'single_select'
+  | 'select'
   | 'multi_select'
   | 'text'
 

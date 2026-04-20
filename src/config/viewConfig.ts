@@ -55,7 +55,7 @@ const defaultTasklistConfig = (name: string): ViewConfig => ({
   tabLabel: '列表',
   showColumnHeader: true,
   toolbar: {
-    showCreate: true,
+    showCreate: false,
     statusFilterLabel: '全部任务',
     filterBadgeCount: 0,
     showSort: true,
@@ -77,7 +77,7 @@ const configs: Record<string, ViewConfig> = {
     tabs: ['list', 'board', 'report'],
     groupBySection: true,
     toolbar: {
-      showCreate: true,
+      showCreate: false,
       statusFilterLabel: '全部任务',
       filterBadgeCount: 1,
       showSort: true,

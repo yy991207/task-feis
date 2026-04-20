@@ -22,3 +22,18 @@ function parseYaml(raw: string): AppConfig {
 }
 
 export const appConfig = parseYaml(yaml)
+
+// Allow runtime user switching via localStorage.
+// The switched user_id persists across reloads until cleared.
+const storedUserId =
+  typeof localStorage !== 'undefined'
+    ? localStorage.getItem('current_user_id')
+    : null
+if (storedUserId) {
+  appConfig.user_id = storedUserId
+}
+
+export function switchCurrentUser(userId: string): void {
+  localStorage.setItem('current_user_id', userId)
+  window.location.reload()
+}

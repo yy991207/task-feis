@@ -35,11 +35,12 @@ import {
   ShareAltOutlined,
   InboxOutlined,
   StopOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
 import type { Tasklist } from '@/types/task'
 import NotificationBell from '@/components/NotificationBell'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
-import TeamsManagerModal from '@/components/TeamsManagerModal'
+import UserSwitcher from '@/components/UserSwitcher'
 import type { ProjectGroup } from '@/types/projectGroup'
 import type { Project } from '@/types/project'
 import {
@@ -71,6 +72,7 @@ export type NavKey =
   | 'my-created'
   | 'my-assigned-quick'
   | 'done'
+  | 'settings'
   | { type: 'tasklist'; guid: string }
 
 interface SidebarProps {
@@ -119,7 +121,6 @@ export default function Sidebar({
   const [openedProjectMenuId, setOpenedProjectMenuId] = useState<string | null>(null)
   const [openedCreateTarget, setOpenedCreateTarget] = useState<CreatingTarget | null>(null)
   const [customFieldsProjectId, setCustomFieldsProjectId] = useState<string | null>(null)
-  const [teamsModalOpen, setTeamsModalOpen] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
 
   useEffect(() => {
@@ -147,16 +148,12 @@ export default function Sidebar({
     {
       key: 'my-assigned',
       icon: <UserOutlined />,
-      label: (
-        <span className="menu-label">
-          我负责的
-          <Badge count={9} size="small" color="#dee0e3" style={{ color: '#646a73' }} />
-        </span>
-      ),
+      label: '我负责的',
     },
     { key: 'my-followed', icon: <EyeOutlined />, label: '我关注的' },
     { key: 'activity', icon: <BellOutlined />, label: '动态' },
     { key: 'from-project', icon: <ProjectOutlined />, label: '来自飞书项目' },
+    { key: 'settings', icon: <TeamOutlined />, label: '团队管理' },
   ]
 
   // 快速访问 Menu
@@ -864,12 +861,13 @@ export default function Sidebar({
           任务
         </Title>
         <div style={{ marginLeft: 'auto' }}>
+          <UserSwitcher />
           <Tooltip title="团队管理">
             <Button
               type="text"
               size="small"
               icon={<UserOutlined />}
-              onClick={() => setTeamsModalOpen(true)}
+              onClick={() => onNavigate('settings')}
             />
           </Tooltip>
           <NotificationBell />
@@ -952,10 +950,6 @@ export default function Sidebar({
         open={!!customFieldsProjectId}
         projectId={customFieldsProjectId ?? ''}
         onClose={() => setCustomFieldsProjectId(null)}
-      />
-      <TeamsManagerModal
-        open={teamsModalOpen}
-        onClose={() => setTeamsModalOpen(false)}
       />
     </div>
   )

@@ -4,7 +4,8 @@ import { request } from './request'
 export interface ApiComment {
   comment_id: string
   task_id: string
-  user_id: string
+  author_id: string
+  user_id?: string
   content: string
   mentions: string[] | null
   attachment_ids: string[] | null
