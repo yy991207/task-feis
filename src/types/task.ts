@@ -116,6 +116,7 @@ export interface Section {
   name: string
   defaultCollapsed?: boolean
   sort_order?: number
+  is_default?: boolean
 }
 
 export interface Tasklist {

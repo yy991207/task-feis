@@ -512,3 +512,34 @@ body.detail-panel-resizing {
     }
   }
 }
+
+.detail-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.detail-attachment-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #f7f8fa;
+  font-size: 13px;
+  color: #1d2129;
+
+  &:hover {
+    background: #f2f3f5;
+  }
+}
+
+.detail-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    color: #3370ff;
+  }
+}

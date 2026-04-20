@@ -38,7 +38,23 @@ import {
 import dayjs from 'dayjs'
 import type { Task, Tasklist, User } from '@/types/task'
 import { appConfig } from '@/config/appConfig'
+import {
+  listComments,
+  createComment,
+  updateComment,
+  deleteComment,
+  type ApiComment,
+} from '@/services/commentService'
 import { listMembers } from '@/services/teamService'
+import {
+  listAttachments,
+  uploadAttachment,
+  deleteAttachment,
+  downloadAttachment,
+  type ApiAttachment,
+} from '@/services/attachmentService'
+import Upload from 'antd/es/upload'
+import Popconfirm from 'antd/es/popconfirm'
 import {
   createTaskApi,
   updateTaskApi,
@@ -77,7 +93,9 @@ export default function TaskDetailPanel({
     task.tasklists[0]?.section_guid ?? '',
   )
   const [commentValue, setCommentValue] = useState('')
-  const [comments, setComments] = useState<string[]>([])
+  const [comments, setComments] = useState<ApiComment[]>([])
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editingCommentValue, setEditingCommentValue] = useState('')
   const [descriptionDraft, setDescriptionDraft] = useState(task.description)
   const [descriptionVisible, setDescriptionVisible] = useState(Boolean(task.description))
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
@@ -85,7 +103,9 @@ export default function TaskDetailPanel({
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
-  const [attachmentCount, setAttachmentCount] = useState(0)
+  const [, setAttachmentCount] = useState(0)
+  const [attachments, setAttachments] = useState<ApiAttachment[]>([])
+  const [attachmentUploading, setAttachmentUploading] = useState(false)
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
@@ -112,6 +132,26 @@ export default function TaskDetailPanel({
     void listSubtasks(task.guid).then((items) =>
       setSubtaskDrafts(items.map((t) => apiTaskToTask(t))),
     )
+  }, [task.guid])
+
+  useEffect(() => {
+    let cancelled = false
+    void listAttachments(task.guid)
+      .then((items) => {
+        if (!cancelled) {
+          setAttachments(items)
+          setAttachmentCount(items.length)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAttachments([])
+          setAttachmentCount(0)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
   }, [task.guid])
 
   useEffect(() => {
@@ -221,8 +261,38 @@ export default function TaskDetailPanel({
     onSubtaskCreated?.(createdTask)
   }
 
-  const handleAttachmentAdd = () => {
-    setAttachmentCount((prev) => prev + 1)
+  const handleAttachmentUpload = async (file: File) => {
+    setAttachmentUploading(true)
+    try {
+      const created = await uploadAttachment(task.guid, file)
+      setAttachments((prev) => [...prev, created])
+      setAttachmentCount((prev) => prev + 1)
+      message.success('附件已上传')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setAttachmentUploading(false)
+    }
+    return false
+  }
+
+  const handleAttachmentDelete = async (attachmentId: string) => {
+    try {
+      await deleteAttachment(attachmentId)
+      setAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
+      setAttachmentCount((prev) => Math.max(0, prev - 1))
+      message.success('附件已删除')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }
+
+  const handleAttachmentDownload = async (att: ApiAttachment) => {
+    try {
+      await downloadAttachment(att.attachment_id, att.file_name)
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '下载失败')
+    }
   }
 
   const handleMoveTask = async () => {
@@ -240,13 +310,63 @@ export default function TaskDetailPanel({
     })
   }
 
-  const handleSendComment = () => {
+  useEffect(() => {
+    let cancelled = false
+    void listComments(task.guid)
+      .then((items) => {
+        if (!cancelled) setComments(items)
+      })
+      .catch(() => {
+        if (!cancelled) setComments([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [task.guid])
+
+  const handleSendComment = async () => {
     const content = commentValue.trim()
     if (!content) {
       return
     }
-    setComments((prev) => [...prev, content])
-    setCommentValue('')
+    try {
+      const created = await createComment(task.guid, content)
+      setComments((prev) => [...prev, created])
+      setCommentValue('')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '发送失败')
+    }
+  }
+
+  const handleStartEditComment = (c: ApiComment) => {
+    setEditingCommentId(c.comment_id)
+    setEditingCommentValue(c.content)
+  }
+
+  const handleSaveEditComment = async () => {
+    if (!editingCommentId) return
+    const content = editingCommentValue.trim()
+    if (!content) return
+    try {
+      const updated = await updateComment(task.guid, editingCommentId, content)
+      setComments((prev) =>
+        prev.map((c) => (c.comment_id === editingCommentId ? updated : c)),
+      )
+      setEditingCommentId(null)
+      setEditingCommentValue('')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '保存失败')
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await deleteComment(task.guid, commentId)
+      setComments((prev) => prev.filter((c) => c.comment_id !== commentId))
+      message.success('评论已删除')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除失败')
+    }
   }
 
   const handleDeleteTask = async () => {
@@ -614,18 +734,45 @@ export default function TaskDetailPanel({
           {/* Attachment row */}
           <div className="detail-field-row">
             <PaperClipOutlined className="field-icon" />
-            <div
-              className="field-content field-clickable"
-              onClick={handleAttachmentAdd}
-            >
-              <span className="field-placeholder">添加附件</span>
+            <div className="field-content">
+              <Upload
+                multiple
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  void handleAttachmentUpload(file as File)
+                  return false
+                }}
+              >
+                <span className="field-placeholder" style={{ cursor: 'pointer' }}>
+                  {attachmentUploading ? '上传中...' : '添加附件'}
+                </span>
+              </Upload>
             </div>
           </div>
-          {attachmentCount > 0 && (
+          {attachments.length > 0 && (
             <div className="detail-field-indent">
-              <Text type="secondary" className="detail-attachment-tip">
-                已添加 {attachmentCount} 个附件占位
-              </Text>
+              <div className="detail-attachment-list">
+                {attachments.map((att) => (
+                  <div key={att.attachment_id} className="detail-attachment-item">
+                    <PaperClipOutlined style={{ color: '#86909c' }} />
+                    <span
+                      className="detail-attachment-name"
+                      onClick={() => handleAttachmentDownload(att)}
+                      style={{ cursor: 'pointer', flex: 1, marginLeft: 6 }}
+                    >
+                      {att.file_name}
+                    </span>
+                    <Popconfirm
+                      title="确定删除该附件？"
+                      okText="删除"
+                      cancelText="取消"
+                      onConfirm={() => handleAttachmentDelete(att.attachment_id)}
+                    >
+                      <DeleteOutlined style={{ color: '#86909c', cursor: 'pointer' }} />
+                    </Popconfirm>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -647,15 +794,60 @@ export default function TaskDetailPanel({
                 </span>
               </div>
             </div>
-            {comments.map((comment, index) => (
-              <div key={`${comment}-${index}`} className="comment-item">
-                <span className="comment-dot" />
-                <div className="comment-content">
-                  <span className="comment-author">{currentUser.name}</span>
-                  <span className="comment-text">{`：${comment}`}</span>
+            {comments.map((comment) => {
+              const isMine = comment.user_id === appConfig.user_id
+              const isEditing = editingCommentId === comment.comment_id
+              return (
+                <div key={comment.comment_id} className="comment-item">
+                  <span className="comment-dot" />
+                  <div className="comment-content">
+                    <span className="comment-author">{comment.user_id}</span>
+                    {isEditing ? (
+                      <span style={{ display: 'inline-flex', gap: 6, marginLeft: 6 }}>
+                        <Input
+                          size="small"
+                          value={editingCommentValue}
+                          onChange={(e) => setEditingCommentValue(e.target.value)}
+                          onPressEnter={handleSaveEditComment}
+                          style={{ width: 220 }}
+                        />
+                        <Button size="small" type="link" onClick={handleSaveEditComment}>
+                          保存
+                        </Button>
+                        <Button
+                          size="small"
+                          type="link"
+                          onClick={() => {
+                            setEditingCommentId(null)
+                            setEditingCommentValue('')
+                          }}
+                        >
+                          取消
+                        </Button>
+                      </span>
+                    ) : (
+                      <span className="comment-text">{`：${comment.content}`}</span>
+                    )}
+                    <span className="comment-time" style={{ marginLeft: 8 }}>
+                      {dayjs(comment.created_at).format('HH:mm')}
+                    </span>
+                    {isMine && !isEditing && (
+                      <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8 }}>
+                        <a onClick={() => handleStartEditComment(comment)}>编辑</a>
+                        <Popconfirm
+                          title="确定删除该评论？"
+                          okText="删除"
+                          cancelText="取消"
+                          onConfirm={() => handleDeleteComment(comment.comment_id)}
+                        >
+                          <a>删除</a>
+                        </Popconfirm>
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>

@@ -75,6 +75,8 @@ import {
   updateSectionSortOrder,
   moveTaskToSection,
   computeSectionSortOrder,
+  deleteSection as apiDeleteSection,
+  updateSection as apiUpdateSection,
 } from '@/services/sectionService'
 import type { ViewConfig, ColumnKey } from '@/config/viewConfig'
 import EditableInput from '@/components/EditableInput'
@@ -779,8 +781,7 @@ export default function TaskTable({
     setHasLocalSectionEdits(true)
 
     try {
-      const { updateSection } = await import('@/services/sectionService')
-      await updateSection(sectionGuid, name)
+      await apiUpdateSection(sectionGuid, name)
       if (tasklist) {
         onTasklistUpdated?.({
           ...tasklist,
@@ -791,6 +792,68 @@ export default function TaskTable({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '重命名失败'
+      message.error(msg)
+    }
+  }
+
+  const handleDeleteSection = async (sectionGuid: string) => {
+    if (!tasklist) return
+    const target = sectionSource.find((s) => s.guid === sectionGuid)
+    if (!target) return
+    if (target.is_default) {
+      message.warning('默认分组不可删除')
+      return
+    }
+    const defaultSection =
+      sectionSource.find((s) => s.is_default) ??
+      sectionSource.find((s) => s.guid !== sectionGuid)
+    if (!defaultSection) {
+      message.warning('没有可迁移到的默认分组')
+      return
+    }
+    // 找到该分组下当前清单中的所有任务
+    const affectedTasks = tasks.filter((t) =>
+      t.tasklists.some(
+        (r) =>
+          r.tasklist_guid === tasklist.guid && r.section_guid === sectionGuid,
+      ),
+    )
+
+    const prevLocal = localSections
+    const prevHasEdits = hasLocalSectionEdits
+    const nextSections = sectionSource.filter((s) => s.guid !== sectionGuid)
+    setLocalSections(nextSections)
+    setHasLocalSectionEdits(true)
+    onTasklistUpdated?.({ ...tasklist, sections: nextSections })
+
+    // 先把任务迁到默认分组（本地 + 后端）
+    for (const t of affectedTasks) {
+      const updated: Task = {
+        ...t,
+        tasklists: t.tasklists.map((r) =>
+          r.tasklist_guid === tasklist.guid
+            ? { ...r, section_guid: defaultSection.guid }
+            : r,
+        ),
+      }
+      onTaskUpdated?.(updated)
+    }
+    try {
+      await Promise.all(
+        affectedTasks.map((t) => moveTaskToSection(t.guid, defaultSection.guid)),
+      )
+      await apiDeleteSection(sectionGuid)
+      message.success(
+        affectedTasks.length > 0
+          ? `已删除分组，${affectedTasks.length} 个任务已移至「${defaultSection.name}」`
+          : '已删除分组',
+      )
+    } catch (err: unknown) {
+      setLocalSections(prevLocal)
+      setHasLocalSectionEdits(prevHasEdits)
+      onTasklistUpdated?.({ ...tasklist, sections: sectionSource })
+      for (const t of affectedTasks) onTaskUpdated?.(t)
+      const msg = err instanceof Error ? err.message : '删除分组失败'
       message.error(msg)
     }
   }
@@ -1642,12 +1705,36 @@ export default function TaskTable({
                         onClick={() => startInlineCreate(section.guid)}
                         className="section-action-btn"
                       />
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={<EllipsisOutlined />}
-                        className="section-action-btn"
-                      />
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [
+                            {
+                              key: 'rename',
+                              label: '重命名',
+                              onClick: () => {
+                                setEditingSectionGuid(section.guid)
+                                setEditingSectionName(section.name)
+                              },
+                            },
+                            { type: 'divider' as const },
+                            {
+                              key: 'delete',
+                              danger: true,
+                              label: '删除分组',
+                              onClick: () => void handleDeleteSection(section.guid),
+                            },
+                          ],
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<EllipsisOutlined />}
+                          className="section-action-btn"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Dropdown>
                     </div>
                   )}
                 </div>

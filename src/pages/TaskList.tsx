@@ -77,6 +77,7 @@ export default function TaskListPage() {
               guid: s.section_id,
               name: s.name,
               sort_order: s.sort_order,
+              is_default: s.is_default,
             }))
           tls = tls.map((tl) =>
             tl.guid === activeNav.guid ? { ...tl, sections } : tl,
