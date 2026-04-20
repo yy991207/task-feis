@@ -4,7 +4,7 @@ import Button from 'antd/es/button'
 import Skeleton from 'antd/es/skeleton'
 import Tooltip from 'antd/es/tooltip'
 import { UnorderedListOutlined } from '@ant-design/icons'
-import type { Task, Tasklist, User } from '@/types/task'
+import type { Task, Tasklist } from '@/types/task'
 import type { Project } from '@/types/project'
 import { appConfig } from '@/config/appConfig'
 import { listProjects } from '@/services/projectService'
@@ -174,7 +174,22 @@ export default function TaskListPage() {
   }, [])
 
   const removeTaskFromState = useCallback((taskGuid: string) => {
-    setTasks((prev) => prev.filter((task) => task.guid !== taskGuid))
+    setTasks((prev) => {
+      const deletedTask = prev.find((task) => task.guid === taskGuid)
+      return prev
+        .filter((task) => task.guid !== taskGuid)
+        .map((task) => {
+          if (task.guid !== deletedTask?.parent_task_guid) {
+            return task
+          }
+
+          // 子任务删除后先本地修正父任务计数，避免父行继续显示旧的 0/1 进度。
+          return {
+            ...task,
+            subtask_count: Math.max(0, task.subtask_count - 1),
+          }
+        })
+    })
     setSelectedTask((prev) => (prev?.guid === taskGuid ? null : prev))
   }, [])
 

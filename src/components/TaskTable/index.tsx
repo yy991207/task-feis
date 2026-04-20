@@ -535,24 +535,28 @@ export default function TaskTable({
   const [localSections, setLocalSections] = useState<Section[]>(sections ?? [])
   const [hasLocalSectionEdits, setHasLocalSectionEdits] = useState(false)
   const [creatingSection, setCreatingSection] = useState(false)
-  const [newSectionName, setNewSectionName] = useState('')
   const [activeAssigneePickerKey, setActiveAssigneePickerKey] = useState<string | null>(null)
   const [expandedTaskGuids, setExpandedTaskGuids] = useState<Set<string>>(new Set())
   const [subtasksByGuid, setSubtasksByGuid] = useState<Record<string, Task[]>>({})
 
-  // 当外部 tasks 更新时（如详情页更改状态），同步子任务缓存
+  // 外部 tasks 是权威数据源：详情页删除子任务后，要同步清掉展开缓存里的旧子任务。
   useEffect(() => {
     setSubtasksByGuid((prev) => {
       let changed = false
+      const taskByGuid = new Map(tasks.map((item) => [item.guid, item]))
       const next: Record<string, Task[]> = {}
       for (const [pid, list] of Object.entries(prev)) {
-        const updated = list.map((child) => {
-          const fresh = tasks.find((t) => t.guid === child.guid)
-          if (fresh && fresh !== child) {
+        const updated = list.flatMap((child) => {
+          const fresh = taskByGuid.get(child.guid)
+          if (!fresh) {
             changed = true
-            return fresh
+            return []
           }
-          return child
+          if (fresh !== child) {
+            changed = true
+            return [fresh]
+          }
+          return [child]
         })
         next[pid] = updated
       }
@@ -1063,44 +1067,6 @@ export default function TaskTable({
     }
   }
 
-  const handleCreateSection = async () => {
-    const name = newSectionName.trim()
-    if (!tasklist || !name) {
-      setCreatingSection(false)
-      setNewSectionName('')
-      return
-    }
-
-    try {
-      const apiSection = await apiCreateSection(tasklist.guid, name)
-      const nextSection: Section = {
-        guid: apiSection.section_id,
-        name: apiSection.name,
-        sort_order: apiSection.sort_order,
-      }
-      setLocalSections((prev) => [...prev, nextSection])
-      setHasLocalSectionEdits(true)
-      onTasklistUpdated?.({
-        ...tasklist,
-        sections: [...sectionSource, nextSection],
-      })
-      setNewSectionName('')
-      setCreatingSection(false)
-      setAnimatedSectionGuid(nextSection.guid)
-      if (animationTimerRef.current !== null) {
-        window.clearTimeout(animationTimerRef.current)
-      }
-      animationTimerRef.current = window.setTimeout(() => {
-        setAnimatedSectionGuid((prev) => (prev === nextSection.guid ? null : prev))
-      }, 900)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '创建分组失败'
-      message.error(msg)
-      setCreatingSection(false)
-      setNewSectionName('')
-    }
-  }
-
   // ---- Drag & Drop: sections (reorder) + tasks (move between sections) ----
   const [draggingSectionGuid, setDraggingSectionGuid] = useState<string | null>(null)
   const [draggingTaskGuid, setDraggingTaskGuid] = useState<string | null>(null)
@@ -1392,7 +1358,7 @@ export default function TaskTable({
       {isTasklistView && (
         <Dropdown
           trigger={['hover']}
-          placement="rightTop"
+          placement="topRight"
           menu={{
             items: customFieldTypeMenuItems.map((it) => ({
               key: it.key,
@@ -2118,6 +2084,7 @@ function TaskRow({
   const creatorUser = users.find((u) => u.id === task.creator.id)
   const has = (col: ColumnKey) => columns.includes(col)
   const showPriority = task.priority !== Priority.None
+  const isSubtask = Boolean(task.parent_task_guid)
   const startDate = task.start ? dayjs(Number(task.start.timestamp)) : null
   const dueDate = task.due ? dayjs(Number(task.due.timestamp)) : null
 
@@ -2194,6 +2161,11 @@ function TaskRow({
     field: 'start' | 'due',
     date: dayjs.Dayjs | null,
   ) => {
+    if (field === 'start' && isSubtask) {
+      message.warning('子任务开始时间跟随父任务，不能单独修改')
+      return
+    }
+
     const patch: Partial<Task> = {}
     if (date) {
       patch[field] = { timestamp: date.valueOf().toString(), is_all_day: false }
@@ -2346,38 +2318,51 @@ function TaskRow({
       )}
       {has('start') && (
         <div className="cell cell-start" onClick={(e) => e.stopPropagation()}>
-          <Popover
-            trigger="click"
-            placement="bottomLeft"
-            content={
-              <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-                <Calendar
-                  fullscreen={false}
-                  value={startDate ?? undefined}
-                  onSelect={(value) => void handleDateChange('start', value)}
-                />
-                {startDate && (
-                  <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                    <Button
-                      type="link"
-                      size="small"
-                      onClick={() => void handleDateChange('start', null)}
-                    >
-                      清除
-                    </Button>
-                  </div>
-                )}
-              </div>
-            }
-          >
-            <div className="date-trigger">
+          {isSubtask ? (
+            <div
+              className="date-trigger date-trigger-readonly"
+              title="子任务开始时间跟随父任务，不能单独修改"
+            >
               {startDate ? (
                 <span className="date-text">{startDate.format('M月D日')}</span>
               ) : (
                 <CalendarOutlined className="empty-date-icon" />
               )}
             </div>
-          </Popover>
+          ) : (
+            <Popover
+              trigger="click"
+              placement="bottomLeft"
+              content={
+                <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                  <Calendar
+                    fullscreen={false}
+                    value={startDate ?? undefined}
+                    onSelect={(value) => void handleDateChange('start', value)}
+                  />
+                  {startDate && (
+                    <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={() => void handleDateChange('start', null)}
+                      >
+                        清除
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              }
+            >
+              <div className="date-trigger">
+                {startDate ? (
+                  <span className="date-text">{startDate.format('M月D日')}</span>
+                ) : (
+                  <CalendarOutlined className="empty-date-icon" />
+                )}
+              </div>
+            </Popover>
+          )}
         </div>
       )}
       {has('due') && (
