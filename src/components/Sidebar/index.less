@@ -1,0 +1,318 @@
+.sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  user-select: none;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #ddd;
+    border-radius: 2px;
+  }
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 12px 8px;
+  gap: 8px;
+
+  .sidebar-toggle-btn {
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    font-size: 16px !important;
+    color: #1f2329 !important;
+    flex-shrink: 0;
+
+    &:hover {
+      background: #f0f1f5 !important;
+      color: #3370ff !important;
+    }
+  }
+
+  .sidebar-title {
+    flex: 1;
+    margin: 0 !important;
+    color: #1f2329;
+  }
+}
+
+.sidebar-menu {
+  border-inline-end: none !important;
+  background: transparent !important;
+
+  .ant-menu-item {
+    margin: 2px 8px !important;
+    padding-inline: 12px !important;
+    width: calc(100% - 16px) !important;
+    height: 34px !important;
+    line-height: 34px !important;
+    border-radius: 6px !important;
+  }
+  .ant-menu-item-group-title {
+    padding: 8px 16px 4px !important;
+    font-size: 12px;
+    color: #8f959e;
+    font-weight: 500;
+  }
+
+  .menu-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    .ant-badge-count {
+      font-size: 11px;
+      min-width: 20px;
+      height: 16px;
+      line-height: 16px;
+      padding: 0 5px;
+    }
+  }
+}
+
+.sidebar-divider {
+  margin: 4px 12px !important;
+}
+
+.tasklist-tree-wrap {
+  padding: 0 8px;
+  flex-shrink: 0;
+
+  .ant-tree {
+    background: transparent;
+    font-size: 14px;
+    color: #1f2329;
+  }
+
+  .ant-tree .ant-tree-treenode {
+    padding: 0 !important;
+    width: 100%;
+    align-items: center;
+  }
+
+  /* 缩进单元：去掉子节点的额外缩进，让子清单与父"任务清单"左对齐
+     （父节点的 switcher 和子节点的 switcher-noop 都占 16px，起点自然对齐） */
+  .ant-tree .ant-tree-indent-unit {
+    width: 0 !important;
+  }
+  .ant-tree .ant-tree-indent-unit:before {
+    display: none !important;
+  }
+
+  .ant-tree .ant-tree-node-content-wrapper {
+    padding: 6px 8px !important;
+    border-radius: 6px;
+    transition: background 0.15s;
+    min-height: 34px;
+    display: flex !important;
+    align-items: center;
+    flex: 1;
+    overflow: hidden;
+    line-height: 22px !important;
+
+    &:hover {
+      background: #f0f1f5;
+    }
+  }
+
+  /* Tree 默认 title 容器不会自动撑满整行。
+     这里让 antd 的标题层参与 flex，分组右侧操作按钮才能稳定贴到最右边。 */
+  .ant-tree .ant-tree-node-content-wrapper .ant-tree-title {
+    display: block;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ant-tree .ant-tree-node-selected {
+    background: transparent !important;
+  }
+
+  /* switcher 图标：默认 24px 太宽，压到 16px */
+  .ant-tree .ant-tree-switcher {
+    align-self: center;
+    font-size: 10px;
+    color: #8f959e;
+    line-height: 34px;
+    width: 16px !important;
+    flex-shrink: 0;
+  }
+  .ant-tree .ant-tree-switcher-noop {
+    width: 16px !important;
+  }
+
+  .ant-tree .tree-section {
+    > .ant-tree-node-content-wrapper {
+      color: #8f959e;
+      font-size: 12px;
+      font-weight: 500;
+
+      &:hover {
+        background: transparent;
+        color: #646a73;
+
+        .group-action-btn {
+          opacity: 1;
+        }
+      }
+    }
+  }
+
+  .group-title-row {
+    width: 100%;
+    min-height: 22px;
+
+    .group-name {
+      flex: 1;
+      min-width: 0;
+      color: inherit;
+    }
+
+    .group-actions {
+      flex-shrink: 0;
+    }
+
+    .group-action-btn {
+      opacity: 0;
+      transition: opacity 0.15s;
+      width: 20px !important;
+      height: 20px !important;
+      min-width: 20px;
+      padding: 0 !important;
+      font-size: 11px !important;
+      color: #8f959e !important;
+
+      &.always-visible {
+        opacity: 1;
+      }
+      &:hover {
+        background: #e5e6eb !important;
+        color: #1f2329 !important;
+      }
+    }
+  }
+
+  .tasklist-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    font-size: 14px;
+    color: #1f2329;
+
+    .ant-badge-status-dot {
+      width: 8px !important;
+      height: 8px !important;
+    }
+
+    .tasklist-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .tasklist-name-editor {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .tasklist-action-btn {
+      opacity: 0;
+      transition: opacity 0.15s;
+      width: 20px !important;
+      height: 20px !important;
+      min-width: 20px;
+      padding: 0 !important;
+      font-size: 12px !important;
+      color: #8f959e !important;
+      flex-shrink: 0;
+
+      &.always-visible {
+        opacity: 1;
+      }
+      &:hover {
+        background: #e5e6eb !important;
+        color: #1f2329 !important;
+      }
+    }
+
+    &:hover .tasklist-action-btn {
+      opacity: 1;
+    }
+
+    &.editing {
+      gap: 6px;
+    }
+
+    &.active {
+      color: #3370ff;
+      font-weight: 500;
+    }
+  }
+
+  .ant-tree .ant-tree-node-content-wrapper:has(.tasklist-title.active) {
+    background: #e1eaff;
+  }
+
+  .ant-tree .ant-input {
+    height: 24px;
+    font-size: 13px;
+    padding-inline: 8px;
+  }
+}
+
+.create-group-wrap {
+  padding: 4px 16px;
+
+  .create-group-btn {
+    color: #8f959e !important;
+    font-size: 13px !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    height: 30px !important;
+
+    &:hover {
+      color: #3370ff !important;
+      background: #f0f1f5 !important;
+    }
+  }
+}
+
+// Drag & drop visual indicators — rely on antd's native drop-indicator,
+// just tweak the drag handle icon + dragging opacity.
+.tasklist-tree-wrap {
+  .ant-tree-treenode.dragging {
+    opacity: 0.4;
+  }
+
+  .ant-tree .ant-tree-draggable-icon {
+    width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+    color: #bfbfbf;
+    cursor: grab;
+  }
+
+  .ant-tree .ant-tree-treenode:hover .ant-tree-draggable-icon {
+    opacity: 1;
+  }
+
+  .ant-tree .ant-tree-treenode .ant-tree-draggable-icon:active {
+    cursor: grabbing;
+  }
+
+  // antd's native drop indicator is `.ant-tree-drop-indicator`; keep it visible
+  .ant-tree .ant-tree-drop-indicator {
+    background-color: #3370ff;
+    height: 2px;
+  }
+}
