@@ -36,6 +36,7 @@ import {
   FontSizeOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import Calendar from 'antd/es/calendar'
 import type { Task, Tasklist, User } from '@/types/task'
 import { appConfig } from '@/config/appConfig'
 import {
@@ -62,6 +63,7 @@ import {
   patchTaskStatus,
   patchTaskAssignee,
   listSubtasks,
+  getTask,
   apiTaskToTask,
 } from '@/services/taskService'
 import './index.less'
@@ -75,6 +77,7 @@ interface TaskDetailPanelProps {
   onTaskUpdated?: (task: Task) => void
   onSubtaskCreated?: (task: Task) => void
   onTaskDeleted?: (taskGuid: string) => void
+  onOpenTask?: (task: Task) => void
   onClose: () => void
 }
 
@@ -85,6 +88,7 @@ export default function TaskDetailPanel({
   onTaskUpdated,
   onSubtaskCreated,
   onTaskDeleted,
+  onOpenTask,
   onClose,
 }: TaskDetailPanelProps) {
   const [panelWidth, setPanelWidth] = useState(360)
@@ -97,7 +101,7 @@ export default function TaskDetailPanel({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentValue, setEditingCommentValue] = useState('')
   const [descriptionDraft, setDescriptionDraft] = useState(task.description)
-  const [descriptionVisible, setDescriptionVisible] = useState(Boolean(task.description))
+  const [descriptionEditing, setDescriptionEditing] = useState(false)
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
@@ -132,6 +136,29 @@ export default function TaskDetailPanel({
     void listSubtasks(task.guid).then((items) =>
       setSubtaskDrafts(items.map((t) => apiTaskToTask(t))),
     )
+  }, [task.guid])
+
+  useEffect(() => {
+    let cancelled = false
+    void getTask(task.guid)
+      .then((api) => {
+        if (cancelled) return
+        const fresh = apiTaskToTask(api)
+        // 仅在 start/due/status/title 等关键字段有差异时回写，避免不必要的渲染
+        if (
+          fresh.start?.timestamp !== task.start?.timestamp ||
+          fresh.due?.timestamp !== task.due?.timestamp ||
+          fresh.status !== task.status ||
+          fresh.summary !== task.summary
+        ) {
+          onTaskUpdated?.(fresh)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.guid])
 
   useEffect(() => {
@@ -234,31 +261,58 @@ export default function TaskDetailPanel({
     })
   }
 
+  const handleDateChange = handleDateQuickSet
+
+  const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
+  const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
+
   const handleAddSubtask = async () => {
     const summary = subtaskTitle.trim()
     if (!summary) {
       setSubtaskCreating(true)
-      setSubtaskAssigneeIds((prev) => (prev.length > 0 ? prev : assignees.map((item) => item.id)))
+      return
+    }
+    if (!canCreateSubtask) {
+      message.warning('子任务层级已达上限（共 5 层）')
       return
     }
 
     const tasklistRef = task.tasklists[0]
-    const apiTask = await createTaskApi({
-      project_id: tasklistRef?.tasklist_guid ?? '',
-      title: summary,
-      parent_task_id: task.guid,
-      assignee_id: subtaskAssigneeIds[0] ?? assignees[0]?.id,
-      section_id: selectedSectionGuid || tasklistRef?.section_guid,
-      due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
-    })
-    const createdTask = apiTaskToTask(apiTask)
+    // 开始时间默认继承父任务
+    const parentStart = task.start?.timestamp
+      ? new Date(Number(task.start.timestamp)).toISOString()
+      : undefined
+    try {
+      const apiTask = await createTaskApi({
+        project_id: tasklistRef?.tasklist_guid ?? '',
+        title: summary,
+        parent_task_id: task.guid,
+        section_id: selectedSectionGuid || tasklistRef?.section_guid,
+        assignee_id: subtaskAssigneeIds[0],
+        start_date: parentStart,
+        due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
+      })
+      const createdTask = apiTaskToTask(apiTask)
+      setSubtaskDrafts((prev) => [...prev, createdTask])
+      setSubtaskTitle('')
+      setSubtaskAssigneeIds([])
+      setSubtaskDue(null)
+      setSubtaskCreating(true)
+      onSubtaskCreated?.(createdTask)
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '创建子任务失败')
+    }
+  }
 
-    setSubtaskDrafts((prev) => [...prev, createdTask])
-    setSubtaskCreating(false)
-    setSubtaskTitle('')
-    setSubtaskAssigneeIds([])
-    setSubtaskDue(null)
-    onSubtaskCreated?.(createdTask)
+  const handleToggleSubtaskStatus = async (subtask: Task) => {
+    const nextDone = subtask.status !== 'done'
+    try {
+      const apiTask = await patchTaskStatus(subtask.guid, nextDone ? 'done' : 'todo')
+      const next = apiTaskToTask(apiTask)
+      setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '状态更新失败')
+    }
   }
 
   const handleAttachmentUpload = async (file: File) => {
@@ -292,6 +346,21 @@ export default function TaskDetailPanel({
       await downloadAttachment(att.attachment_id, att.file_name)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '下载失败')
+    }
+  }
+
+  const handleChangeSection = async (nextSectionGuid: string) => {
+    setSelectedSectionGuid(nextSectionGuid)
+    try {
+      const apiTask = await updateTaskApi(task.guid, {
+        section_id: nextSectionGuid,
+      })
+      const nextTask = apiTaskToTask(apiTask)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) onRefresh?.()
+      message.success('已移动到新分组')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '移动失败')
     }
   }
 
@@ -379,6 +448,17 @@ export default function TaskDetailPanel({
     onClose()
   }
 
+  const handleCancelTask = async () => {
+    try {
+      const { cancelTask } = await import('@/services/taskService')
+      await cancelTask(task.guid, { terminate: true })
+      message.success('已取消任务')
+      onRefresh?.()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '取消失败')
+    }
+  }
+
   const moreMenu = {
     items: [
       { key: 'setting', icon: <FlagOutlined />, label: '设置父任务' },
@@ -386,6 +466,7 @@ export default function TaskDetailPanel({
       { key: 'before', icon: <ForkOutlined rotate={180} />, label: '添加前置任务' },
       { key: 'after', icon: <ForkOutlined />, label: '添加后置任务' },
       { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
+      { key: 'cancel', icon: <CloseOutlined />, label: '取消任务' },
       { key: 'report', icon: <FlagOutlined />, label: '举报' },
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
@@ -394,14 +475,16 @@ export default function TaskDetailPanel({
         void handleDeleteTask()
         return
       }
+      if (key === 'cancel') {
+        void handleCancelTask()
+        return
+      }
       message.info('功能开发中')
     },
   }
 
-  const tasklistCount = currentTasklist?.sections.reduce(
-    (sum, s) => sum + (s.guid ? 1 : 0),
-    0,
-  ) ?? 0
+
+
 
   const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeStateRef.current = {
@@ -420,24 +503,43 @@ export default function TaskDetailPanel({
       />
       {/* Header */}
       <div className="detail-top">
-        <Button
-          type={task.status === 'done' ? 'primary' : 'default'}
-          size="small"
-          icon={<CheckOutlined />}
-          className={task.status === 'done' ? 'done-btn' : 'complete-btn'}
-          onClick={() => {
-            const nextStatus = task.status === 'done' ? 'todo' : 'done'
-            void patchTaskStatus(task.guid, nextStatus).then((apiTask) => {
-              const nextTask = apiTaskToTask(apiTask)
-              onTaskUpdated?.(nextTask)
-              if (!onTaskUpdated) {
-                onRefresh?.()
-              }
-            })
-          }}
-        >
-          {task.status === 'done' ? '已完成' : '完成任务'}
-        </Button>
+        {task.status === 'done' ? (
+          <Tag
+            icon={<CheckOutlined />}
+            color="success"
+            className="done-tag"
+            style={{
+              cursor: 'pointer',
+              padding: '4px 10px',
+              fontSize: 13,
+              borderRadius: 6,
+            }}
+            onClick={() => {
+              void patchTaskStatus(task.guid, 'todo').then((apiTask) => {
+                const nextTask = apiTaskToTask(apiTask)
+                onTaskUpdated?.(nextTask)
+                if (!onTaskUpdated) onRefresh?.()
+              })
+            }}
+          >
+            任务已完成
+          </Tag>
+        ) : (
+          <Button
+            size="small"
+            icon={<CheckOutlined />}
+            className="complete-btn"
+            onClick={() => {
+              void patchTaskStatus(task.guid, 'done').then((apiTask) => {
+                const nextTask = apiTaskToTask(apiTask)
+                onTaskUpdated?.(nextTask)
+                if (!onTaskUpdated) onRefresh?.()
+              })
+            }}
+          >
+            完成任务
+          </Button>
+        )}
         <div className="detail-actions">
           <span className="detail-action-icon detail-action-primary">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -514,61 +616,79 @@ export default function TaskDetailPanel({
           <div className="detail-field-row">
             <CalendarOutlined className="field-icon" />
             <div className="field-content">
-              <div className="date-tags">
-                <Button
-                  size="small"
-                  className={`date-tag-btn ${
-                    task.start && dayjs(Number(task.start.timestamp)).isSame(dayjs(), 'day')
-                      ? 'date-tag-active'
-                      : ''
-                  }`}
-                  icon={<CalendarOutlined />}
-                  onClick={() => void handleDateQuickSet('start', dayjs().startOf('day'))}
-                >
-                  今天
-                </Button>
-                <Button
-                  size="small"
-                  className={`date-tag-btn date-tag-tomorrow ${
-                    task.start &&
-                    dayjs(Number(task.start.timestamp)).isSame(dayjs().add(1, 'day'), 'day')
-                      ? 'date-tag-active'
-                      : ''
-                  }`}
-                  icon={<CalendarOutlined />}
-                  onClick={() => void handleDateQuickSet('start', dayjs().add(1, 'day').startOf('day'))}
-                >
-                  明天
-                </Button>
+              <Space size={8}>
                 <Popover
                   trigger="click"
                   placement="bottomLeft"
                   content={
-                    <div className="detail-popover-panel">
-                      <Text strong>设置时间</Text>
-                      <Select
-                        size="small"
-                        value={task.due ? 'due' : task.start ? 'start' : undefined}
-                        placeholder="选择时间字段"
-                        onChange={(value) =>
-                          void handleDateQuickSet(
-                            value as 'start' | 'due',
-                            dayjs().add(2, 'day').startOf('day'),
-                          )
+                    <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                      <Calendar
+                        fullscreen={false}
+                        value={
+                          task.start
+                            ? dayjs(Number(task.start.timestamp))
+                            : undefined
                         }
-                        options={[
-                          { value: 'start', label: '设置开始时间' },
-                          { value: 'due', label: '设置截止时间' },
-                        ]}
+                        onSelect={(value) => void handleDateChange('start', value)}
                       />
+                      {task.start && (
+                        <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => void handleDateChange('start', null)}
+                          >
+                            清除
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   }
                 >
                   <Button size="small" className="date-tag-btn" icon={<CalendarOutlined />}>
-                    其他时间
+                    {task.start
+                      ? `开始 ${dayjs(Number(task.start.timestamp)).format('M月D日')}`
+                      : '开始时间'}
                   </Button>
                 </Popover>
-              </div>
+                <Popover
+                  trigger="click"
+                  placement="bottomLeft"
+                  content={
+                    <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                      <Calendar
+                        fullscreen={false}
+                        value={
+                          task.due
+                            ? dayjs(Number(task.due.timestamp))
+                            : undefined
+                        }
+                        onSelect={(value) => void handleDateChange('due', value)}
+                        disabledDate={(current) =>
+                          current && current < dayjs().startOf('day')
+                        }
+                      />
+                      {task.due && (
+                        <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => void handleDateChange('due', null)}
+                          >
+                            清除
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  }
+                >
+                  <Button size="small" className="date-tag-btn" icon={<CalendarOutlined />}>
+                    {task.due
+                      ? `截止 ${dayjs(Number(task.due.timestamp)).format('M月D日')}`
+                      : '截止时间'}
+                  </Button>
+                </Popover>
+              </Space>
             </div>
           </div>
 
@@ -581,8 +701,6 @@ export default function TaskDetailPanel({
                   <span className="tasklist-info">
                     <span className="tasklist-name">
                       {selectedTasklist?.name ?? currentTasklist.name}
-                      {' '}
-                      {tasklistCount > 0 && <span className="tasklist-count">{tasklistCount}</span>}
                     </span>
                     <span className="tasklist-divider">|</span>
                     <Popover
@@ -594,7 +712,7 @@ export default function TaskDetailPanel({
                           <Select
                             size="small"
                             value={selectedSectionGuid}
-                            onChange={(value) => setSelectedSectionGuid(value)}
+                            onChange={(value) => void handleChangeSection(value)}
                             options={(selectedTasklist?.sections ?? []).map((item) => ({
                               value: item.guid,
                               label: item.name,
@@ -627,19 +745,33 @@ export default function TaskDetailPanel({
             <AlignLeftOutlined className="field-icon" />
             <div
               className="field-content field-clickable"
-              onClick={() => setDescriptionVisible(true)}
+              onClick={() => {
+                setDescriptionDraft(task.description ?? '')
+                setDescriptionEditing(true)
+              }}
             >
-              <span className="field-placeholder">
-                {descriptionVisible ? '编辑描述' : '添加描述'}
-              </span>
+              {descriptionEditing ? (
+                <span className="field-placeholder">编辑描述</span>
+              ) : task.description ? (
+                <span className="detail-description-text">{task.description}</span>
+              ) : (
+                <span className="field-placeholder">添加描述</span>
+              )}
             </div>
           </div>
-          {descriptionVisible && (
+          {descriptionEditing && (
             <div className="detail-field-indent">
               <Input.TextArea
                 value={descriptionDraft}
+                autoFocus
                 onChange={(e) => setDescriptionDraft(e.target.value)}
-                onBlur={() => void handleTaskPatch({ description: descriptionDraft })}
+                onBlur={async () => {
+                  const next = descriptionDraft ?? ''
+                  if (next !== (task.description ?? '')) {
+                    await handleTaskPatch({ description: next })
+                  }
+                  setDescriptionEditing(false)
+                }}
                 placeholder="输入任务描述"
                 autoSize={{ minRows: 3, maxRows: 6 }}
                 className="detail-description-input"
@@ -650,86 +782,165 @@ export default function TaskDetailPanel({
           {/* Subtask row */}
           <div className="detail-field-row">
             <BranchesOutlined className="field-icon" />
-            <div
-              className="field-content field-clickable"
-              onClick={() => void handleAddSubtask()}
-            >
-              <span className="field-placeholder">添加子任务</span>
+            <div className="field-content">
+              <span className="field-placeholder">子任务</span>
             </div>
           </div>
-          {subtaskCreating && (
-            <div className="detail-field-indent">
-              <div className="detail-subtask-creator">
-                <Input
-                  size="small"
-                  placeholder="输入子任务标题"
-                  value={subtaskTitle}
-                  onChange={(e) => setSubtaskTitle(e.target.value)}
-                  onPressEnter={() => void handleAddSubtask()}
-                  autoFocus
-                />
-                <div className="detail-subtask-create-grid">
-                  <Select
-                    mode="multiple"
+          <div className="detail-field-indent">
+            <div className="detail-subtasks">
+              {subtaskDrafts.map((subtask) => {
+                const isDone = subtask.status === 'done'
+                const assignee = subtask.members.find((m) => m.role === 'assignee')
+                return (
+                  <div
+                    key={subtask.guid}
+                    className={`detail-subtask-row ${isDone ? 'is-done' : ''}`}
+                    onClick={() => onOpenTask?.(subtask)}
+                  >
+                    <span
+                      className={`subtask-check ${isDone ? 'checked' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleToggleSubtaskStatus(subtask)
+                      }}
+                    >
+                      {isDone && <CheckOutlined />}
+                    </span>
+                    <span className="subtask-title">{subtask.summary}</span>
+                    <div
+                      className="subtask-meta"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {subtask.due && (
+                        <span className="subtask-date">
+                          {dayjs(Number(subtask.due.timestamp)).format('M月D日')}
+                        </span>
+                      )}
+                      {assignee && (
+                        <Avatar size={20} style={{ backgroundColor: '#f5a623' }}>
+                          {(assignee.name ?? assignee.id).slice(0, 1)}
+                        </Avatar>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {canCreateSubtask && subtaskCreating && (
+                <div className="detail-subtask-row is-creating">
+                  <span className="subtask-check" />
+                  <Input
                     size="small"
-                    placeholder="负责人"
-                    value={subtaskAssigneeIds}
-                    onChange={setSubtaskAssigneeIds}
-                    options={availableUsers.map((user) => ({
-                      value: user.id,
-                      label: user.name,
-                    }))}
-                  />
-                  <DatePicker
-                    size="small"
-                    placeholder="截止时间"
-                    value={subtaskDue}
-                    onChange={(value) => setSubtaskDue(value)}
+                    autoFocus
+                    placeholder="输入内容，回车即可创建子任务"
+                    value={subtaskTitle}
+                    onChange={(e) => setSubtaskTitle(e.target.value)}
+                    onPressEnter={() => void handleAddSubtask()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setSubtaskCreating(false)
+                        setSubtaskTitle('')
+                        setSubtaskAssigneeIds([])
+                        setSubtaskDue(null)
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                    suffix={
+                      <span
+                        className="subtask-suffix-icons"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Popover
+                          trigger="click"
+                          placement="bottomRight"
+                          content={
+                            <div
+                              style={{ width: 260 }}
+                              onMouseDown={(e) => e.preventDefault()}
+                            >
+                              <Calendar
+                                fullscreen={false}
+                                value={subtaskDue ?? undefined}
+                                onSelect={setSubtaskDue}
+                                disabledDate={(current) =>
+                                  current && current < dayjs().startOf('day')
+                                }
+                              />
+                            </div>
+                          }
+                        >
+                          <CalendarOutlined
+                            className={`subtask-icon-btn ${subtaskDue ? 'active' : ''}`}
+                          />
+                        </Popover>
+                        <Popover
+                          trigger="click"
+                          placement="bottomRight"
+                          content={
+                            <div
+                              style={{ width: 200 }}
+                              onMouseDown={(e) => e.preventDefault()}
+                            >
+                              <Select
+                                autoFocus
+                                showSearch
+                                size="small"
+                                placeholder="选择负责人"
+                                value={subtaskAssigneeIds[0]}
+                                onChange={(v) => setSubtaskAssigneeIds(v ? [v] : [])}
+                                options={availableUsers.map((u) => ({
+                                  value: u.id,
+                                  label: u.name,
+                                }))}
+                                style={{ width: '100%' }}
+                                allowClear
+                              />
+                            </div>
+                          }
+                        >
+                          <UsergroupAddOutlined
+                            className={`subtask-icon-btn ${subtaskAssigneeIds[0] ? 'active' : ''}`}
+                          />
+                        </Popover>
+                      </span>
+                    }
+                    onBlur={(e) => {
+                      // 如果焦点移到 suffix 图标或它们的 popover，不要关闭
+                      const next = e.relatedTarget as HTMLElement | null
+                      if (
+                        next &&
+                        (next.closest('.subtask-suffix-icons') ||
+                          next.closest('.ant-popover'))
+                      ) {
+                        return
+                      }
+                      if (!subtaskTitle.trim()) {
+                        setSubtaskCreating(false)
+                        setSubtaskAssigneeIds([])
+                        setSubtaskDue(null)
+                      }
+                    }}
                   />
                 </div>
-                <Space size={8}>
-                  <Button size="small" onClick={() => {
-                    setSubtaskCreating(false)
-                    setSubtaskTitle('')
-                    setSubtaskAssigneeIds([])
-                    setSubtaskDue(null)
-                  }}>
-                    取消
-                  </Button>
-                  <Button
-                    size="small"
-                    type="primary"
-                    disabled={!subtaskTitle.trim()}
-                    onClick={() => void handleAddSubtask()}
-                  >
-                    创建
-                  </Button>
-                </Space>
-              </div>
+              )}
+              {canCreateSubtask && !subtaskCreating && (
+                <div
+                  className="detail-subtask-row detail-subtask-add"
+                  onClick={() => setSubtaskCreating(true)}
+                >
+                  <PlusOutlined className="subtask-add-icon" />
+                  <span className="subtask-add-text">添加子任务</span>
+                </div>
+              )}
+              {!canCreateSubtask && (
+                <div
+                  className="detail-subtask-row"
+                  style={{ color: '#86909c', fontSize: 12 }}
+                >
+                  已达子任务层级上限（共 5 层）
+                </div>
+              )}
             </div>
-          )}
-          {subtaskDrafts.length > 0 && (
-            <div className="detail-field-indent">
-              <div className="detail-subtasks">
-                {subtaskDrafts.map((subtask) => (
-                  <div key={subtask.guid} className="detail-subtask-item">
-                    <BranchesOutlined />
-                    <Text>{subtask.summary}</Text>
-                    {subtask.members[0] && (
-                      <Tag variant="filled" className="detail-subtask-assignee">
-                        {subtask.members[0].name ?? subtask.members[0].id}
-                      </Tag>
-                    )}
-                    {subtask.due && (
-                      <Text type="secondary" className="detail-subtask-date">
-                        {dayjs(Number(subtask.due.timestamp)).format('M月D日')}
-                      </Text>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          </div>
 
           {/* Attachment row */}
           <div className="detail-field-row">
@@ -743,9 +954,9 @@ export default function TaskDetailPanel({
                   return false
                 }}
               >
-                <span className="field-placeholder" style={{ cursor: 'pointer' }}>
+                <Button type="link" size="small" style={{ padding: 0 }}>
                   {attachmentUploading ? '上传中...' : '添加附件'}
-                </span>
+                </Button>
               </Upload>
             </div>
           </div>

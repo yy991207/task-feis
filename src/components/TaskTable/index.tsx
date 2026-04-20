@@ -32,11 +32,6 @@ import {
   EllipsisOutlined,
   FlagFilled,
   CheckSquareFilled,
-  LayoutOutlined,
-  AlignLeftOutlined,
-  DashboardOutlined,
-  HistoryOutlined,
-  UnorderedListOutlined,
   CheckCircleOutlined,
   AppstoreOutlined,
   DownOutlined,
@@ -66,6 +61,7 @@ import {
   patchTaskAssignee,
   apiTaskToTask,
   toPriorityString,
+  listSubtasks,
 } from '@/services/taskService'
 import { updateProject } from '@/services/projectService'
 import { listMembers } from '@/services/teamService'
@@ -489,6 +485,49 @@ export default function TaskTable({
   const [creatingSection, setCreatingSection] = useState(false)
   const [newSectionName, setNewSectionName] = useState('')
   const [activeAssigneePickerKey, setActiveAssigneePickerKey] = useState<string | null>(null)
+  const [expandedTaskGuids, setExpandedTaskGuids] = useState<Set<string>>(new Set())
+  const [subtasksByGuid, setSubtasksByGuid] = useState<Record<string, Task[]>>({})
+
+  // 当外部 tasks 更新时（如详情页更改状态），同步子任务缓存
+  useEffect(() => {
+    setSubtasksByGuid((prev) => {
+      let changed = false
+      const next: Record<string, Task[]> = {}
+      for (const [pid, list] of Object.entries(prev)) {
+        const updated = list.map((child) => {
+          const fresh = tasks.find((t) => t.guid === child.guid)
+          if (fresh && fresh !== child) {
+            changed = true
+            return fresh
+          }
+          return child
+        })
+        next[pid] = updated
+      }
+      return changed ? next : prev
+    })
+  }, [tasks])
+
+  const handleToggleExpand = useCallback(async (parent: Task) => {
+    const guid = parent.guid
+    setExpandedTaskGuids((prev) => {
+      const next = new Set(prev)
+      if (next.has(guid)) next.delete(guid)
+      else next.add(guid)
+      return next
+    })
+    if (!subtasksByGuid[guid]) {
+      try {
+        const items = await listSubtasks(guid)
+        setSubtasksByGuid((prev) => ({
+          ...prev,
+          [guid]: items.map((t) => apiTaskToTask(t)),
+        }))
+      } catch {
+        setSubtasksByGuid((prev) => ({ ...prev, [guid]: [] }))
+      }
+    }
+  }, [subtasksByGuid])
   const [creatingCustomField, setCreatingCustomField] = useState(false)
   const animationTimerRef = useRef<number | null>(null)
   const inlineCreateInteractingRef = useRef(false)
@@ -626,16 +665,34 @@ export default function TaskTable({
     const nextStatus = task.status === 'done' ? 'todo' : 'done'
     const optimistic = { ...task, status: nextStatus as Task['status'] }
     handleTaskUpdate(optimistic)
+    updateSubtaskInCache(optimistic)
     try {
       const apiTask = await patchTaskStatus(task.guid, nextStatus)
-      handleTaskUpdate(apiTaskToTask(apiTask, tasklist?.guid))
+      const next = apiTaskToTask(apiTask, tasklist?.guid)
+      handleTaskUpdate(next)
+      updateSubtaskInCache(next)
     } catch {
       handleTaskUpdate(task)
+      updateSubtaskInCache(task)
       message.error('更新状态失败')
     }
   }
 
+  const updateSubtaskInCache = (nextTask: Task) => {
+    const parentGuid = nextTask.parent_task_guid
+    if (!parentGuid) return
+    setSubtasksByGuid((prev) => {
+      const list = prev[parentGuid]
+      if (!list) return prev
+      return {
+        ...prev,
+        [parentGuid]: list.map((t) => (t.guid === nextTask.guid ? nextTask : t)),
+      }
+    })
+  }
+
   const handleTaskUpdate = (nextTask: Task) => {
+    updateSubtaskInCache(nextTask)
     onTaskUpdated?.(nextTask)
     if (!onTaskUpdated) {
       onRefresh()
@@ -643,6 +700,10 @@ export default function TaskTable({
   }
 
   const tasksAfterFilter = tasks.filter((task) => {
+    // 过滤掉有父任务的子任务，子任务通过父行展开显示
+    if (task.parent_task_guid) {
+      return false
+    }
     if (statusFilter !== 'all' && task.status !== statusFilter) {
       return false
     }
@@ -734,7 +795,11 @@ export default function TaskTable({
   const [editingSectionName, setEditingSectionName] = useState('')
 
   const handleStartCreateSection = async () => {
-    if (!tasklist || creatingSection) return
+    if (creatingSection) return
+    if (!tasklist) {
+      message.warning('请先选择一个清单')
+      return
+    }
     setCreatingSection(true)
     try {
       const apiSection = await apiCreateSection(tasklist.guid, '新分组')
@@ -1400,29 +1465,6 @@ export default function TaskTable({
               )}
             </div>
           </div>
-          {config.tabLabel && (
-            <div className="table-view-tabs">
-              <Button type="text" size="small" className="active-view-tab" icon={<UnorderedListOutlined />}>
-                {config.tabLabel}
-              </Button>
-              {isTasklistView && (
-                <>
-                  <Button type="text" size="small" icon={<LayoutOutlined />}>
-                    看板
-                  </Button>
-                  <Button type="text" size="small" icon={<AlignLeftOutlined />}>
-                    甘特图
-                  </Button>
-                  <Button type="text" size="small" icon={<DashboardOutlined />}>
-                    仪表盘
-                  </Button>
-                  <Button type="text" size="small" icon={<HistoryOutlined />}>
-                    动态
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -1742,32 +1784,53 @@ export default function TaskTable({
 
               {(!shouldGroupBySection || !collapsedSections.has(section.guid)) && (
                 <>
-                  {sectionTasks.map((task) => (
-                    <div
-                      key={task.guid}
-                      draggable={isTasklistView}
-                      onDragStart={(e) => handleTaskDragStart(e, task.guid)}
-                      onDragEnd={clearDragState}
-                      className={`task-row-wrap ${
-                        draggingTaskGuid === task.guid ? 'dragging' : ''
-                      }`}
-                    >
-                      <TaskRow
-                        task={task}
-                        users={users}
-                        columns={visibleColumnKeys}
-                        customFields={visibleCustomFieldDefs}
-                        isTasklistView={isTasklistView}
-                        activeAssigneePickerKey={activeAssigneePickerKey}
-                        isNew={task.guid === animatedTaskGuid}
-                        isSelected={task.guid === selectedTaskGuid}
-                        onToggleStatus={handleToggleStatus}
-                        onClick={() => onTaskClick(task)}
-                        onUpdate={handleTaskUpdate}
-                        onAssigneePickerOpenChange={setActiveAssigneePickerKey}
-                      />
-                    </div>
-                  ))}
+                  {(() => {
+                    const renderTask = (
+                      task: Task,
+                      depth: number,
+                    ): React.ReactNode => {
+                      const isExpanded = expandedTaskGuids.has(task.guid)
+                      const children = subtasksByGuid[task.guid] ?? []
+                      return (
+                        <div key={task.guid}>
+                          <div
+                            draggable={isTasklistView && depth === 0}
+                            onDragStart={
+                              depth === 0
+                                ? (e) => handleTaskDragStart(e, task.guid)
+                                : undefined
+                            }
+                            onDragEnd={clearDragState}
+                            className={`task-row-wrap ${
+                              draggingTaskGuid === task.guid ? 'dragging' : ''
+                            }`}
+                          >
+                            <TaskRow
+                              task={task}
+                              users={users}
+                              columns={visibleColumnKeys}
+                              customFields={visibleCustomFieldDefs}
+                              isTasklistView={isTasklistView}
+                              activeAssigneePickerKey={activeAssigneePickerKey}
+                              isNew={task.guid === animatedTaskGuid}
+                              isSelected={task.guid === selectedTaskGuid}
+                              depth={depth}
+                              expanded={isExpanded}
+                              loadedSubtaskCount={children.length}
+                              onToggleExpand={handleToggleExpand}
+                              onToggleStatus={handleToggleStatus}
+                              onClick={() => onTaskClick(task)}
+                              onUpdate={handleTaskUpdate}
+                              onAssigneePickerOpenChange={setActiveAssigneePickerKey}
+                            />
+                          </div>
+                          {isExpanded &&
+                            children.map((child) => renderTask(child, depth + 1))}
+                        </div>
+                      )
+                    }
+                    return sectionTasks.map((task) => renderTask(task, 0))
+                  })()}
 
                   {config.toolbar.showCreate && shouldGroupBySection && (
                     creatingInSection === section.guid ? (
@@ -1815,6 +1878,10 @@ interface TaskRowProps {
   activeAssigneePickerKey: string | null
   isNew?: boolean
   isSelected?: boolean
+  depth?: number
+  expanded?: boolean
+  loadedSubtaskCount?: number
+  onToggleExpand?: (task: Task) => void
   onToggleStatus: (e: React.MouseEvent, task: Task) => void
   onClick: () => void
   onUpdate: (task: Task) => void
@@ -1830,6 +1897,10 @@ function TaskRow({
   activeAssigneePickerKey,
   isNew,
   isSelected,
+  depth = 0,
+  expanded = false,
+  loadedSubtaskCount,
+  onToggleExpand,
   onToggleStatus,
   onClick,
   onUpdate,
@@ -1915,9 +1986,31 @@ function TaskRow({
       </div>
       {has('title') && (
         <div className="cell cell-title">
-          {task.subtask_count > 0 && (
-            <CaretRightOutlined className="subtask-icon" />
+          {depth > 0 && (
+            <span
+              className="task-tree-guide"
+              style={{ width: depth * 20 }}
+              aria-hidden
+            />
           )}
+          {task.subtask_count > 0 ? (
+            <CaretRightOutlined
+              className="subtask-icon"
+              style={{
+                cursor: 'pointer',
+                transform: expanded ? 'rotate(90deg)' : 'rotate(0)',
+                transition: 'transform 0.15s',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleExpand?.(task)
+              }}
+            />
+          ) : depth > 0 ? (
+            <span className="subtask-icon" style={{ visibility: 'hidden' }}>
+              <CaretRightOutlined />
+            </span>
+          ) : null}
           {editingName ? (
             <div className="task-name-editor">
               <EditableInput
@@ -1940,7 +2033,9 @@ function TaskRow({
             </span>
           )}
           {task.subtask_count > 0 && !editingName && (
-            <Tag className="subtask-tag">0 / {task.subtask_count}</Tag>
+            <Tag className="subtask-tag">
+              {loadedSubtaskCount ?? 0} / {task.subtask_count}
+            </Tag>
           )}
         </div>
       )}
@@ -1991,20 +2086,32 @@ function TaskRow({
             trigger="click"
             placement="bottomLeft"
             content={
-              <DateConfigPanel
-                initialField="start"
-                startDate={startDate}
-                dueDate={dueDate}
-                onStartChange={(value) => void handleDateChange('start', value)}
-                onDueChange={(value) => void handleDateChange('due', value)}
-              />
+              <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                <Calendar
+                  fullscreen={false}
+                  value={startDate ?? undefined}
+                  onSelect={(value) => void handleDateChange('start', value)}
+                />
+                {startDate && (
+                  <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={() => void handleDateChange('start', null)}
+                    >
+                      清除
+                    </Button>
+                  </div>
+                )}
+              </div>
             }
           >
             <div className="date-trigger">
-              <span className="date-text">
-                {startDate ? startDate.format('M月D日') : ''}
-              </span>
-              {!startDate && <CalendarOutlined className="empty-date-icon" />}
+              {startDate ? (
+                <span className="date-text">{startDate.format('M月D日')}</span>
+              ) : (
+                <CalendarOutlined className="empty-date-icon" />
+              )}
             </div>
           </Popover>
         </div>
@@ -2015,20 +2122,35 @@ function TaskRow({
             trigger="click"
             placement="bottomLeft"
             content={
-              <DateConfigPanel
-                initialField="due"
-                startDate={startDate}
-                dueDate={dueDate}
-                onStartChange={(value) => void handleDateChange('start', value)}
-                onDueChange={(value) => void handleDateChange('due', value)}
-              />
+              <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                <Calendar
+                  fullscreen={false}
+                  value={dueDate ?? undefined}
+                  onSelect={(value) => void handleDateChange('due', value)}
+                  disabledDate={(current) =>
+                    current && current < dayjs().startOf('day')
+                  }
+                />
+                {dueDate && (
+                  <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={() => void handleDateChange('due', null)}
+                    >
+                      清除
+                    </Button>
+                  </div>
+                )}
+              </div>
             }
           >
             <div className="date-trigger">
-              <span className="date-text">
-                {dueDate ? dueDate.format('M月D日') : ''}
-              </span>
-              {!dueDate && <CalendarOutlined className="empty-date-icon" />}
+              {dueDate ? (
+                <span className="date-text">{dueDate.format('M月D日')}</span>
+              ) : (
+                <CalendarOutlined className="empty-date-icon" />
+              )}
             </div>
           </Popover>
         </div>

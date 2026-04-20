@@ -88,6 +88,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     is_milestone: false,
     source: 1,
     parent_task_guid: api.parent_task_id ?? '',
+    depth: api.depth,
     subtask_count: api.subtask_count,
     members,
     tasklists: [{ tasklist_guid: tlGuid, section_guid: api.section_id }],
@@ -174,6 +175,7 @@ export function updateTaskApi(
     priority?: string
     assignee_id?: string | null
     tags?: string[]
+    section_id?: string | null
     start_date?: string | null
     due_date?: string | null
   },
@@ -292,6 +294,19 @@ export function batchTasks(payload: {
 }
 
 // ---- Helpers ----
+
+export async function cancelTask(
+  taskId: string,
+  opts?: { terminate?: boolean; signal?: string },
+): Promise<void> {
+  const qs: string[] = []
+  if (typeof opts?.terminate === 'boolean') qs.push(`terminate=${opts.terminate}`)
+  if (opts?.signal) qs.push(`signal=${encodeURIComponent(opts.signal)}`)
+  const suffix = qs.length ? `?${qs.join('&')}` : ''
+  return request<void>(`api/v1/tasks/${taskId}/cancel${suffix}`, {
+    method: 'POST',
+  })
+}
 
 export function toPriorityString(p: number): string {
   return priorityNumToString[p] ?? 'medium'

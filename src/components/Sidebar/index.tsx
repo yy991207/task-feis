@@ -37,6 +37,9 @@ import {
   StopOutlined,
 } from '@ant-design/icons'
 import type { Tasklist } from '@/types/task'
+import NotificationBell from '@/components/NotificationBell'
+import CustomFieldsModal from '@/components/CustomFieldsModal'
+import TeamsManagerModal from '@/components/TeamsManagerModal'
 import type { ProjectGroup } from '@/types/projectGroup'
 import type { Project } from '@/types/project'
 import {
@@ -115,6 +118,8 @@ export default function Sidebar({
   const [openedGroupMenuId, setOpenedGroupMenuId] = useState<string | null>(null)
   const [openedProjectMenuId, setOpenedProjectMenuId] = useState<string | null>(null)
   const [openedCreateTarget, setOpenedCreateTarget] = useState<CreatingTarget | null>(null)
+  const [customFieldsProjectId, setCustomFieldsProjectId] = useState<string | null>(null)
+  const [teamsModalOpen, setTeamsModalOpen] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
 
   useEffect(() => {
@@ -218,12 +223,19 @@ export default function Sidebar({
     }
   }
 
-  const handleStartCreateGroup = () => {
+  const handleStartCreateGroup = async () => {
     if (draftGroupUid) return
-    const uid = `draft_${Math.random().toString(36).slice(2, 9)}`
-    setDraftGroupUid(uid)
-    setExpandedKeys((prev) => [...prev, encodeGroupKey(uid)])
-    setEditingGroupId(uid)
+    try {
+      const created = await createProjectGroup('新分组')
+      setGroups((prev) => [...prev, created])
+      setExpandedKeys((prev) => [...prev, encodeGroupKey(created.group_id)])
+      // 立即进入重命名模式，便于修改名称
+      setEditingGroupId(created.group_id)
+      message.success('已创建分组')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '创建分组失败'
+      message.error(msg)
+    }
   }
 
   const handleSaveGroupName = async (groupId: string, rawName: string) => {
@@ -458,6 +470,14 @@ export default function Sidebar({
         label: '复制链接',
         onClick: () => {
           void handleCopyTasklistLink(proj.project_id)
+        },
+      },
+      {
+        key: 'custom-fields',
+        icon: <AppstoreOutlined />,
+        label: '自定义字段',
+        onClick: () => {
+          setCustomFieldsProjectId(proj.project_id)
         },
       },
       { type: 'divider' },
@@ -843,6 +863,17 @@ export default function Sidebar({
         <Title level={5} className="sidebar-title">
           任务
         </Title>
+        <div style={{ marginLeft: 'auto' }}>
+          <Tooltip title="团队管理">
+            <Button
+              type="text"
+              size="small"
+              icon={<UserOutlined />}
+              onClick={() => setTeamsModalOpen(true)}
+            />
+          </Tooltip>
+          <NotificationBell />
+        </div>
       </div>
 
       <Menu
@@ -909,13 +940,23 @@ export default function Sidebar({
           type="text"
           size="small"
           icon={<PlusOutlined />}
-          onClick={handleStartCreateGroup}
+          onClick={() => void handleStartCreateGroup()}
           block
           className="create-group-btn"
         >
           新建分组
         </Button>
       </div>
+
+      <CustomFieldsModal
+        open={!!customFieldsProjectId}
+        projectId={customFieldsProjectId ?? ''}
+        onClose={() => setCustomFieldsProjectId(null)}
+      />
+      <TeamsManagerModal
+        open={teamsModalOpen}
+        onClose={() => setTeamsModalOpen(false)}
+      />
     </div>
   )
 }

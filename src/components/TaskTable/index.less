@@ -892,3 +892,28 @@
     }
   }
 }
+
+.task-tree-guide {
+  position: relative;
+  align-self: stretch;
+  flex-shrink: 0;
+  display: inline-block;
+
+  &::before {
+    content: '';
+    position: absolute;
+    right: 12px;
+    top: 0;
+    bottom: 50%;
+    border-left: 1px solid #d9dbe0;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 12px;
+    border-top: 1px solid #d9dbe0;
+  }
+}

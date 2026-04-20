@@ -100,6 +100,7 @@ export interface Task {
   is_milestone: boolean
   source: number
   parent_task_guid: string
+  depth?: number
   subtask_count: number
   members: Member[]
   tasklists: TasklistRef[]

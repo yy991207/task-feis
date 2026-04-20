@@ -328,6 +328,7 @@ export default function TaskListPage() {
           onTaskUpdated={updateTaskInState}
           onSubtaskCreated={handleSubtaskCreated}
           onTaskDeleted={removeTaskFromState}
+          onOpenTask={(t) => setSelectedTask(t)}
           onClose={() => setSelectedTask(null)}
         />
       )}
