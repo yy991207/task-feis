@@ -58,8 +58,8 @@ async function testCommentAttachmentsRenderInlineImagePreview() {
   )
   assert.match(
     source,
-    /setPreviewAttachment\(att\)/,
-    '点击评论区图片附件时应该打开预览态',
+    /handleOpenAttachmentPreview\(att\)/,
+    '点击评论区图片附件时应该通过统一预览处理函数打开预览态',
   )
   assert.match(
     styleSource,
@@ -89,8 +89,13 @@ async function testTaskAttachmentsExposePreviewAndDownloadActions() {
   )
   assert.match(
     source,
-    /onClick=\{\(\) => setPreviewAttachment\(att\)\}/,
-    '点击任务附件的预览图标应该打开预览态',
+    /const handleOpenAttachmentPreview = \(attachment: ApiAttachment\) => \{/,
+    '任务详情应该提供统一的附件预览处理函数',
+  )
+  assert.match(
+    source,
+    /onClick=\{\(\) => handleOpenAttachmentPreview\(att\)\}/,
+    '点击任务附件的预览图标应该走统一预览处理函数',
   )
   assert.match(
     source,
@@ -131,6 +136,21 @@ async function testTaskAttachmentsExposePreviewAndDownloadActions() {
     source,
     /loading=\{previewLoading\}/,
     '文件预览组件应该接收真实的 preview loading 状态',
+  )
+}
+
+async function testTaskDetailAvatarsUseTaskTablePurple() {
+  const source = await readTaskDetailSource()
+
+  assert.doesNotMatch(
+    source,
+    /backgroundColor: '#f5a623'/,
+    '任务详情页头像颜色应该和主页面一致使用紫色，不能再出现橙色头像',
+  )
+  assert.match(
+    source,
+    /backgroundColor: '#7b67ee'/,
+    '任务详情页头像应该使用主页面同款紫色',
   )
 }
 
@@ -219,6 +239,7 @@ async function main() {
   await testCommentInputSupportsPasteImageUpload()
   await testCommentAttachmentsRenderInlineImagePreview()
   await testTaskAttachmentsExposePreviewAndDownloadActions()
+  await testTaskDetailAvatarsUseTaskTablePurple()
   await testAttachmentPreviewUsesServiceHelpers()
   await testTaskDetailUsesSharedFilePreviewRenderer()
   console.log('comment image preview regressions ok')

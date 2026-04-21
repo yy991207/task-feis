@@ -1,6 +1,6 @@
 import { request } from './request'
 import { appConfig } from '@/config/appConfig'
-import type { Task, Priority } from '@/types/task'
+import type { Task, Priority, CustomFieldValue } from '@/types/task'
 
 export interface ApiTask {
   task_id: string
@@ -30,6 +30,7 @@ export interface ApiTask {
   updated_at: string
   is_deleted: boolean
   is_starred: boolean
+  custom_fields?: Record<string, unknown>
 }
 
 interface PaginatedResponse<T> {
@@ -54,6 +55,67 @@ const priorityNumToString: Record<number, string> = {
   4: 'urgent',
 }
 
+function normalizeTaskStatus(status: string): Task['status'] {
+  if (status === 'done' || status === 'in_progress' || status === 'cancelled') {
+    return status
+  }
+  return 'todo'
+}
+
+function mapApiCustomFieldValue(fieldId: string, rawValue: unknown): CustomFieldValue | null {
+  if (rawValue === null || rawValue === undefined) {
+    return null
+  }
+
+  if (typeof rawValue === 'string') {
+    return {
+      guid: fieldId,
+      text_value: rawValue,
+      single_select_value: rawValue,
+    }
+  }
+
+  if (typeof rawValue === 'number') {
+    return {
+      guid: fieldId,
+      number_value: String(rawValue),
+      datetime_value: String(rawValue),
+    }
+  }
+
+  if (Array.isArray(rawValue)) {
+    if (
+      rawValue.every(
+        (item) => typeof item === 'object' && item !== null && 'id' in item,
+      )
+    ) {
+      return {
+        guid: fieldId,
+        member_value: rawValue.map((item) => {
+          const member = item as { id: string; type?: 'user' | 'chat'; name?: string }
+          return {
+            id: member.id,
+            type: member.type ?? 'user',
+            name: member.name,
+          }
+        }),
+      }
+    }
+
+    if (rawValue.every((item) => typeof item === 'string')) {
+      return {
+        guid: fieldId,
+        multi_select_value: rawValue,
+      }
+    }
+  }
+
+  return {
+    guid: fieldId,
+    text_value: JSON.stringify(rawValue),
+  }
+}
+
 export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
   const members = [
     ...(api.assignee_id
@@ -67,13 +129,16 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
   ]
 
   const tlGuid = projectId ?? api.project_id
+  const mappedCustomFields = Object.entries(api.custom_fields ?? {})
+    .map(([fieldId, rawValue]) => mapApiCustomFieldValue(fieldId, rawValue))
+    .filter((item): item is CustomFieldValue => item !== null)
 
   return {
     guid: api.task_id,
     task_id: api.task_id,
     summary: api.title,
     description: api.description ?? '',
-    status: api.status === 'done' ? 'done' : 'todo',
+    status: normalizeTaskStatus(api.status),
     completed_at: api.completed_at
       ? new Date(api.completed_at).getTime().toString()
       : '0',
@@ -91,7 +156,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     members,
     tasklists: [{ tasklist_guid: tlGuid, section_guid: api.section_id }],
     dependencies: [],
-    custom_fields: [],
+    custom_fields: mappedCustomFields,
     reminders: [],
     start: api.start_date
       ? { timestamp: new Date(api.start_date).getTime().toString(), is_all_day: false }

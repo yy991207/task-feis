@@ -95,8 +95,10 @@ import type { ViewConfig, ColumnKey } from '@/config/viewConfig'
 import EditableInput from '@/components/EditableInput'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
 import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
+import UserSearchSelect from '@/components/UserSearchSelect'
 import {
   listCustomFields,
+  updateCustomField,
   patchTaskCustomFields,
   type ApiCustomField,
   type CustomFieldType as ApiCustomFieldType,
@@ -117,16 +119,44 @@ type ExtraColumnKey =
   | 'sourceCategory'
 type CustomFieldColumnKey = `custom:${string}`
 type ExtendedColumnKey = ColumnKey | ExtraColumnKey | CustomFieldColumnKey
-type TaskTableRow = Task & {
+type TaskTableTaskRow = Task & {
   key: string
+  rowKind: 'task'
   tableDepth: number
-  children?: TaskTableRow[]
+  sectionGuid: string
+  children?: TaskTableTaskRow[]
 }
+type TaskTableSectionRow = {
+  key: string
+  guid: string
+  rowKind: 'section'
+  section: Section
+  sectionTasks: Task[]
+}
+type TaskTableInlineCreateRow = {
+  key: string
+  guid: string
+  rowKind: 'inlineCreate'
+  section: Section
+  content: React.ReactNode
+}
+type TaskTableNewTaskRow = {
+  key: string
+  guid: string
+  rowKind: 'newTask'
+  section: Section
+}
+type TaskTableDisplayRow =
+  | TaskTableTaskRow
+  | TaskTableSectionRow
+  | TaskTableInlineCreateRow
+  | TaskTableNewTaskRow
 
 interface FieldOption {
   key: ExtendedColumnKey
   label: string
   isVisible: boolean
+  sortOrder?: number
 }
 
 const allConfigurableColumns: ConfigurableColumnKey[] = [
@@ -282,22 +312,18 @@ function AssigneePicker({
           style={{ width: 220 }}
           onMouseDown={onInteract}
         >
-          <Typography.Text strong style={{ fontSize: 12 }}>
-            添加负责人
-          </Typography.Text>
-          <Select
+          <UserSearchSelect
+            label="添加负责人"
             size="small"
             open={open ? selectOpen : false}
             onOpenChange={setSelectOpen}
             getPopupContainer={() => popupContainerRef.current ?? document.body}
-            style={{ width: '100%', marginTop: 8 }}
+            style={{ width: '100%' }}
             placeholder="搜索用户"
             value={value}
             onChange={onChange}
-            allowClear
-            options={users.map((user) => ({ label: user.name, value: user.id }))}
+            users={users}
             autoFocus
-            showSearch
           />
         </div>
       }
@@ -666,15 +692,36 @@ export default function TaskTable({
     options: (f.options ?? []).map((o) => ({ guid: o.value, name: o.label })),
   })
 
+  const buildVisibleColumnKeys = useCallback(
+    (fields: ApiCustomField[]) => {
+      const nextKeys = new Set<ExtendedColumnKey>(config.columns)
+      fields
+        .filter((field) => field.is_visible !== false)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .forEach((field) => nextKeys.add(toCustomFieldColumnKey(field.field_id)))
+      return Array.from(nextKeys)
+    },
+    [config.columns],
+  )
+
   // 加载项目自定义字段
   useEffect(() => {
     if (!tasklist) return
     let cancelled = false
-    void listCustomFields(tasklist.guid)
+    void listCustomFields(tasklist.guid, { includeDisabledOptions: true })
       .then((list) => {
         if (cancelled) return
         setRawCustomFields(list)
-        const defs = list.map(apiToCustomFieldDef)
+        setVisibleColumnKeys((prev) => {
+          const persistedKeys = buildVisibleColumnKeys(list)
+          const extraVisibleKeys = prev.filter(
+            (key) => typeof key === 'string' && !key.startsWith('custom:'),
+          )
+          return Array.from(new Set([...persistedKeys, ...extraVisibleKeys]))
+        })
+        const defs = [...list]
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(apiToCustomFieldDef)
         const prev = tasklist.custom_fields ?? []
         const changed =
           prev.length !== defs.length ||
@@ -693,11 +740,20 @@ export default function TaskTable({
   const reloadCustomFields = async () => {
     if (!tasklist) return
     try {
-      const list = await listCustomFields(tasklist.guid)
+      const list = await listCustomFields(tasklist.guid, { includeDisabledOptions: true })
       setRawCustomFields(list)
+      setVisibleColumnKeys((prev) => {
+        const persistedKeys = buildVisibleColumnKeys(list)
+        const extraVisibleKeys = prev.filter(
+          (key) => typeof key === 'string' && !key.startsWith('custom:'),
+        )
+        return Array.from(new Set([...persistedKeys, ...extraVisibleKeys]))
+      })
       onTasklistUpdated?.({
         ...tasklist,
-        custom_fields: list.map(apiToCustomFieldDef),
+        custom_fields: [...list]
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(apiToCustomFieldDef),
       })
     } catch {
       // ignore
@@ -1293,6 +1349,7 @@ export default function TaskTable({
       key: toCustomFieldColumnKey(field.guid),
       label: field.name,
       isVisible: visibleColumnKeys.includes(toCustomFieldColumnKey(field.guid)),
+      sortOrder: rawCustomFields.find((item) => item.field_id === field.guid)?.sort_order,
     })),
   ]
 
@@ -1312,11 +1369,70 @@ export default function TaskTable({
     handleAddVisibleColumn(toCustomFieldColumnKey(field.field_id))
   }
 
+  const handleCustomFieldDeleted = async (fieldId: string) => {
+    setVisibleColumnKeys((prev) =>
+      prev.filter((key) => key !== toCustomFieldColumnKey(fieldId)),
+    )
+    await reloadCustomFields()
+  }
+
   const handleRemoveVisibleColumn = (column: ExtendedColumnKey) => {
     if (column === 'title') {
       return
     }
     setVisibleColumnKeys((prev) => prev.filter((item) => item !== column))
+  }
+
+  const handleToggleCustomFieldVisibility = async (field: ApiCustomField) => {
+    try {
+      await updateCustomField(field.field_id, { is_visible: !field.is_visible })
+      if (field.is_visible) {
+        handleRemoveVisibleColumn(toCustomFieldColumnKey(field.field_id))
+      } else {
+        handleAddVisibleColumn(toCustomFieldColumnKey(field.field_id))
+      }
+      await reloadCustomFields()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '更新字段显示状态失败'
+      message.error(msg)
+    }
+  }
+
+  const handleCustomFieldSort = async (dragFieldId: string, dropFieldId: string) => {
+    if (dragFieldId === dropFieldId) {
+      return
+    }
+
+    const orderedFields = [...rawCustomFields].sort((a, b) => a.sort_order - b.sort_order)
+    const fromIndex = orderedFields.findIndex((field) => field.field_id === dragFieldId)
+    const toIndex = orderedFields.findIndex((field) => field.field_id === dropFieldId)
+    if (fromIndex === -1 || toIndex === -1) {
+      return
+    }
+
+    const reordered = [...orderedFields]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+
+    const nextOrderedFields = reordered.map((field, index) => ({
+      ...field,
+      sort_order: index + 1,
+    }))
+
+    setRawCustomFields(nextOrderedFields)
+
+    try {
+      await Promise.all(
+        nextOrderedFields.map((field, index) =>
+          updateCustomField(field.field_id, { sort_order: index + 1 }),
+        ),
+      )
+      await reloadCustomFields()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '更新字段排序失败'
+      message.error(msg)
+      await reloadCustomFields()
+    }
   }
 
   const handleRenameTasklist = async (rawName: string) => {
@@ -1461,6 +1577,14 @@ export default function TaskTable({
   }
 
   const handleToggleField = (field: FieldOption) => {
+    if (typeof field.key === 'string' && field.key.startsWith('custom:')) {
+      const customField = rawCustomFields.find((item) => item.field_id === field.key.slice(7))
+      if (customField) {
+        void handleToggleCustomFieldVisibility(customField)
+      }
+      return
+    }
+
     if (field.isVisible) {
       handleRemoveVisibleColumn(field.key)
     } else {
@@ -1477,7 +1601,27 @@ export default function TaskTable({
         : null
     const cfRaw = cfGuid ? rawCustomFields.find((r) => r.field_id === cfGuid) : null
     return (
-      <div key={field.key} className="field-config-row-v2">
+      <div
+        key={field.key}
+        className="field-config-row-v2"
+        draggable={!!cfRaw}
+        onDragStart={(event) => {
+          if (!cfRaw) return
+          event.dataTransfer.setData('application/x-custom-field', cfRaw.field_id)
+        }}
+        onDragOver={(event) => {
+          if (!cfRaw) return
+          event.preventDefault()
+        }}
+        onDrop={(event) => {
+          if (!cfRaw) return
+          event.preventDefault()
+          const dragFieldId = event.dataTransfer.getData('application/x-custom-field')
+          if (dragFieldId) {
+            void handleCustomFieldSort(dragFieldId, cfRaw.field_id)
+          }
+        }}
+      >
         <span className="field-config-row-drag">
           <HolderOutlined />
         </span>
@@ -1728,7 +1872,18 @@ export default function TaskTable({
       handleTaskUpdate(nextTask)
 
       const payload: Record<string, unknown> = {
-        [field.guid]: value,
+        [field.guid]:
+          field.type === 'number'
+            ? value.number_value ? Number(value.number_value) : null
+            : field.type === 'text'
+              ? value.text_value ?? ''
+              : field.type === 'datetime'
+                ? value.datetime_value ? Number(value.datetime_value) : null
+                : field.type === 'single_select'
+                  ? value.single_select_value ?? null
+                  : field.type === 'multi_select'
+                    ? value.multi_select_value ?? []
+                    : value.member_value ?? [],
       }
 
       try {
@@ -1742,19 +1897,151 @@ export default function TaskTable({
     [handleTaskUpdate],
   )
 
-  function buildTaskTreeRows(list: Task[], depth = 0): TaskTableRow[] {
+  const handleTaskStatusFieldChange = useCallback(
+    async (task: Task, nextStatus: Task['status']) => {
+      const optimistic = { ...task, status: nextStatus }
+      handleTaskUpdate(optimistic)
+      updateSubtaskInCache(optimistic)
+
+      try {
+        await patchTaskStatus(task.guid, nextStatus)
+        const fresh = await getTask(task.guid)
+        const nextTask = apiTaskToTask(fresh, tasklist?.guid)
+        handleTaskUpdate(nextTask)
+        updateSubtaskInCache(nextTask)
+      } catch {
+        handleTaskUpdate(task)
+        updateSubtaskInCache(task)
+        message.error('更新状态失败')
+      }
+    },
+    [handleTaskUpdate, tasklist?.guid],
+  )
+
+  function isTaskTableTaskRow(record: TaskTableDisplayRow): record is TaskTableTaskRow {
+    return record.rowKind === 'task'
+  }
+
+  function buildTaskTreeRows(
+    list: Task[],
+    sectionGuid: string,
+    depth = 0,
+  ): TaskTableTaskRow[] {
     return list.map((task) => {
       const children = subtasksByGuid[task.guid] ?? []
       return {
         ...task,
         key: task.guid,
+        rowKind: 'task',
         tableDepth: depth,
-        children: children.length > 0 ? buildTaskTreeRows(children, depth + 1) : undefined,
+        sectionGuid,
+        children:
+          children.length > 0
+            ? buildTaskTreeRows(children, sectionGuid, depth + 1)
+            : undefined,
       }
     })
   }
 
-  const taskColumns: ColumnsType<TaskTableRow> = [
+  const renderSectionRow = (section: Section, sectionTasks: Task[]) => (
+    <div
+      className={`section-row-content ${animatedSectionGuid === section.guid ? 'section-row-new' : ''} ${
+        draggingSectionGuid === section.guid ? 'dragging' : ''
+      } ${
+        dragOverSectionGuid === section.guid && dragOverMode === 'section-before'
+          ? 'drag-over-top'
+          : ''
+      } ${
+        dragOverSectionGuid === section.guid && dragOverMode === 'section-after'
+          ? 'drag-over-bottom'
+          : ''
+      }`}
+      onClick={() => toggleSection(section.guid)}
+      draggable={isTasklistView && !section.guid.startsWith('__')}
+      onDragStart={(e) => handleSectionDragStart(e, section.guid)}
+      onDragOver={(e) => handleSectionDragOver(e, section.guid)}
+      onDragLeave={handleSectionDragLeave}
+      onDrop={(e) => {
+        void handleSectionDrop(e, section.guid)
+      }}
+      onDragEnd={clearDragState}
+    >
+      {collapsedSections.has(section.guid) ? (
+        <CaretRightOutlined className="caret" />
+      ) : (
+        <CaretDownOutlined className="caret" />
+      )}
+      {editingSectionGuid === section.guid ? (
+        <Input
+          size="small"
+          className="new-section-input"
+          value={editingSectionName}
+          onChange={(e) => setEditingSectionName(e.target.value)}
+          onPressEnter={() => void handleRenameSection(section.guid)}
+          onBlur={() => void handleRenameSection(section.guid)}
+          onClick={(e) => e.stopPropagation()}
+          autoFocus
+        />
+      ) : (
+        <span
+          className="section-name"
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            setEditingSectionGuid(section.guid)
+            setEditingSectionName(section.name)
+          }}
+        >
+          {section.name}
+        </span>
+      )}
+      <Tag color="default" className="section-count-tag">
+        {sectionTasks.length}
+      </Tag>
+      {isTasklistView && (
+        <div className="section-actions" onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="small"
+            type="text"
+            icon={<PlusOutlined />}
+            onClick={() => startInlineCreate(section.guid)}
+            className="section-action-btn"
+          />
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                {
+                  key: 'rename',
+                  label: '重命名',
+                  onClick: () => {
+                    setEditingSectionGuid(section.guid)
+                    setEditingSectionName(section.name)
+                  },
+                },
+                { type: 'divider' as const },
+                {
+                  key: 'delete',
+                  danger: true,
+                  label: '删除分组',
+                  onClick: () => void handleDeleteSection(section.guid),
+                },
+              ],
+            }}
+          >
+            <Button
+              size="small"
+              type="text"
+              icon={<EllipsisOutlined />}
+              className="section-action-btn"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        </div>
+      )}
+    </div>
+  )
+
+  const taskColumns: ColumnsType<TaskTableDisplayRow> = [
     {
       key: 'title',
       dataIndex: 'summary',
@@ -1765,18 +2052,39 @@ export default function TaskTable({
         </span>
       ),
       width: 420,
-      render: (_value, record) => (
-        <TaskTitleCell
-          task={record}
-          depth={record.tableDepth}
-          expanded={expandedTaskGuids.has(record.guid)}
-          loadedSubtaskCount={(subtasksByGuid[record.guid] ?? []).length}
-          onToggleExpand={handleToggleExpand}
-          onToggleStatus={handleToggleStatus}
-          onOpenDetail={() => onTaskClick(record)}
-          onUpdate={handleTaskUpdate}
-        />
-      ),
+      render: (_value, record) => {
+        if (record.rowKind === 'section') {
+          return renderSectionRow(record.section, record.sectionTasks)
+        }
+        if (record.rowKind === 'inlineCreate') {
+          return record.content
+        }
+        if (record.rowKind === 'newTask') {
+          return (
+            <Button
+              type="text"
+              className="new-task-btn"
+              onClick={() => startInlineCreate(record.section.guid)}
+              block
+            >
+              新建任务
+            </Button>
+          )
+        }
+
+        return (
+          <TaskTitleCell
+            task={record}
+            depth={record.tableDepth}
+            expanded={expandedTaskGuids.has(record.guid)}
+            loadedSubtaskCount={(subtasksByGuid[record.guid] ?? []).length}
+            onToggleExpand={handleToggleExpand}
+            onToggleStatus={handleToggleStatus}
+            onOpenDetail={() => onTaskClick(record)}
+            onUpdate={handleTaskUpdate}
+          />
+        )
+      },
     },
   ]
 
@@ -1786,7 +2094,10 @@ export default function TaskTable({
       dataIndex: 'priority',
       title: <span>优先级</span>,
       width: 96,
-      render: (_value, record) => <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />,
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? (
+          <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />
+        ) : null,
     })
   }
 
@@ -1801,16 +2112,17 @@ export default function TaskTable({
         </span>
       ),
       width: 156,
-      render: (_value, record) => (
-        <TaskAssigneeCell
-          task={record}
-          users={users}
-          isTasklistView={isTasklistView}
-          activeAssigneePickerKey={activeAssigneePickerKey}
-          onUpdate={handleTaskUpdate}
-          onAssigneePickerOpenChange={setActiveAssigneePickerKey}
-        />
-      ),
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? (
+          <TaskAssigneeCell
+            task={record}
+            users={users}
+            isTasklistView={isTasklistView}
+            activeAssigneePickerKey={activeAssigneePickerKey}
+            onUpdate={handleTaskUpdate}
+            onAssigneePickerOpenChange={setActiveAssigneePickerKey}
+          />
+        ) : null,
     })
   }
 
@@ -1835,9 +2147,10 @@ export default function TaskTable({
         </span>
       ),
       width: 120,
-      render: (_value, record) => (
-        <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
-      ),
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? (
+          <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
+        ) : null,
     })
   }
 
@@ -1852,9 +2165,10 @@ export default function TaskTable({
         </span>
       ),
       width: 120,
-      render: (_value, record) => (
-        <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
-      ),
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? (
+          <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
+        ) : null,
     })
   }
 
@@ -1870,6 +2184,9 @@ export default function TaskTable({
       ),
       width: 108,
       render: (_value, record) => {
+        if (!isTaskTableTaskRow(record)) {
+          return null
+        }
         const creatorUser = users.find((u) => u.id === record.creator.id)
         return creatorUser ? (
           <Tooltip title={creatorUser.name}>
@@ -1891,7 +2208,8 @@ export default function TaskTable({
       dataIndex: 'created_at',
       title: <span>创建时间</span>,
       width: 140,
-      render: (value: string) => dayjs(Number(value)).format('M月D日 HH:mm'),
+      render: (value: string, record) =>
+        isTaskTableTaskRow(record) ? dayjs(Number(value)).format('M月D日 HH:mm') : null,
     })
   }
 
@@ -1901,9 +2219,10 @@ export default function TaskTable({
       dataIndex: 'subtask_count',
       title: <span>子任务进度</span>,
       width: 120,
-      render: (value: number) => (
-        <span className="custom-field-text">{value > 0 ? `0 / ${value}` : '-'}</span>
-      ),
+      render: (value: number, record) =>
+        isTaskTableTaskRow(record) ? (
+          <span className="custom-field-text">{value > 0 ? `0 / ${value}` : '-'}</span>
+        ) : null,
     })
   }
 
@@ -1913,7 +2232,8 @@ export default function TaskTable({
       dataIndex: 'source',
       title: <span>任务来源</span>,
       width: 120,
-      render: () => <span className="custom-field-text">任务</span>,
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? <span className="custom-field-text">任务</span> : null,
     })
   }
 
@@ -1924,6 +2244,9 @@ export default function TaskTable({
       title: <span>分配人</span>,
       width: 120,
       render: (_value, record) => {
+        if (!isTaskTableTaskRow(record)) {
+          return null
+        }
         const creatorUser = users.find((u) => u.id === record.creator.id)
         return <span className="custom-field-text">{creatorUser?.name ?? '-'}</span>
       },
@@ -1937,6 +2260,9 @@ export default function TaskTable({
       title: <span>关注人</span>,
       width: 108,
       render: (_value, record) => {
+        if (!isTaskTableTaskRow(record)) {
+          return null
+        }
         const followerCount = new Set([
           ...(record.participant_ids ?? []),
           ...record.members
@@ -1954,11 +2280,12 @@ export default function TaskTable({
       dataIndex: 'completed_at',
       title: <span>完成时间</span>,
       width: 140,
-      render: (value: string) => (
-        <span className="custom-field-text">
-          {value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-'}
-        </span>
-      ),
+      render: (value: string, record) =>
+        isTaskTableTaskRow(record) ? (
+          <span className="custom-field-text">
+            {value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-'}
+          </span>
+        ) : null,
     })
   }
 
@@ -1968,11 +2295,12 @@ export default function TaskTable({
       dataIndex: 'updated_at',
       title: <span>更新时间</span>,
       width: 140,
-      render: (value: string) => (
-        <span className="custom-field-text">
-          {dayjs(Number(value)).format('M月D日 HH:mm')}
-        </span>
-      ),
+      render: (value: string, record) =>
+        isTaskTableTaskRow(record) ? (
+          <span className="custom-field-text">
+            {dayjs(Number(value)).format('M月D日 HH:mm')}
+          </span>
+        ) : null,
     })
   }
 
@@ -1982,7 +2310,10 @@ export default function TaskTable({
       dataIndex: 'task_id',
       title: <span>任务 ID</span>,
       width: 140,
-      render: (value: string) => <span className="custom-field-text">{value}</span>,
+      render: (value: string, record) =>
+        isTaskTableTaskRow(record) ? (
+          <span className="custom-field-text">{value}</span>
+        ) : null,
     })
   }
 
@@ -1992,7 +2323,10 @@ export default function TaskTable({
       dataIndex: 'sourceCategory',
       title: <span>来源类别</span>,
       width: 120,
-      render: () => <span className="custom-field-text">任务列表</span>,
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? (
+          <span className="custom-field-text">任务列表</span>
+        ) : null,
     })
   }
 
@@ -2002,60 +2336,132 @@ export default function TaskTable({
       dataIndex: field.guid,
       title: <span>{field.name}</span>,
       width: 160,
-      render: (_value, record) => (
-        <CustomFieldCell
-          field={field}
-          task={record}
-          users={users}
-          onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
-        />
-      ),
+      render: (_value, record) =>
+        isTaskTableTaskRow(record) ? (
+          <CustomFieldCell
+            field={field}
+            task={record}
+            users={users}
+            onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
+            onStatusChange={(task, nextStatus) => void handleTaskStatusFieldChange(task, nextStatus)}
+          />
+        ) : null,
     })
   })
 
-  const visibleSectionGroups = groupedTasks.filter(
-    ({ section }) => !shouldGroupBySection || !collapsedSections.has(section.guid),
-  )
+  const buildTableRows = () => {
+    const rows: TaskTableDisplayRow[] = []
+    groupedTasks.forEach(({ section, tasks: sectionTasks }) => {
+      if (shouldGroupBySection) {
+        rows.push({
+          key: `section-${section.guid}`,
+          guid: section.guid,
+          rowKind: 'section',
+          section,
+          sectionTasks,
+        })
+      }
 
-  const renderSectionTable = (sectionTasks: Task[], showHeader: boolean) => (
-    <Table<TaskTableRow>
+      if (!shouldGroupBySection || !collapsedSections.has(section.guid)) {
+        rows.push(...buildTaskTreeRows(sectionTasks, section.guid))
+
+        if (shouldGroupBySection && creatingInSection === section.guid) {
+          rows.push({
+            key: `inline-create-${section.guid}`,
+            guid: `inline-create-${section.guid}`,
+            rowKind: 'inlineCreate',
+            section,
+            content: createTaskInlineRow(section.guid),
+          })
+        } else if (config.toolbar.showCreate && shouldGroupBySection) {
+          rows.push({
+            key: `new-task-${section.guid}`,
+            guid: `new-task-${section.guid}`,
+            rowKind: 'newTask',
+            section,
+          })
+        }
+      }
+    })
+    return rows
+  }
+  const tableRows = buildTableRows()
+
+  const renderTaskTable = () => (
+    <Table<TaskTableDisplayRow>
       className="task-grid-table"
-      rowKey="guid"
+      rowKey="key"
       size="small"
       pagination={false}
-      showHeader={showHeader}
+      showHeader={config.showColumnHeader !== false}
       columns={taskColumns}
-      dataSource={buildTaskTreeRows(sectionTasks)}
+      dataSource={tableRows}
       scroll={{ x: 'max-content' }}
       expandable={{
         expandedRowKeys: Array.from(expandedTaskGuids),
         showExpandColumn: false,
         indentSize: 20,
-        rowExpandable: (record) => record.subtask_count > 0,
+        rowExpandable: (record) =>
+          isTaskTableTaskRow(record) && record.subtask_count > 0,
         onExpand: (_expanded, record) => {
-          void handleToggleExpand(record)
+          if (isTaskTableTaskRow(record)) {
+            void handleToggleExpand(record)
+          }
         },
       }}
       rowClassName={(record) =>
         [
-          'task-table-row',
-          record.status === 'done' ? 'done' : '',
-          record.guid === animatedTaskGuid ? 'task-row-new' : '',
-          record.guid === selectedTaskGuid ? 'selected' : '',
-          draggingTaskGuid === record.guid ? 'dragging' : '',
+          `${record.rowKind}-table-row`,
+          isTaskTableTaskRow(record) ? 'task-table-row' : '',
+          record.rowKind === 'section' ? 'section-table-row' : '',
+          record.rowKind === 'inlineCreate' ? 'inline-create-table-row' : '',
+          record.rowKind === 'newTask' ? 'new-task-table-row' : '',
+          isTaskTableTaskRow(record) && record.status === 'done' ? 'done' : '',
+          isTaskTableTaskRow(record) && record.guid === animatedTaskGuid ? 'task-row-new' : '',
+          isTaskTableTaskRow(record) && record.guid === selectedTaskGuid ? 'selected' : '',
+          isTaskTableTaskRow(record) && draggingTaskGuid === record.guid ? 'dragging' : '',
+          record.rowKind === 'section' &&
+          dragOverSectionGuid === record.section.guid &&
+          dragOverMode === 'task-into'
+            ? 'drag-target-task'
+            : '',
         ]
           .filter(Boolean)
           .join(' ')
       }
-      onRow={(record) => ({
-        draggable: isTasklistView && record.tableDepth === 0,
-        onDragStart:
-          isTasklistView && record.tableDepth === 0
-            ? (event) => handleTaskDragStart(event, record.guid)
-            : undefined,
-        onDragEnd:
-          isTasklistView && record.tableDepth === 0 ? clearDragState : undefined,
-      })}
+      onRow={(record) => {
+        if (record.rowKind === 'section') {
+          return {
+            onDragOver: (event) => {
+              if (draggingTaskGuid) {
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                setDragOverSectionGuid(record.section.guid)
+                setDragOverMode('task-into')
+              }
+            },
+            onDrop: (event) => {
+              if (draggingTaskGuid) {
+                void handleSectionDrop(event, record.section.guid)
+              }
+            },
+          }
+        }
+
+        if (!isTaskTableTaskRow(record)) {
+          return {}
+        }
+
+        return {
+          draggable: isTasklistView && record.tableDepth === 0,
+          onDragStart:
+            isTasklistView && record.tableDepth === 0
+              ? (event) => handleTaskDragStart(event, record.guid)
+              : undefined,
+          onDragEnd:
+            isTasklistView && record.tableDepth === 0 ? clearDragState : undefined,
+        }
+      }}
       locale={{
         emptyText: <div className="table-empty-state">{config.emptyState?.title ?? '暂无任务'}</div>,
       }}
@@ -2181,154 +2587,7 @@ export default function TaskTable({
 
       <div className="table-body">
         <>
-          {groupedTasks.map(({ section, tasks: sectionTasks }) => (
-            <div
-              key={section.guid}
-              className={`section-group ${
-                dragOverSectionGuid === section.guid && dragOverMode === 'task-into'
-                  ? 'drag-target-task'
-                  : ''
-              }`}
-              onDragOver={(e) => {
-                if (draggingTaskGuid) {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  setDragOverSectionGuid(section.guid)
-                  setDragOverMode('task-into')
-                }
-              }}
-              onDrop={(e) => {
-                if (draggingTaskGuid) {
-                  void handleSectionDrop(e, section.guid)
-                }
-              }}
-            >
-              {shouldGroupBySection && (
-                <div
-                  className={`section-row ${animatedSectionGuid === section.guid ? 'section-row-new' : ''} ${
-                    draggingSectionGuid === section.guid ? 'dragging' : ''
-                  } ${
-                    dragOverSectionGuid === section.guid && dragOverMode === 'section-before'
-                      ? 'drag-over-top'
-                      : ''
-                  } ${
-                    dragOverSectionGuid === section.guid && dragOverMode === 'section-after'
-                      ? 'drag-over-bottom'
-                      : ''
-                  }`}
-                  onClick={() => toggleSection(section.guid)}
-                  draggable={isTasklistView && !section.guid.startsWith('__')}
-                  onDragStart={(e) => handleSectionDragStart(e, section.guid)}
-                  onDragOver={(e) => handleSectionDragOver(e, section.guid)}
-                  onDragLeave={handleSectionDragLeave}
-                  onDrop={(e) => {
-                    void handleSectionDrop(e, section.guid)
-                  }}
-                  onDragEnd={clearDragState}
-                >
-                  {collapsedSections.has(section.guid) ? (
-                    <CaretRightOutlined className="caret" />
-                  ) : (
-                    <CaretDownOutlined className="caret" />
-                  )}
-                  {editingSectionGuid === section.guid ? (
-                    <Input
-                      size="small"
-                      className="new-section-input"
-                      value={editingSectionName}
-                      onChange={(e) => setEditingSectionName(e.target.value)}
-                      onPressEnter={() => void handleRenameSection(section.guid)}
-                      onBlur={() => void handleRenameSection(section.guid)}
-                      onClick={(e) => e.stopPropagation()}
-                      autoFocus
-                    />
-                  ) : (
-                    <span
-                      className="section-name"
-                      onDoubleClick={(e) => {
-                        e.stopPropagation()
-                        setEditingSectionGuid(section.guid)
-                        setEditingSectionName(section.name)
-                      }}
-                    >
-                      {section.name}
-                    </span>
-                  )}
-                  <Tag color="default" className="section-count-tag">
-                    {sectionTasks.length}
-                  </Tag>
-                  {isTasklistView && (
-                    <div className="section-actions" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={<PlusOutlined />}
-                        onClick={() => startInlineCreate(section.guid)}
-                        className="section-action-btn"
-                      />
-                      <Dropdown
-                        trigger={['click']}
-                        menu={{
-                          items: [
-                            {
-                              key: 'rename',
-                              label: '重命名',
-                              onClick: () => {
-                                setEditingSectionGuid(section.guid)
-                                setEditingSectionName(section.name)
-                              },
-                            },
-                            { type: 'divider' as const },
-                            {
-                              key: 'delete',
-                              danger: true,
-                              label: '删除分组',
-                              onClick: () => void handleDeleteSection(section.guid),
-                            },
-                          ],
-                        }}
-                      >
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={<EllipsisOutlined />}
-                          className="section-action-btn"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </Dropdown>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {(!shouldGroupBySection || !collapsedSections.has(section.guid)) && (
-                <>
-                  {renderSectionTable(
-                    sectionTasks,
-                    config.showColumnHeader !== false &&
-                      visibleSectionGroups.findIndex(
-                        (group) => group.section.guid === section.guid,
-                      ) === 0,
-                  )}
-
-                  {shouldGroupBySection && creatingInSection === section.guid ? (
-                    createTaskInlineRow(section.guid)
-                  ) : (
-                    config.toolbar.showCreate && shouldGroupBySection && (
-                      <Button
-                        type="text"
-                        className="new-task-btn"
-                        onClick={() => startInlineCreate(section.guid)}
-                        block
-                      >
-                        新建任务
-                      </Button>
-                    )
-                  )}
-                </>
-              )}
-            </div>
-          ))}
+          {renderTaskTable()}
 
           {shouldGroupBySection && (
             <Button
@@ -2361,10 +2620,18 @@ export default function TaskTable({
           existingFields={rawCustomFields}
           onClose={() => setEditorOpen(false)}
           onSaved={(field) => void handleCustomFieldSaved(field)}
-          onDeleted={() => void reloadCustomFields()}
+          onDeleted={(fieldId) => void handleCustomFieldDeleted(fieldId)}
           onPickExisting={(f) => {
-            // 直接把字段列设为可见
-            handleAddVisibleColumn(toCustomFieldColumnKey(f.field_id))
+            void (async () => {
+              try {
+                await updateCustomField(f.field_id, { is_visible: true })
+                handleAddVisibleColumn(toCustomFieldColumnKey(f.field_id))
+                await reloadCustomFields()
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : '启用字段失败'
+                message.error(msg)
+              }
+            })()
           }}
         />
       )}
@@ -2408,6 +2675,7 @@ interface CustomFieldCellProps {
   task: Task
   users: User[]
   onChange: (value: CustomFieldValue) => void
+  onStatusChange: (task: Task, nextStatus: Task['status']) => void
 }
 
 function CustomFieldCell({
@@ -2415,7 +2683,9 @@ function CustomFieldCell({
   task,
   users,
   onChange,
+  onStatusChange,
 }: CustomFieldCellProps) {
+  const [editing, setEditing] = useState(false)
   const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
   const textValue = fieldValue?.text_value ?? ''
   const numberValue = fieldValue?.number_value ?? ''
@@ -2425,97 +2695,191 @@ function CustomFieldCell({
   const singleValue = fieldValue?.single_select_value
   const multiValue = fieldValue?.multi_select_value ?? []
   const memberValue = fieldValue?.member_value?.map((member) => member.id) ?? []
+  const displayValue = formatCustomFieldValue(task, field, users)
+  const hasValue = displayValue !== '-'
+
+  const exitEditing = () => {
+    setEditing(false)
+  }
+
+  const enterEditing = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation()
+    setEditing(true)
+  }
+
+  const renderPlaceholder = (label: string) => (
+    <span className="custom-field-placeholder">{label}</span>
+  )
+
+  const renderReadTrigger = (content: React.ReactNode) => (
+    <div
+      className="custom-field-trigger"
+      data-has-value={hasValue ? 'true' : 'false'}
+      onClick={enterEditing}
+    >
+      {content}
+    </div>
+  )
+
+  if (!editing) {
+    if (field.type === 'single_select' && hasValue) {
+      return renderReadTrigger(<Tag className="custom-field-value-tag">{displayValue}</Tag>)
+    }
+
+    if (field.type === 'multi_select' && multiValue.length > 0) {
+      return renderReadTrigger(<Tag className="custom-field-value-tag">{displayValue}</Tag>)
+    }
+
+    return renderReadTrigger(
+      hasValue ? (
+        <span className="custom-field-text">{displayValue}</span>
+      ) : (
+        renderPlaceholder('点击填写')
+      ),
+    )
+  }
 
   if (field.type === 'text') {
     return (
-      <Input
-        size="small"
-        value={textValue}
-        placeholder="输入文本"
-        onChange={(e) => onChange({ guid: field.guid, text_value: e.target.value })}
-      />
+      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+        <Input
+          size="small"
+          value={textValue}
+          placeholder="输入文本"
+          autoFocus
+          onChange={(e) => onChange({ guid: field.guid, text_value: e.target.value })}
+          onBlur={exitEditing}
+          onPressEnter={exitEditing}
+        />
+      </div>
     )
   }
 
   if (field.type === 'number') {
     return (
-      <Input
-        size="small"
-        value={numberValue}
-        placeholder="输入数字"
-        onChange={(e) => onChange({ guid: field.guid, number_value: e.target.value })}
-      />
+      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+        <Input
+          size="small"
+          value={numberValue}
+          placeholder="输入数字"
+          autoFocus
+          onChange={(e) => onChange({ guid: field.guid, number_value: e.target.value })}
+          onBlur={exitEditing}
+          onPressEnter={exitEditing}
+        />
+      </div>
     )
   }
 
   if (field.type === 'datetime') {
     return (
-      <DatePicker
-        size="small"
-        value={dateValue}
-        placeholder="选择日期"
-        style={{ width: '100%' }}
-        onChange={(value) =>
-          onChange({
-            guid: field.guid,
-            datetime_value: value ? value.valueOf().toString() : undefined,
-          })}
-      />
+      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+        <DatePicker
+          size="small"
+          value={dateValue}
+          placeholder="选择日期"
+          style={{ width: '100%' }}
+          autoFocus
+          onChange={(value) => {
+            onChange({
+              guid: field.guid,
+              datetime_value: value ? value.valueOf().toString() : undefined,
+            })
+            exitEditing()
+          }}
+          onOpenChange={(open) => {
+            if (!open) {
+              exitEditing()
+            }
+          }}
+        />
+      </div>
     )
   }
 
   if (field.type === 'single_select') {
     return (
-      <Select
-        size="small"
-        value={singleValue}
-        placeholder="选择选项"
-        allowClear
-        options={(field.options ?? []).map((option) => ({
-          label: option.name,
-          value: option.guid,
-        }))}
-        onChange={(value) =>
-          onChange({ guid: field.guid, single_select_value: value || undefined })}
-      />
+      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+        <Select
+          size="small"
+          autoFocus
+          value={field.guid === 'status' ? task.status : singleValue}
+          placeholder="选择选项"
+          allowClear
+          options={(field.options ?? []).map((option) => ({
+            label: option.name,
+            value: option.guid,
+          }))}
+          onChange={(value) => {
+            if (field.guid === 'status') {
+              onStatusChange(task, (value || 'todo') as Task['status'])
+            } else {
+              onChange({ guid: field.guid, single_select_value: value || undefined })
+            }
+            exitEditing()
+          }}
+          onOpenChange={(open) => {
+            if (!open) {
+              exitEditing()
+            }
+          }}
+        />
+      </div>
     )
   }
 
   if (field.type === 'multi_select') {
     return (
-      <Select
-        mode="multiple"
-        size="small"
-        value={multiValue}
-        placeholder="选择选项"
-        options={(field.options ?? []).map((option) => ({
-          label: option.name,
-          value: option.guid,
-        }))}
-        onChange={(value) =>
-          onChange({ guid: field.guid, multi_select_value: value })}
-      />
+      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+        <Select
+          mode="multiple"
+          size="small"
+          autoFocus
+          value={multiValue}
+          placeholder="选择选项"
+          options={(field.options ?? []).map((option) => ({
+            label: option.name,
+            value: option.guid,
+          }))}
+          onChange={(value) => onChange({ guid: field.guid, multi_select_value: value })}
+          onBlur={exitEditing}
+          onOpenChange={(open) => {
+            if (!open) {
+              exitEditing()
+            }
+          }}
+        />
+      </div>
     )
   }
 
   if (field.type === 'member') {
     return (
-      <Select
-        mode="multiple"
-        size="small"
-        value={memberValue}
-        placeholder="选择成员"
-        options={users.map((user) => ({ label: user.name, value: user.id }))}
-        onChange={(value) =>
-          onChange({
-            guid: field.guid,
-            member_value: value.map((id) => ({
-              id,
-              type: 'user' as const,
-              name: users.find((user) => user.id === id)?.name,
-            })),
-          })}
-      />
+      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+        <Select
+          mode="multiple"
+          size="small"
+          autoFocus
+          value={memberValue}
+          placeholder="选择成员"
+          options={users.map((user) => ({ label: user.name, value: user.id }))}
+          onChange={(value) =>
+            onChange({
+              guid: field.guid,
+              member_value: value.map((id) => ({
+                id,
+                type: 'user' as const,
+                name: users.find((user) => user.id === id)?.name,
+              })),
+            })}
+          onBlur={exitEditing}
+          onOpenChange={(open) => {
+            if (!open) {
+              exitEditing()
+            }
+          }}
+        />
+      </div>
     )
   }
 

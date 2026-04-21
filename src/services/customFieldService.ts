@@ -13,15 +13,21 @@ export interface FieldOption {
   value: string
   label: string
   color?: string | null
+  is_disabled?: boolean
+  disabled_at?: string | null
 }
 
 export interface ApiCustomField {
   field_id: string
   project_id: string
+  team_id?: string
   name: string
   field_type: CustomFieldType
   options: FieldOption[] | null
   required: boolean
+  is_visible: boolean
+  sort_order: number
+  creator_id?: string
   created_at: string
   updated_at: string
   is_deleted?: boolean
@@ -29,9 +35,21 @@ export interface ApiCustomField {
 
 const uid = () => encodeURIComponent(appConfig.user_id)
 
-export async function listCustomFields(projectId: string): Promise<ApiCustomField[]> {
+export async function listCustomFields(
+  projectId: string,
+  options?: {
+    includeDisabledOptions?: boolean
+  },
+): Promise<ApiCustomField[]> {
+  const qs = new URLSearchParams({
+    user_id: appConfig.user_id,
+  })
+  if (options?.includeDisabledOptions) {
+    qs.set('include_disabled_options', 'true')
+  }
+
   const res = await request<ApiCustomField[] | { items: ApiCustomField[] }>(
-    `api/v1/task-center/projects/${projectId}/custom-fields?user_id=${uid()}`,
+    `api/v1/task-center/projects/${projectId}/custom-fields?${qs.toString()}`,
   )
   return Array.isArray(res) ? res : (res?.items ?? [])
 }
@@ -62,7 +80,13 @@ export async function createCustomField(
 
 export async function updateCustomField(
   fieldId: string,
-  patch: { name?: string; options?: FieldOption[]; required?: boolean },
+  patch: {
+    name?: string
+    options?: FieldOption[]
+    required?: boolean
+    is_visible?: boolean
+    sort_order?: number
+  },
 ): Promise<ApiCustomField> {
   return request<ApiCustomField>(`api/v1/task-center/custom-fields/${fieldId}`, {
     method: 'PUT',

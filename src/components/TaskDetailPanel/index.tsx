@@ -7,10 +7,11 @@ import Tag from 'antd/es/tag'
 import Avatar from 'antd/es/avatar'
 import Popover from 'antd/es/popover'
 import Select from 'antd/es/select'
+import Card from 'antd/es/card'
 import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
-import Tooltip from 'antd/es/tooltip'
+import List from 'antd/es/list'
 import {
   CloseOutlined,
   MoreOutlined,
@@ -76,6 +77,7 @@ import {
   updateProject as apiUpdateProject,
 } from '@/services/projectService'
 import { FilePreviewRenderer } from '@/components/file-preview'
+import UserSearchSelect from '@/components/UserSearchSelect'
 import './index.less'
 
 const { Text } = Typography
@@ -127,7 +129,8 @@ export default function TaskDetailPanel({
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeId, setSubtaskAssigneeId] = useState<string | undefined>(undefined)
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
-  const [selectedFollowerIds, setSelectedFollowerIds] = useState<string[]>([])
+  const [selectedFollowerId, setSelectedFollowerId] = useState<string>()
+  const [followersPopoverOpen, setFollowersPopoverOpen] = useState(false)
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
   const subtaskInteractingRef = useRef(false)
   const subtaskSubmittingRef = useRef(false)
@@ -261,9 +264,11 @@ export default function TaskDetailPanel({
     const matched = availableUsers.find((user) => user.id === userId)
     return matched ?? { id: userId, name: userId }
   })
+  const visibleFollowedUsers = followedUsers.slice(0, 3)
+  const availableFollowerUsers = availableUsers.filter((user) => !followedUserIds.includes(user.id))
 
   useEffect(() => {
-    setSelectedFollowerIds(followedUserIds)
+    setSelectedFollowerId(undefined)
   }, [task.guid, followedUserIdsKey])
 
   const handleTaskPatch = async (patch: Partial<Task>) => {
@@ -305,8 +310,11 @@ export default function TaskDetailPanel({
   }
 
   const handleAddFollowers = async () => {
-    const toAdd = selectedFollowerIds.filter((id) => !followedUserIds.includes(id))
+    const toAdd = selectedFollowerId && !followedUserIds.includes(selectedFollowerId)
+      ? [selectedFollowerId]
+      : []
     if (toAdd.length === 0) {
+      setFollowersPopoverOpen(false)
       return
     }
 
@@ -316,6 +324,7 @@ export default function TaskDetailPanel({
       const nextTask = apiTaskToTask(fresh)
       onTaskUpdated?.(nextTask)
       if (!onTaskUpdated) onRefresh?.()
+      setSelectedFollowerId(undefined)
       message.success('已添加关注人')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '添加关注人失败')
@@ -334,6 +343,72 @@ export default function TaskDetailPanel({
       message.error(err instanceof Error ? err.message : '移除关注人失败')
     }
   }
+
+  const followerPopoverContent = (
+    <div className="followers-popover">
+      <Card
+        className="followers-popover-card"
+        variant="borderless"
+      >
+        <Space direction="vertical" size={12} className="followers-popover-body">
+          <div className="followers-toolbar">
+            <div className="followers-picker-inline">
+              <UserSearchSelect
+                className="followers-search"
+                size="middle"
+                placeholder="搜索并选择要新增的人"
+                value={selectedFollowerId}
+                onChange={setSelectedFollowerId}
+                users={availableFollowerUsers}
+              />
+              <Button
+                type="primary"
+                size="middle"
+                icon={<PlusOutlined />}
+                disabled={!selectedFollowerId}
+                onClick={() => void handleAddFollowers()}
+              >
+                添加
+              </Button>
+            </div>
+          </div>
+          <div className="followers-list-panel">
+            <List
+              className="followers-list"
+              dataSource={followedUsers}
+              locale={{ emptyText: '暂无关注的人' }}
+              renderItem={(user) => (
+                <List.Item
+                  className="followers-list-item"
+                  actions={[
+                    <Button
+                      key="remove"
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => void handleRemoveFollower(user.id)}
+                    >
+                      删除
+                    </Button>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      <Avatar size={30} style={{ backgroundColor: '#7b67ee' }}>
+                        {(user.name ?? user.id).slice(0, 1)}
+                      </Avatar>
+                    }
+                    title={<Text className="followers-user-name">{user.name ?? user.id}</Text>}
+                  />
+                </List.Item>
+              )}
+            />
+          </div>
+        </Space>
+      </Card>
+    </div>
+  )
 
   const handleDateQuickSet = async (
     field: 'start' | 'due',
@@ -554,6 +629,10 @@ export default function TaskDetailPanel({
     } catch (err) {
       message.error(err instanceof Error ? err.message : '下载失败')
     }
+  }
+
+  const handleOpenAttachmentPreview = (attachment: ApiAttachment) => {
+    setPreviewAttachment(attachment)
   }
 
   const handleChangeSection = async (nextSectionGuid: string) => {
@@ -1152,7 +1231,7 @@ export default function TaskDetailPanel({
                         </span>
                       )}
                       {assignee && (
-                        <Avatar size={20} style={{ backgroundColor: '#f5a623' }}>
+                        <Avatar size={20} style={{ backgroundColor: '#7b67ee' }}>
                           {(assignee.name ?? assignee.id).slice(0, 1)}
                         </Avatar>
                       )}
@@ -1312,7 +1391,7 @@ export default function TaskDetailPanel({
                       <div className="attachment-actions">
                         <EyeOutlined
                           className="attachment-action"
-                          onClick={() => setPreviewAttachment(att)}
+                          onClick={() => handleOpenAttachmentPreview(att)}
                         />
                         <DownloadOutlined
                           className="attachment-action"
@@ -1443,7 +1522,7 @@ export default function TaskDetailPanel({
                                     key={id}
                                     type="button"
                                     className="comment-image-card"
-                                    onClick={() => att && setPreviewAttachment(att)}
+                                    onClick={() => att && handleOpenAttachmentPreview(att)}
                                   >
                                     <img
                                       className="comment-image-thumb"
@@ -1521,7 +1600,7 @@ export default function TaskDetailPanel({
                       <button
                         type="button"
                         className="comment-image-card"
-                        onClick={() => setPreviewAttachment(att)}
+                        onClick={() => handleOpenAttachmentPreview(att)}
                       >
                         <img
                           className="comment-image-thumb"
@@ -1621,60 +1700,36 @@ export default function TaskDetailPanel({
             </div>
           )}
         </Modal>
-        <div className="detail-followers">
-          <span className="followers-text">{followedUsers.length} 人关注</span>
-          <Space size={6} wrap>
-            {followedUsers.map((user) => (
-              <span key={user.id} className="follower-chip">
-                <Avatar size={20} style={{ backgroundColor: '#f5a623' }}>
-                  {(user.name ?? user.id).slice(0, 1)}
-                </Avatar>
-                <span className="follower-name">{user.name ?? user.id}</span>
-                <Tooltip title="移除关注人">
-                  <CloseOutlined
-                    className="follower-remove"
-                    onClick={() => void handleRemoveFollower(user.id)}
-                  />
-                </Tooltip>
-              </span>
-            ))}
-            <Popover
-              trigger="click"
-              placement="topLeft"
-              destroyOnHidden
-              content={
-                <div className="detail-popover-panel follower-popover-panel">
-                  <Text strong>添加关注的人</Text>
-                  <Select
-                    mode="multiple"
-                    size="small"
-                    showSearch
-                    placeholder="选择要关注的人"
-                    value={selectedFollowerIds}
-                    onChange={setSelectedFollowerIds}
-                    options={availableUsers.map((user) => ({
-                      value: user.id,
-                      label: user.name,
-                    }))}
-                  />
-                  <div className="follower-popover-actions">
-                    <Button size="small" onClick={() => setSelectedFollowerIds(followedUserIds)}>
-                      重置
-                    </Button>
-                    <Button type="primary" size="small" onClick={() => void handleAddFollowers()}>
-                      添加
-                    </Button>
-                  </div>
-                </div>
-              }
+        <Popover
+          open={followersPopoverOpen}
+          onOpenChange={setFollowersPopoverOpen}
+          placement="topLeft"
+          trigger="click"
+          content={followerPopoverContent}
+          overlayClassName="followers-popover-overlay"
+        >
+          <div className="detail-followers">
+            <Button
+              type="text"
+              htmlType="button"
+              className="followers-summary"
             >
-              <span className="followers-add">
-                <PlusOutlined />
-                <span>添加关注的人</span>
-              </span>
-            </Popover>
-          </Space>
-        </div>
+              {visibleFollowedUsers.length > 0 ? (
+                <Avatar.Group max={{ count: 3 }} size={24}>
+                  {visibleFollowedUsers.map((user) => (
+                    <Avatar key={user.id} size={20} style={{ backgroundColor: '#7b67ee' }}>
+                      {(user.name ?? user.id).slice(0, 1)}
+                    </Avatar>
+                  ))}
+                </Avatar.Group>
+              ) : (
+                <Avatar size={20} style={{ backgroundColor: '#7b67ee' }} icon={<UserOutlined />} />
+              )}
+              <span className="followers-text">{followedUsers.length} 人关注</span>
+              <span className="followers-summary-action">管理</span>
+            </Button>
+          </div>
+        </Popover>
       </div>
     </div>
   )

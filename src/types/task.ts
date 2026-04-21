@@ -24,7 +24,7 @@ export const PriorityColor: Record<Priority, string> = {
 }
 
 export type MemberRole = 'assignee' | 'follower'
-export type MemberType = 'user' | 'app'
+export type MemberType = 'user' | 'app' | 'chat'
 
 export interface Member {
   id: string
@@ -84,7 +84,7 @@ export interface CustomFieldValue {
   member_value?: { id: string; type: MemberType; name?: string }[]
 }
 
-export type TaskStatus = 'todo' | 'done'
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'cancelled'
 export type TaskMode = 1 | 2 // 1=会签, 2=或签
 
 export interface Task {

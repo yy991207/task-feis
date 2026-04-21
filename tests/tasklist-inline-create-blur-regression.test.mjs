@@ -45,12 +45,12 @@ async function testSectionHeaderPlusCanShowInlineCreateWhenToolbarCreateHidden()
 
   assert.match(
     source,
-    /className="section-action-btn"[\s\S]*onClick=\{\(\) => startInlineCreate\(section\.guid\)\}/,
+    /onClick=\{\(\) => startInlineCreate\(section\.guid\)\}[\s\S]*className="section-action-btn"/,
     '分组头部加号按钮应该继续直接触发行内新建任务',
   )
   assert.match(
     source,
-    /shouldGroupBySection && creatingInSection === section\.guid \? \(\s*createTaskInlineRow\(section\.guid\)\s*\)/,
+    /shouldGroupBySection && creatingInSection === section\.guid[\s\S]*createTaskInlineRow\(section\.guid\)/,
     '分组头部加号触发行内新建后，输入行不应该再依赖 toolbar.showCreate 才能显示',
   )
 }

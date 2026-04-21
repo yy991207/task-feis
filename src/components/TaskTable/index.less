@@ -171,98 +171,12 @@
   padding-left: 12px;
 }
 
-.section-group {
+.task-grid-table {
   margin: 0 16px 10px;
+  overflow: hidden;
   border: 1px solid #eef1f6;
   border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
 
-  .section-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 34px;
-    padding: 0 16px;
-    color: #1f2329;
-    font-size: 13px;
-    font-weight: 500;
-    user-select: none;
-    cursor: pointer;
-
-    &:hover {
-      background: #fafbfc;
-    }
-
-    .caret {
-      font-size: 10px;
-      color: #8f959e;
-    }
-
-    .section-name {
-      white-space: nowrap;
-    }
-
-    .section-count-tag {
-      margin: 0 !important;
-      padding: 0 6px !important;
-      border: none !important;
-      border-radius: 10px !important;
-      background: #f2f3f5 !important;
-      color: #8f959e !important;
-      font-size: 11px !important;
-      line-height: 18px !important;
-    }
-
-    .section-actions {
-      display: flex;
-      align-items: center;
-      gap: 2px;
-      margin-left: 4px;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-
-      .section-action-btn {
-        color: #8f959e !important;
-        border-radius: 6px !important;
-        
-        &:hover {
-          background: #e4e6ea !important;
-          color: #1f2329 !important;
-        }
-      }
-    }
-
-    &:hover .section-actions {
-      opacity: 1;
-    }
-  }
-
-  .section-row-new {
-    animation:
-      taskRowEnter var(--task-create-duration, 0.24s)
-        var(--task-create-ease, ease-out),
-      taskRowFlash 0.9s ease;
-  }
-
-  // drag & drop visuals
-  .section-row.dragging {
-    opacity: 0.4;
-  }
-  .section-row.drag-over-top {
-    box-shadow: inset 0 2px 0 0 #3370ff;
-  }
-  .section-row.drag-over-bottom {
-    box-shadow: inset 0 -2px 0 0 #3370ff;
-  }
-
-  &.drag-target-task {
-    background: rgba(51, 112, 255, 0.06);
-    border-radius: 12px;
-  }
-}
-
-.task-grid-table {
   .ant-table {
     background: transparent;
   }
@@ -300,6 +214,96 @@
 
   .ant-table-expanded-row > .ant-table-cell {
     padding: 0 !important;
+  }
+}
+
+.section-table-row {
+  > td {
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  &.drag-target-task > td {
+    background: rgba(51, 112, 255, 0.06) !important;
+  }
+}
+
+.section-row-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 16px;
+  color: #1f2329;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+  cursor: pointer;
+
+  &:hover {
+    background: #fafbfc;
+  }
+
+  .caret {
+    font-size: 10px;
+    color: #8f959e;
+  }
+
+  .section-name {
+    white-space: nowrap;
+  }
+
+  .section-count-tag {
+    margin: 0 !important;
+    padding: 0 6px !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: #f2f3f5 !important;
+    color: #8f959e !important;
+    font-size: 11px !important;
+    line-height: 18px !important;
+  }
+
+  .section-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+
+    .section-action-btn {
+      color: #8f959e !important;
+      border-radius: 6px !important;
+      
+      &:hover {
+        background: #e4e6ea !important;
+        color: #1f2329 !important;
+      }
+    }
+  }
+
+  &:hover .section-actions {
+    opacity: 1;
+  }
+
+  &.section-row-new {
+    animation:
+      taskRowEnter var(--task-create-duration, 0.24s)
+        var(--task-create-ease, ease-out),
+      taskRowFlash 0.9s ease;
+  }
+
+  &.dragging {
+    opacity: 0.4;
+  }
+
+  &.drag-over-top {
+    box-shadow: inset 0 2px 0 0 #3370ff;
+  }
+
+  &.drag-over-bottom {
+    box-shadow: inset 0 -2px 0 0 #3370ff;
   }
 }
 
@@ -545,18 +549,6 @@
     font-size: 12px;
   }
 
-  .cell-custom {
-    width: 120px;
-
-    .custom-field-text {
-      overflow: hidden;
-      color: #646a73;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 12px;
-    }
-  }
-
   .cell-more {
     width: 64px;
     gap: 2px;
@@ -611,6 +603,82 @@
   .cell-created,
   .cell-custom {
     width: auto;
+  }
+
+  .custom-field-trigger {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 28px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+
+    &:hover {
+      background: #f2f3f5;
+    }
+
+    &[data-has-value='true'] {
+      .custom-field-text {
+        color: #1f2329;
+      }
+    }
+  }
+
+  .custom-field-text {
+    overflow: hidden;
+    width: 100%;
+    color: #646a73;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .custom-field-value-tag {
+    display: inline-flex !important;
+    align-items: center;
+    max-width: 100%;
+    margin: 0 !important;
+    padding: 1px 8px !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: #eef3ff !important;
+    color: #1456f0 !important;
+    font-size: 12px !important;
+    line-height: 20px !important;
+  }
+
+  .custom-field-placeholder {
+    color: #b8bcc5;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .custom-field-editor {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 28px;
+
+    .ant-picker,
+    .ant-select,
+    .ant-input {
+      width: 100%;
+    }
+
+    .ant-input,
+    .ant-picker,
+    .ant-select-selector {
+      border-radius: 6px !important;
+    }
+
+    .ant-select-selector {
+      min-height: 28px !important;
+      padding-block: 0 !important;
+      align-items: center;
+    }
   }
 }
 
@@ -1037,21 +1105,19 @@
   }
 }
 
-.new-section-row {
-  .new-section-input {
-    width: 240px;
-    height: 28px;
-    padding: 0 8px;
-    border: 1px solid #3370ff;
-    border-radius: 4px;
-    box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.2);
-    font-size: 13px;
+.new-section-input {
+  width: 240px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #3370ff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.2);
+  font-size: 13px;
 
-    &:focus,
-    &:hover {
-      border-color: #3370ff;
-      box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.2);
-    }
+  &:focus,
+  &:hover {
+    border-color: #3370ff;
+    box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.2);
   }
 }
 

@@ -15,8 +15,6 @@ import type { MenuProps } from 'antd/es/menu'
 import {
   UserOutlined,
   EyeOutlined,
-  BellOutlined,
-  ProjectOutlined,
   StarOutlined,
   FileTextOutlined,
   OrderedListOutlined,
@@ -35,7 +33,6 @@ import {
   ShareAltOutlined,
   InboxOutlined,
   StopOutlined,
-  TeamOutlined,
 } from '@ant-design/icons'
 import type { Tasklist } from '@/types/task'
 import NotificationBell from '@/components/NotificationBell'
@@ -90,6 +87,14 @@ type CreatingTarget = 'root' | string
 const encodeTasklistKey = (guid: string) => `tl:${guid}`
 const encodeGroupKey = (id: string) => `grp:${id}`
 
+// 刷新后默认展示完整清单树：根清单区和所有自定义分组都展开。
+const buildDefaultExpandedKeys = (groups: ProjectGroup[]): React.Key[] => [
+  'root',
+  ...groups
+    .filter((group) => !group.is_default)
+    .map((group) => encodeGroupKey(group.group_id)),
+]
+
 function generateDefaultTasklistName(projects: Project[]): string {
   const maxIndex = projects.reduce((max, proj) => {
     const match = proj.name.match(/^任务清单\s*(\d+)$/)
@@ -127,6 +132,11 @@ export default function Sidebar({
     listProjectGroups()
       .then((list) => {
         setGroups(list)
+        setExpandedKeys((prev) => {
+          const next = new Set(prev)
+          buildDefaultExpandedKeys(list).forEach((key) => next.add(key))
+          return Array.from(next)
+        })
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : '加载分组失败'
@@ -151,9 +161,6 @@ export default function Sidebar({
       label: '我负责的',
     },
     { key: 'my-followed', icon: <EyeOutlined />, label: '我关注的' },
-    { key: 'activity', icon: <BellOutlined />, label: '动态' },
-    { key: 'from-project', icon: <ProjectOutlined />, label: '来自飞书项目' },
-    { key: 'settings', icon: <TeamOutlined />, label: '团队管理' },
   ]
 
   // 快速访问 Menu

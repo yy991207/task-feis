@@ -23,6 +23,7 @@ async function testTaskKeepsParticipantIds() {
 
 async function testDetailFollowersSupportAddAndRemove() {
   const detailSource = await readSource('../src/components/TaskDetailPanel/index.tsx')
+  const taskTableSource = await readSource('../src/components/TaskTable/index.tsx')
 
   assert.match(
     detailSource,
@@ -39,6 +40,11 @@ async function testDetailFollowersSupportAddAndRemove() {
     /await addParticipants\(task\.guid, toAdd\)/,
     '添加关注人时应该走 participants 接口',
   )
+  assert.doesNotMatch(
+    detailSource,
+    /setSelectedFollowerId\(undefined\)\s*setFollowersPopoverOpen\(false\)/,
+    '添加关注人成功后不应该关闭关注人弹层，应该和删除关注人一样保持打开方便继续操作',
+  )
   assert.match(
     detailSource,
     /const handleRemoveFollower = async \(targetUserId: string\) => \{/,
@@ -51,13 +57,13 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /<Drawer/,
-    '详情页关注人列表应该改成 antd Drawer 上拉层，方便查看全部关注人',
+    /<Popover/,
+    '详情页关注人列表应该改成锚点式 antd Popover，避免全宽底部抽屉把版面撑坏',
   )
   assert.match(
     detailSource,
-    /placement="bottom"/,
-    '关注人列表 Drawer 应该从底部拉起，贴近参考图交互',
+    /placement="top(?:Left)?"/,
+    '关注人弹层应该从底部摘要条上方展开，方向要和参考图一致',
   )
   assert.match(
     detailSource,
@@ -71,8 +77,68 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
+    /<Card[\s\S]*className="followers-popover-card"/,
+    '关注人管理弹层应该用 antd Card 重新组织标题、选择区和列表，避免裸 div 拼出来显得粗糙',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /followers-popover-title|followers-popover-subtitle/,
+    '关注人弹层顶部的头像和人数标题块应该删除，避免重复占空间',
+  )
+  assert.match(
+    detailSource,
+    /<UserSearchSelect[\s\S]*className="followers-search"/,
+    '添加关注人应该复用主页面负责人选择的 UserSearchSelect 搜索控件',
+  )
+  assert.match(
+    taskTableSource,
+    /<UserSearchSelect[\s\S]*label="添加负责人"/,
+    '主页面负责人选择应该使用共享的 UserSearchSelect，确保关注人和负责人选人控件一致',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /AutoComplete/,
+    '关注人的选人组件不应该再用单独的 AutoComplete，避免和主页面负责人选择控件不一致',
+  )
+  assert.match(
+    detailSource,
+    /className="followers-picker-inline"/,
+    '添加关注人的搜索框和添加按钮应该在同一行显示',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /followers-count/,
+    '关注人弹层工具栏不应该再显示人数，避免右侧多余信息占位',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /mode="multiple"|followers-picker-actions|followers-picker-row|followers-list-title|followers-section-label/,
+    '添加关注人不应该再用多选 Select、独立按钮行或上下分块标题，避免布局上下堆叠',
+  )
+  assert.match(
+    detailSource,
+    /actions=\{\[\s*<Button[\s\S]*DeleteOutlined/,
+    '关注人列表删除操作应该继续保留，并使用 antd List 的 actions 区域承载',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /description=\{user\.id\}/,
+    '关注人列表只应该显示一行名称，不要再把同一个用户 id 放到第二行重复显示',
+  )
+  assert.match(
+    detailSource,
     /className="followers-summary"/,
     '详情页底部应该有独立的关注人摘要条，样式上对齐参考图',
+  )
+  assert.match(
+    detailSource,
+    /className="followers-popover"/,
+    '关注人弹层应该有独立的卡片容器，方便控制无边框摘要和弹层滚动布局',
+  )
+  assert.match(
+    detailSource,
+    /backgroundColor: '#7b67ee'/,
+    '关注人头像颜色应该和主页面当前紫色头像保持一致',
   )
 }
 
