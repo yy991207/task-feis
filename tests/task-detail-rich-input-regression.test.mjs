@@ -18,7 +18,7 @@ async function testTaskDetailUsesSharedRichInput() {
 
   assert.match(
     source,
-    /import TaskRichInput, \{ TaskRichText \} from '@\/components\/TaskRichInput'/,
+    /import TaskRichInput, \{[\s\S]*TaskRichText[\s\S]*\} from '@\/components\/TaskRichInput'/,
     '任务详情应该引入统一的 TaskRichInput 组件，不能再让描述和评论各写一套输入框',
   )
   assert.match(
@@ -83,8 +83,88 @@ async function testRichInputSupportsMentionLinkAndPasteImage() {
   )
   assert.match(
     source,
+    /getAttachmentFileNameValidationError\(file\.name\)/,
+    '统一输入框应该先拦截带空格的附件文件名，避免继续走上传和 preview',
+  )
+  assert.match(
+    source,
+    /if \(mode === 'description' && created && isImageAttachment\(created\)\)/,
+    '描述模式仍然应该保留粘贴图片后插入正文的逻辑，不能和评论附件渲染混在一起',
+  )
+  assert.match(
+    source,
     /onSubmit/,
     '统一输入框应该支持提交动作，给评论发送和描述保存共用',
+  )
+}
+
+async function testRichInputProvidesModeAwareHoverTooltip() {
+  const source = await readRichInputSource()
+
+  assert.match(
+    source,
+    /import Tooltip from 'antd\/es\/tooltip'/,
+    '任务详情输入框的鼠标浮窗提示应该使用 antd Tooltip',
+  )
+  assert.match(
+    source,
+    /TASK_RICH_INPUT_TOOLTIP_TITLE/,
+    '统一输入框应该按 description、comment、comment-edit 区分提示内容',
+  )
+  assert.match(
+    source,
+    /任务描述输入框/,
+    '描述输入框浮窗应该说明这是用于编辑任务描述的组件',
+  )
+  assert.match(
+    source,
+    /评论输入框/,
+    '评论输入框浮窗应该说明这是用于补充任务评论的组件',
+  )
+  assert.match(
+    source,
+    /评论编辑输入框/,
+    '评论编辑态浮窗应该说明这是用于修改已有评论的组件',
+  )
+  assert.match(
+    source,
+    /<Tooltip[\s\S]*title=\{TASK_RICH_INPUT_TOOLTIP_TITLE\[mode\]\}[\s\S]*placement="topLeft"/,
+    '鼠标移到输入区域时应该展示当前组件用途提示',
+  )
+}
+
+async function testCommentComposerAttachmentsUseFileCardLayout() {
+  const source = await readRichInputSource()
+
+  assert.match(
+    source,
+    /EyeOutlined/,
+    '评论输入框附件应该提供预览眼睛图标',
+  )
+  assert.match(
+    source,
+    /<div key=\{attachment\.attachment_id\} className="detail-attachment-card">/,
+    '评论输入框附件应该复用文件卡片布局，而不是图片缩略图卡片',
+  )
+  assert.match(
+    source,
+    /icon={<DownloadOutlined \/>}/,
+    '评论输入框附件应该提供下载箭头图标',
+  )
+  assert.match(
+    source,
+    /const attachmentSource = attachmentOrigins\[attachment\.attachment_id\] \?\? 'upload'/,
+    '评论输入框附件应该能区分上传来源和粘贴来源',
+  )
+  assert.match(
+    source,
+    /if \(attachmentSource === 'paste' && isImageAttachment\(attachment\)\)/,
+    '评论输入框里的粘贴图片仍然应该保留缩略图渲染',
+  )
+  assert.match(
+    source,
+    /className="comment-image-card"/,
+    '评论输入框里的粘贴图片应该继续使用图片缩略图卡片',
   )
 }
 
@@ -121,6 +201,8 @@ async function testRichInputProvidesLinkPopoverAndMentionPanelStyles() {
 async function main() {
   await testTaskDetailUsesSharedRichInput()
   await testRichInputSupportsMentionLinkAndPasteImage()
+  await testRichInputProvidesModeAwareHoverTooltip()
+  await testCommentComposerAttachmentsUseFileCardLayout()
   await testRichInputProvidesLinkPopoverAndMentionPanelStyles()
   console.log('task detail rich input regressions ok')
 }

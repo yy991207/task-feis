@@ -5,6 +5,7 @@ import Input from 'antd/es/input'
 import Popover from 'antd/es/popover'
 import Select from 'antd/es/select'
 import Space from 'antd/es/space'
+import Tooltip from 'antd/es/tooltip'
 import Typography from 'antd/es/typography'
 import Upload from 'antd/es/upload'
 import message from 'antd/es/message'
@@ -14,6 +15,7 @@ import {
   DeleteOutlined,
   ItalicOutlined,
   LinkOutlined,
+  EyeOutlined,
   DownloadOutlined,
   OrderedListOutlined,
   PaperClipOutlined,
@@ -28,6 +30,7 @@ import {
 import type { ApiAttachment } from '@/services/attachmentService'
 import {
   buildAttachmentPreviewUrl,
+  getAttachmentFileNameValidationError,
   isImageAttachment,
 } from '@/services/attachmentService'
 import type { User } from '@/types/task'
@@ -38,6 +41,13 @@ const { Text } = Typography
 const MentionOutlined = UsergroupAddOutlined
 
 export type TaskRichInputMode = 'description' | 'comment' | 'comment-edit'
+export type TaskRichAttachmentSource = 'upload' | 'paste'
+
+const TASK_RICH_INPUT_TOOLTIP_TITLE: Record<TaskRichInputMode, string> = {
+  description: '任务描述输入框：用于编辑任务背景和说明，失焦后自动保存，支持 @ 选人、链接和图片粘贴。',
+  comment: '评论输入框：用于补充任务评论，支持 @ 选人、链接、图片粘贴和附件，按 Enter 发送。',
+  'comment-edit': '评论编辑输入框：用于修改已有评论，支持 @ 选人、链接和图片粘贴，按 Enter 保存。',
+}
 
 export interface TaskRichInputProps {
   mode: TaskRichInputMode
@@ -48,6 +58,7 @@ export interface TaskRichInputProps {
   autoFocus?: boolean
   disabled?: boolean
   attachments?: ApiAttachment[]
+  attachmentOrigins?: Record<string, TaskRichAttachmentSource>
   attachmentUploading?: boolean
   mentionIds?: string[]
   submitLabel?: string
@@ -59,7 +70,7 @@ export interface TaskRichInputProps {
   onRequestAttachmentUpload?: (
     file: File,
   ) => Promise<ApiAttachment | null | undefined> | ApiAttachment | null | undefined
-  onAttachmentUploaded?: (attachment: ApiAttachment) => void
+  onAttachmentUploaded?: (attachment: ApiAttachment, source?: TaskRichAttachmentSource) => void
   onPreviewAttachment?: (attachment: ApiAttachment) => void
   onDownloadAttachment?: (attachment: ApiAttachment) => void
   onRemoveAttachment?: (attachmentId: string) => void
@@ -251,6 +262,7 @@ export default function TaskRichInput({
   autoFocus,
   disabled,
   attachments = [],
+  attachmentOrigins = {},
   attachmentUploading = false,
   mentionIds,
   submitLabel = '发送',
@@ -393,9 +405,15 @@ export default function TaskRichInput({
   const handleUploadAttachment = async (file: File) => {
     if (!onRequestAttachmentUpload) return false
 
+    const fileNameError = getAttachmentFileNameValidationError(file.name)
+    if (fileNameError) {
+      message.error(fileNameError)
+      return false
+    }
+
     const created = await onRequestAttachmentUpload(file)
     if (created) {
-      onAttachmentUploaded?.(created)
+      onAttachmentUploaded?.(created, 'upload')
     }
     if (mode === 'description' && created && isImageAttachment(created)) {
       const imageHtml = `<img src="${escapeAttr(buildAttachmentPreviewUrl(created))}" data-attachment-id="${escapeAttr(created.attachment_id)}" alt="${escapeAttr(created.file_name)}" />`
@@ -418,9 +436,14 @@ export default function TaskRichInput({
       for (const item of imageItems) {
         const file = item.getAsFile()
         if (!file) continue
+        const fileNameError = getAttachmentFileNameValidationError(file.name)
+        if (fileNameError) {
+          message.error(fileNameError)
+          continue
+        }
         const created = await onRequestAttachmentUpload(file)
         if (created) {
-          onAttachmentUploaded?.(created)
+          onAttachmentUploaded?.(created, 'paste')
         }
         if (mode === 'description' && created && isImageAttachment(created)) {
           const imageHtml = `<img src="${escapeAttr(buildAttachmentPreviewUrl(created))}" data-attachment-id="${escapeAttr(created.attachment_id)}" alt="${escapeAttr(created.file_name)}" />`
@@ -471,7 +494,15 @@ export default function TaskRichInput({
   }
 
   const renderAttachmentItem = (attachment: ApiAttachment) => {
-    if (isImageAttachment(attachment)) {
+    const attachmentSource = attachmentOrigins[attachment.attachment_id] ?? 'upload'
+    const ext = (attachment.file_name.split('.').pop() ?? '').toLowerCase()
+    const sizeKB = attachment.file_size / 1024
+    const sizeLabel =
+      sizeKB >= 1024
+        ? `${(sizeKB / 1024).toFixed(1)} MB`
+        : `${Math.max(1, Math.round(sizeKB))} KB`
+
+    if (attachmentSource === 'paste' && isImageAttachment(attachment)) {
       return (
         <div key={attachment.attachment_id} className="comment-image-preview-item">
           <button
@@ -500,13 +531,6 @@ export default function TaskRichInput({
       )
     }
 
-    const ext = (attachment.file_name.split('.').pop() ?? '').toLowerCase()
-    const sizeKB = attachment.file_size / 1024
-    const sizeLabel =
-      sizeKB >= 1024
-        ? `${(sizeKB / 1024).toFixed(1)} MB`
-        : `${Math.max(1, Math.round(sizeKB))} KB`
-
     return (
       <div key={attachment.attachment_id} className="detail-attachment-card">
         <div className="attachment-thumb">
@@ -519,6 +543,16 @@ export default function TaskRichInput({
           <div className="attachment-meta">{sizeLabel}</div>
         </div>
         <div className="attachment-actions">
+          {onPreviewAttachment && (
+            <Button
+              type="text"
+              size="small"
+              className="attachment-action"
+              onClick={() => onPreviewAttachment?.(attachment)}
+              icon={<EyeOutlined />}
+              title="预览"
+            />
+          )}
           {onDownloadAttachment && (
             <Button
               type="text"
@@ -534,7 +568,7 @@ export default function TaskRichInput({
               type="text"
               size="small"
               danger
-              className="attachment-action"
+              className="attachment-delete"
               onClick={() => onRemoveAttachment(attachment.attachment_id)}
               icon={<DeleteOutlined />}
               title="删除"
@@ -773,23 +807,30 @@ export default function TaskRichInput({
       className={className ? `task-rich-input ${className}` : 'task-rich-input'}
       onBlurCapture={handleRootBlur}
     >
-      <div className="task-rich-input-shell">
-        <div
-          ref={editorRef}
-          className="task-rich-input-editor"
-          contentEditable={!disabled}
-          suppressContentEditableWarning
-          data-placeholder={placeholder}
-          role="textbox"
-          aria-multiline="true"
-          onFocus={saveSelection}
-          onMouseUp={saveSelection}
-          onKeyUp={saveSelection}
-          onInput={syncFromEditor}
-          onPaste={handlePaste}
-          onKeyDown={handleEditorKeyDown}
-        />
-      </div>
+      <Tooltip
+        title={TASK_RICH_INPUT_TOOLTIP_TITLE[mode]}
+        placement="topLeft"
+        mouseEnterDelay={0.4}
+        getPopupContainer={() => wrapperRef.current ?? document.body}
+      >
+        <div className="task-rich-input-shell">
+          <div
+            ref={editorRef}
+            className="task-rich-input-editor"
+            contentEditable={!disabled}
+            suppressContentEditableWarning
+            data-placeholder={placeholder}
+            role="textbox"
+            aria-multiline="true"
+            onFocus={saveSelection}
+            onMouseUp={saveSelection}
+            onKeyUp={saveSelection}
+            onInput={syncFromEditor}
+            onPaste={handlePaste}
+            onKeyDown={handleEditorKeyDown}
+          />
+        </div>
+      </Tooltip>
       {renderToolbar()}
       {attachments.length > 0 && (
         <div className="detail-attachment-list task-rich-input-attachment-list">

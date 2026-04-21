@@ -2373,6 +2373,19 @@ export default function TaskTable({
     })
   })
 
+  const taskColumnsWithInlineCreateSpan = taskColumns.map((column, index) => ({
+    ...column,
+    onCell: (record: TaskTableDisplayRow) => {
+      if (record.rowKind !== 'inlineCreate') {
+        return {}
+      }
+      // 行内新建是整行编辑态，需要合并表格单元格，避免所有字段都挤进标题列里。
+      return {
+        colSpan: index === 0 ? taskColumns.length : 0,
+      }
+    },
+  }))
+
   const buildTableRows = () => {
     const rows: TaskTableDisplayRow[] = []
     groupedTasks.forEach(({ section, tasks: sectionTasks }) => {
@@ -2418,7 +2431,7 @@ export default function TaskTable({
       size="small"
       pagination={false}
       showHeader={config.showColumnHeader !== false}
-      columns={taskColumns}
+      columns={taskColumnsWithInlineCreateSpan}
       dataSource={tableRows}
       scroll={{ x: 'max-content' }}
       expandable={{

@@ -105,6 +105,34 @@ body.detail-panel-resizing {
   padding: 20px 20px 8px;
   flex-shrink: 0;
 
+  .detail-parent-chain {
+    margin: -4px 0 10px;
+    font-size: 12px;
+
+    .ant-breadcrumb-separator {
+      color: #c9cdd4;
+    }
+  }
+
+  .detail-parent-chain-link {
+    max-width: 160px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #4e5969;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+    transition: color 0.15s ease;
+
+    &:hover,
+    &:focus {
+      color: #3370ff;
+    }
+  }
+
   .detail-title {
     font-size: 18px;
     font-weight: 600;

@@ -13,6 +13,7 @@ import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
 import List from 'antd/es/list'
 import Tooltip from 'antd/es/tooltip'
+import Breadcrumb from 'antd/es/breadcrumb'
 import {
   CloseOutlined,
   MoreOutlined,
@@ -53,6 +54,7 @@ import {
   deleteAttachment,
   downloadAttachment,
   buildAttachmentPreviewUrl,
+  getAttachmentFileNameValidationError,
   isImageAttachment,
   type ApiAttachment,
 } from '@/services/attachmentService'
@@ -74,12 +76,16 @@ import {
   updateProject as apiUpdateProject,
 } from '@/services/projectService'
 import { FilePreviewRenderer } from '@/components/file-preview'
-import TaskRichInput, { TaskRichText } from '@/components/TaskRichInput'
+import TaskRichInput, {
+  TaskRichText,
+  type TaskRichAttachmentSource,
+} from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import './index.less'
 
 const { Text } = Typography
+const PARENT_TASK_CHAIN_MAX_DEPTH = 5
 
 const SUBTASK_CREATE_FLOATING_SELECTOR = [
   '.ant-popover',
@@ -129,6 +135,7 @@ export default function TaskDetailPanel({
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeId, setSubtaskAssigneeId] = useState<string | undefined>(undefined)
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
+  const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
   const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
   const [activeSubtaskAssigneeGuid, setActiveSubtaskAssigneeGuid] = useState<string | null>(null)
   const [selectedFollowerId, setSelectedFollowerId] = useState<string>()
@@ -140,6 +147,9 @@ export default function TaskDetailPanel({
   const [attachments, setAttachments] = useState<ApiAttachment[]>([])
   const [attachmentUploading, setAttachmentUploading] = useState(false)
   const [commentAttachments, setCommentAttachments] = useState<ApiAttachment[]>([])
+  const [commentAttachmentOrigins, setCommentAttachmentOrigins] = useState<
+    Record<string, TaskRichAttachmentSource>
+  >({})
   const [commentAttachmentUploading, setCommentAttachmentUploading] = useState(false)
   const [commentAttachmentMap, setCommentAttachmentMap] = useState<
     Record<string, ApiAttachment>
@@ -180,6 +190,48 @@ export default function TaskDetailPanel({
     setActiveSubtaskDueGuid(null)
     setActiveSubtaskAssigneeGuid(null)
   }, [task.guid])
+
+  useEffect(() => {
+    if (!task.parent_task_guid) {
+      setParentTaskChain([])
+      return undefined
+    }
+
+    let cancelled = false
+    const loadParentTaskChain = async () => {
+      const ancestors: Task[] = []
+      const visitedTaskGuids = new Set<string>([task.guid])
+      let parentTaskGuid = task.parent_task_guid
+      let depth = 0
+
+      // 父任务链路来自逐级父任务查询，限制深度和去重是为了避免异常数据形成死循环。
+      while (parentTaskGuid && depth < PARENT_TASK_CHAIN_MAX_DEPTH) {
+        if (visitedTaskGuids.has(parentTaskGuid)) {
+          break
+        }
+        visitedTaskGuids.add(parentTaskGuid)
+        const apiTask = await getTask(parentTaskGuid)
+        const parentTask = apiTaskToTask(apiTask)
+        ancestors.unshift(parentTask)
+        parentTaskGuid = parentTask.parent_task_guid
+        depth += 1
+      }
+
+      if (!cancelled) {
+        setParentTaskChain(ancestors)
+      }
+    }
+
+    void loadParentTaskChain().catch(() => {
+      if (!cancelled) {
+        setParentTaskChain([])
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [task.guid, task.parent_task_guid])
 
   useEffect(() => {
     let cancelled = false
@@ -590,6 +642,10 @@ export default function TaskDetailPanel({
     onOpenTask?.(subtask)
   }
 
+  const handleOpenParentTask = (parentTask: Task) => {
+    onOpenTask?.(parentTask)
+  }
+
   const handleSubtaskDueChange = async (subtask: Task, value: dayjs.Dayjs | null) => {
     try {
       const apiTask = await updateTaskApi(subtask.guid, {
@@ -619,6 +675,12 @@ export default function TaskDetailPanel({
   }
 
   const handleAttachmentUpload = async (file: File) => {
+    const fileNameError = getAttachmentFileNameValidationError(file.name)
+    if (fileNameError) {
+      message.error(fileNameError)
+      return null
+    }
+
     setAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file)
@@ -635,6 +697,12 @@ export default function TaskDetailPanel({
   }
 
   const handleCommentAttachmentUpload = async (file: File) => {
+    const fileNameError = getAttachmentFileNameValidationError(file.name)
+    if (fileNameError) {
+      message.error(fileNameError)
+      return null
+    }
+
     setCommentAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file, { ownerType: 'comment' })
@@ -650,6 +718,11 @@ export default function TaskDetailPanel({
 
   const handleRemoveCommentAttachment = (attachmentId: string) => {
     setCommentAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
+    setCommentAttachmentOrigins((prev) => {
+      const next = { ...prev }
+      delete next[attachmentId]
+      return next
+    })
   }
 
   const handleAttachmentDelete = async (attachmentId: string) => {
@@ -834,6 +907,7 @@ export default function TaskDetailPanel({
       setCommentValue('')
       setCommentMentions([])
       setCommentAttachments([])
+      setCommentAttachmentOrigins({})
     } catch (err) {
       message.error(err instanceof Error ? err.message : '发送失败')
     }
@@ -984,6 +1058,24 @@ export default function TaskDetailPanel({
       {/* Scrollable body + comments */}
       <div className="detail-scroll">
         <div className="detail-body">
+          {isSubtask && parentTaskChain.length > 0 && (
+            <Breadcrumb
+              className="detail-parent-chain"
+              items={parentTaskChain.map((parentTask) => ({
+                key: parentTask.guid,
+                title: (
+                  <button
+                    type="button"
+                    className="detail-parent-chain-link"
+                    onClick={() => handleOpenParentTask(parentTask)}
+                  >
+                    {parentTask.summary}
+                  </button>
+                ),
+              }))}
+            />
+          )}
+
           {/* Title */}
           <div className="detail-title">{task.summary}</div>
 
@@ -1763,6 +1855,7 @@ export default function TaskDetailPanel({
           placeholder="输入评论"
           className="comment-input-wrapper"
           attachments={commentAttachments}
+          attachmentOrigins={commentAttachmentOrigins}
           attachmentUploading={commentAttachmentUploading}
           mentionIds={commentMentions}
           submitLabel="发送"
@@ -1777,13 +1870,17 @@ export default function TaskDetailPanel({
             })
           }
           onRequestAttachmentUpload={(file) => handleCommentAttachmentUpload(file)}
-          onAttachmentUploaded={(attachment) => {
+          onAttachmentUploaded={(attachment, source = 'upload') => {
             setCommentAttachments((prev) =>
               prev.some((item) => item.attachment_id === attachment.attachment_id)
                 ? prev
                 : [...prev, attachment],
             )
             setCommentAttachmentMap((prev) => ({ ...prev, [attachment.attachment_id]: attachment }))
+            setCommentAttachmentOrigins((prev) => ({
+              ...prev,
+              [attachment.attachment_id]: source,
+            }))
           }}
           onPreviewAttachment={handleOpenAttachmentPreview}
           onDownloadAttachment={(attachment) => void handleAttachmentDownload(attachment)}

@@ -204,6 +204,27 @@ async function testAttachmentPreviewUsesServiceHelpers() {
   )
 }
 
+async function testAttachmentUploadsRejectWhitespaceFileNames() {
+  const detailSource = await readTaskDetailSource()
+  const serviceSource = await readAttachmentServiceSource()
+
+  assert.match(
+    serviceSource,
+    /export function getAttachmentFileNameValidationError\(fileName: string\): string \| null/,
+    '附件服务应该提供文件名校验 helper',
+  )
+  assert.match(
+    detailSource,
+    /getAttachmentFileNameValidationError\(file\.name\)/,
+    '任务详情上传入口应该先拦截带空格的文件名',
+  )
+  assert.match(
+    serviceSource,
+    /文件名包含空格，请修改名称后再上传/,
+    '上传失败提示应该明确要求修改名称',
+  )
+}
+
 async function testTaskDetailUsesSharedFilePreviewRenderer() {
   const detailSource = await readTaskDetailSource()
   const rendererSource = await readFilePreviewRendererSource()
@@ -231,6 +252,7 @@ async function main() {
   await testTaskAttachmentsExposePreviewAndDownloadActions()
   await testTaskDetailAvatarsUseTaskTablePurple()
   await testAttachmentPreviewUsesServiceHelpers()
+  await testAttachmentUploadsRejectWhitespaceFileNames()
   await testTaskDetailUsesSharedFilePreviewRenderer()
   console.log('comment image preview regressions ok')
 }
