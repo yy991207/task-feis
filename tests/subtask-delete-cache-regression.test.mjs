@@ -9,6 +9,10 @@ async function readTaskListSource() {
   return readFile(new URL('../src/pages/TaskList.tsx', import.meta.url), 'utf8')
 }
 
+async function readDetailPanelSource() {
+  return readFile(new URL('../src/components/TaskDetailPanel/index.tsx', import.meta.url), 'utf8')
+}
+
 async function testSubtaskCacheRemovesDeletedTasks() {
   const source = await readTaskTableSource()
 
@@ -145,6 +149,32 @@ async function testCreatingSubtaskExpandsParentInMainTable() {
   )
 }
 
+async function testTogglingSubtaskStatusSyncsOuterTasks() {
+  const detailSource = await readDetailPanelSource()
+  const taskListSource = await readTaskListSource()
+
+  assert.match(
+    detailSource,
+    /const handleToggleSubtaskStatus = async \(subtask: Task\) => \{/,
+    '任务详情里应该有独立的子任务状态切换处理函数',
+  )
+  assert.match(
+    detailSource,
+    /const next = apiTaskToTask\(apiTask\)/,
+    '子任务状态切换成功后应该先把接口返回结果转成前端 Task',
+  )
+  assert.match(
+    detailSource,
+    /onTaskUpdated\?\.\(next\)/,
+    '子任务状态切换成功后应该把更新后的子任务同步给页面层外部 tasks',
+  )
+  assert.match(
+    taskListSource,
+    /const updateTaskInState = useCallback\(.*const exists = prev\.some\(\(task\) => task\.guid === nextTask\.guid\)/s,
+    '页面层收到子任务更新后，应该复用统一的 updateTaskInState 回写外部 tasks',
+  )
+}
+
 async function main() {
   await testSubtaskCacheRemovesDeletedTasks()
   await testSubtaskCacheAddsCreatedTasks()
@@ -152,6 +182,7 @@ async function main() {
   await testDeletingParentTaskRemovesDescendantsFromOuterTasks()
   await testCreatingSubtaskUpdatesOuterTasks()
   await testCreatingSubtaskExpandsParentInMainTable()
+  await testTogglingSubtaskStatusSyncsOuterTasks()
   console.log('subtask delete cache regressions ok')
 }
 

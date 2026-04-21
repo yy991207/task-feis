@@ -2109,7 +2109,7 @@ export default function TaskTable({
                               loadedSubtaskCount={children.length}
                               onToggleExpand={handleToggleExpand}
                               onToggleStatus={handleToggleStatus}
-                              onClick={() => onTaskClick(task)}
+                              onOpenDetail={() => onTaskClick(task)}
                               onUpdate={handleTaskUpdate}
                               onAssigneePickerOpenChange={setActiveAssigneePickerKey}
                               onStartCreateSubtask={handleStartCreateSubtask}
@@ -2199,7 +2199,7 @@ interface TaskRowProps {
   loadedSubtaskCount?: number
   onToggleExpand?: (task: Task) => void
   onToggleStatus: (e: React.MouseEvent, task: Task) => void
-  onClick: () => void
+  onOpenDetail: () => void
   onUpdate: (task: Task) => void
   onAssigneePickerOpenChange: (key: string | null) => void
   onStartCreateSubtask?: (task: Task) => void
@@ -2343,7 +2343,7 @@ function TaskRow({
   loadedSubtaskCount,
   onToggleExpand,
   onToggleStatus,
-  onClick,
+  onOpenDetail,
   onUpdate,
   onAssigneePickerOpenChange,
 }: TaskRowProps) {
@@ -2485,7 +2485,6 @@ function TaskRow({
   return (
     <div
       className={`task-row ${task.status === 'done' ? 'done' : ''} ${isNew ? 'task-row-new' : ''} ${isSelected ? 'selected' : ''}`}
-      onClick={onClick}
     >
       <div className="task-row-main">
         {depth > 0 && (
@@ -2547,6 +2546,17 @@ function TaskRow({
                 {loadedSubtaskCount ?? 0} / {task.subtask_count}
               </Tag>
             )}
+            <Button
+              type="text"
+              size="small"
+              className="task-detail-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenDetail()
+              }}
+            >
+              详情
+            </Button>
           </div>
         )}
       </div>

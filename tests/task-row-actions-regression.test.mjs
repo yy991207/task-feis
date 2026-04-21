@@ -23,8 +23,32 @@ async function testTaskRowDoesNotRenderPlusOrMoreActions() {
   )
 }
 
+async function testTaskRowUsesExplicitDetailButtonInsteadOfBlankAreaClick() {
+  const source = await readTaskTableSource()
+  const taskRowStart = source.indexOf('function TaskRow(')
+  const taskRowEnd = source.indexOf('function formatCustomFieldValue(')
+  const taskRowSource = source.slice(taskRowStart, taskRowEnd)
+
+  assert.doesNotMatch(
+    taskRowSource,
+    /className=\{`task-row[\s\S]*onClick=\{onClick\}/,
+    '任务行根节点不应该再绑定整行点击打开详情，避免点到空白区域误触',
+  )
+  assert.match(
+    taskRowSource,
+    /className="task-detail-btn"[\s\S]*>\s*详情\s*<\/Button>/,
+    '任务标题区域应该有显式的“详情”按钮',
+  )
+  assert.match(
+    taskRowSource,
+    /onClick=\{\(e\) => \{[\s\S]*e\.stopPropagation\(\)[\s\S]*onOpenDetail\(\)/,
+    '点击详情按钮时应该只打开详情面板，不应该继续冒泡到整行',
+  )
+}
+
 async function main() {
   await testTaskRowDoesNotRenderPlusOrMoreActions()
+  await testTaskRowUsesExplicitDetailButtonInsteadOfBlankAreaClick()
   console.log('task row actions regressions ok')
 }
 

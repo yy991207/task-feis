@@ -431,6 +431,7 @@ export default function TaskDetailPanel({
       const apiTask = await patchTaskStatus(subtask.guid, nextDone ? 'done' : 'todo')
       const next = apiTaskToTask(apiTask)
       setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
+      onTaskUpdated?.(next)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '状态更新失败')
     }
