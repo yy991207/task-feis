@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ClipboardEvent, FocusEvent, KeyboardEvent } from 'react'
+import type { ClipboardEvent, FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import Button from 'antd/es/button'
 import Input from 'antd/es/input'
 import Popover from 'antd/es/popover'
@@ -30,7 +30,6 @@ import {
 import type { ApiAttachment } from '@/services/attachmentService'
 import {
   buildAttachmentPreviewUrl,
-  getAttachmentFileNameValidationError,
   isImageAttachment,
 } from '@/services/attachmentService'
 import type { User } from '@/types/task'
@@ -39,15 +38,80 @@ import './index.less'
 const { Text } = Typography
 
 const MentionOutlined = UsergroupAddOutlined
+const TASK_RICH_INPUT_EMOJIS = [
+  String.fromCodePoint(0x1f600),
+  String.fromCodePoint(0x1f604),
+  String.fromCodePoint(0x1f60a),
+  String.fromCodePoint(0x1f609),
+  String.fromCodePoint(0x1f60d),
+  String.fromCodePoint(0x1f618),
+  String.fromCodePoint(0x1f61c),
+  String.fromCodePoint(0x1f61d),
+  String.fromCodePoint(0x1f602),
+  String.fromCodePoint(0x1f923),
+  String.fromCodePoint(0x1f605),
+  String.fromCodePoint(0x1f606),
+  String.fromCodePoint(0x1f60f),
+  String.fromCodePoint(0x1f914),
+  String.fromCodePoint(0x1f970),
+  String.fromCodePoint(0x1f60e),
+  String.fromCodePoint(0x1f973),
+  String.fromCodePoint(0x1f929),
+  String.fromCodePoint(0x1f642),
+  String.fromCodePoint(0x1f643),
+  String.fromCodePoint(0x1f60c),
+  String.fromCodePoint(0x1f634),
+  String.fromCodePoint(0x1f62e),
+  String.fromCodePoint(0x1f62d),
+  String.fromCodePoint(0x1f622),
+  String.fromCodePoint(0x1f621),
+  String.fromCodePoint(0x1f92f),
+  String.fromCodePoint(0x1f631),
+  String.fromCodePoint(0x1f44d),
+  String.fromCodePoint(0x1f44e),
+  String.fromCodePoint(0x1f44c),
+  String.fromCodePoint(0x1f64c),
+  String.fromCodePoint(0x1f64f),
+  String.fromCodePoint(0x1f91d),
+  String.fromCodePoint(0x270c),
+  String.fromCodePoint(0x1f44b),
+  String.fromCodePoint(0x1f44f),
+  String.fromCodePoint(0x1f525),
+  String.fromCodePoint(0x1f4af),
+  String.fromCodePoint(0x1f680),
+  String.fromCodePoint(0x1f389),
+  String.fromCodePoint(0x1f38a),
+  String.fromCodePoint(0x1f381),
+  String.fromCodePoint(0x1f38f),
+  String.fromCodePoint(0x1f31f),
+  String.fromCodePoint(0x2b50),
+  String.fromCodePoint(0x2728),
+  String.fromCodePoint(0x1f4a1),
+  String.fromCodePoint(0x1f4aa),
+  String.fromCodePoint(0x2705),
+  String.fromCodePoint(0x274c),
+  String.fromCodePoint(0x26a1),
+  String.fromCodePoint(0x26a0),
+  String.fromCodePoint(0x1f6a8),
+  String.fromCodePoint(0x1f4cc),
+  String.fromCodePoint(0x1f4ce),
+  String.fromCodePoint(0x1f4c5),
+  String.fromCodePoint(0x1f4dd),
+  String.fromCodePoint(0x1f4e2),
+  String.fromCodePoint(0x1f440),
+  String.fromCodePoint(0x1f4ac),
+  String.fromCodePoint(0x1f4a5),
+  String.fromCodePoint(0x1f44a),
+  String.fromCodePoint(0x1f9e0),
+  String.fromCodePoint(0x1f91f),
+  String.fromCodePoint(0x2763),
+  String.fromCodePoint(0x2764),
+  String.fromCodePoint(0x1f497),
+  String.fromCodePoint(0x1f49c),
+]
 
 export type TaskRichInputMode = 'description' | 'comment' | 'comment-edit'
 export type TaskRichAttachmentSource = 'upload' | 'paste'
-
-const TASK_RICH_INPUT_TOOLTIP_TITLE: Record<TaskRichInputMode, string> = {
-  description: '任务描述输入框：用于编辑任务背景和说明，失焦后自动保存，支持 @ 选人、链接和图片粘贴。',
-  comment: '评论输入框：用于补充任务评论，支持 @ 选人、链接、图片粘贴和附件，按 Enter 发送。',
-  'comment-edit': '评论编辑输入框：用于修改已有评论，支持 @ 选人、链接和图片粘贴，按 Enter 保存。',
-}
 
 export interface TaskRichInputProps {
   mode: TaskRichInputMode
@@ -56,6 +120,7 @@ export interface TaskRichInputProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  focusVersion?: number
   disabled?: boolean
   attachments?: ApiAttachment[]
   attachmentOrigins?: Record<string, TaskRichAttachmentSource>
@@ -239,6 +304,11 @@ export interface TaskRichTextProps {
   className?: string
 }
 
+interface ToolbarTooltipTitleProps {
+  title: string
+  hint?: string
+}
+
 export function TaskRichText({ html, className }: TaskRichTextProps) {
   const normalizedHtml = normalizeRichContent(html)
   if (!normalizedHtml) {
@@ -253,6 +323,15 @@ export function TaskRichText({ html, className }: TaskRichTextProps) {
   )
 }
 
+function ToolbarTooltipTitle({ title, hint }: ToolbarTooltipTitleProps) {
+  return (
+    <span className="task-rich-input-tooltip-title">
+      <span>{title}</span>
+      {hint && <span className="task-rich-input-tooltip-hint">{hint}</span>}
+    </span>
+  )
+}
+
 export default function TaskRichInput({
   mode,
   value,
@@ -260,6 +339,7 @@ export default function TaskRichInput({
   placeholder = '输入内容',
   className,
   autoFocus,
+  focusVersion,
   disabled,
   attachments = [],
   attachmentOrigins = {},
@@ -281,6 +361,7 @@ export default function TaskRichInput({
   const [currentMentionIds, setCurrentMentionIds] = useState<string[]>(mentionIds ?? [])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionSearch, setMentionSearch] = useState('')
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkLabel, setLinkLabel] = useState('')
   const [linkHref, setLinkHref] = useState('')
@@ -294,6 +375,11 @@ export default function TaskRichInput({
       editorRef.current?.focus()
     }
   }, [autoFocus])
+
+  useEffect(() => {
+    if (focusVersion === undefined) return
+    editorRef.current?.focus()
+  }, [focusVersion])
 
   useEffect(() => {
     const nextHtml = normalizeRichContent(value)
@@ -386,6 +472,11 @@ export default function TaskRichInput({
     setMentionSearch('')
   }
 
+  const handleSelectEmoji = (emoji: string) => {
+    insertHtml(escapeHtml(emoji))
+    setEmojiOpen(false)
+  }
+
   const handleLinkConfirm = () => {
     const href = sanitizeUrl(linkHref)
     if (!href) {
@@ -404,12 +495,6 @@ export default function TaskRichInput({
 
   const handleUploadAttachment = async (file: File) => {
     if (!onRequestAttachmentUpload) return false
-
-    const fileNameError = getAttachmentFileNameValidationError(file.name)
-    if (fileNameError) {
-      message.error(fileNameError)
-      return false
-    }
 
     const created = await onRequestAttachmentUpload(file)
     if (created) {
@@ -436,11 +521,6 @@ export default function TaskRichInput({
       for (const item of imageItems) {
         const file = item.getAsFile()
         if (!file) continue
-        const fileNameError = getAttachmentFileNameValidationError(file.name)
-        if (fileNameError) {
-          message.error(fileNameError)
-          continue
-        }
         const created = await onRequestAttachmentUpload(file)
         if (created) {
           onAttachmentUploaded?.(created, 'paste')
@@ -464,18 +544,9 @@ export default function TaskRichInput({
       return
     }
 
-    if (
-      event.key === 'Enter' &&
-      !event.shiftKey &&
-      (mode === 'comment' || mode === 'comment-edit')
-    ) {
-      event.preventDefault()
-      void onSubmit?.(editorHtmlRef.current, currentMentionIds)
-      return
-    }
-
     if (event.key === 'Escape') {
       setMentionOpen(false)
+      setEmojiOpen(false)
       setLinkOpen(false)
     }
   }
@@ -492,6 +563,37 @@ export default function TaskRichInput({
     }
     void onBlurCommit?.(editorHtmlRef.current, currentMentionIds)
   }
+
+  const getOverlayPopupContainer = () => document.body
+
+  useEffect(() => {
+    if (mode !== 'description' || disabled) {
+      return undefined
+    }
+
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      const wrapper = wrapperRef.current
+      if (target instanceof Element && target.closest('.task-rich-input-overlay')) {
+        return
+      }
+      if (!wrapper || wrapper.contains(target)) {
+        return
+      }
+
+      // 描述区是自动保存模式，点到组件外时主动失焦，避免浏览器没有触发 blur。
+      editorRef.current?.blur()
+    }
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown)
+    }
+  }, [mode, disabled])
 
   const renderAttachmentItem = (attachment: ApiAttachment) => {
     const attachmentSource = attachmentOrigins[attachment.attachment_id] ?? 'upload'
@@ -517,15 +619,17 @@ export default function TaskRichInput({
             />
           </button>
           {onRemoveAttachment && (
-            <Button
-              type="text"
-              size="small"
-              danger
-              className="attachment-delete comment-image-delete"
-              onClick={() => onRemoveAttachment(attachment.attachment_id)}
-            >
-              删除
-            </Button>
+            <Tooltip title="移除评论图片" placement="top">
+              <Button
+                type="text"
+                size="small"
+                danger
+                className="attachment-delete comment-image-delete"
+                onClick={() => onRemoveAttachment(attachment.attachment_id)}
+              >
+                删除
+              </Button>
+            </Tooltip>
           )}
         </div>
       )
@@ -579,82 +683,181 @@ export default function TaskRichInput({
     )
   }
 
+  const handleToolbarMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target
+    // Popover 通过 portal 挂到当前输入组件里，事件仍会冒泡到工具栏；这里放过浮层内部输入框，避免链接弹层无法聚焦编辑。
+    if (target instanceof Element && target.closest('.task-rich-input-overlay')) {
+      return
+    }
+    event.preventDefault()
+  }
+
+  const handleEditorClick = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target
+    if (!(target instanceof Element)) {
+      return
+    }
+
+    const anchor = target.closest('a[href]')
+    if (!anchor || !(anchor instanceof HTMLAnchorElement)) {
+      return
+    }
+
+    event.preventDefault()
+    window.open(anchor.href, '_blank', 'noopener,noreferrer')
+  }
+
+  const renderToolbarTooltip = (title: string, child: ReactNode, hint?: string) => (
+    <Tooltip
+      title={<ToolbarTooltipTitle title={title} hint={hint} />}
+      placement="top"
+      mouseEnterDelay={0.2}
+      getPopupContainer={getOverlayPopupContainer}
+    >
+      {child}
+    </Tooltip>
+  )
+
   const renderToolbar = () => (
-    <div className="task-rich-input-toolbar" onMouseDown={(event) => event.preventDefault()}>
+    <div className="task-rich-input-toolbar" onMouseDown={handleToolbarMouseDown}>
       <div className="task-rich-input-toolbar-left">
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<BoldOutlined />}
-          title="加粗"
-          onClick={() => applyCommand('bold')}
-        />
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<StrikethroughOutlined />}
-          title="删除线"
-          onClick={() => applyCommand('strikeThrough')}
-        />
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<ItalicOutlined />}
-          title="斜体"
-          onClick={() => applyCommand('italic')}
-        />
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<UnderlineOutlined />}
-          title="下划线"
-          onClick={() => applyCommand('underline')}
-        />
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<OrderedListOutlined />}
-          title="有序列表"
-          onClick={() => applyCommand('insertOrderedList')}
-        />
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<UnorderedListOutlined />}
-          title="无序列表"
-          onClick={() => applyCommand('insertUnorderedList')}
-        />
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<ContainerOutlined />}
-          title="引用"
-          onClick={() => applyCommand('formatBlock', 'blockquote')}
-        />
+        {renderToolbarTooltip(
+          '正文样式：加粗',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<BoldOutlined />}
+            aria-label="加粗"
+            onClick={() => applyCommand('bold')}
+          />,
+          '让选中的文字加粗',
+        )}
+        {renderToolbarTooltip(
+          '正文样式：删除线',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<StrikethroughOutlined />}
+            aria-label="删除线"
+            onClick={() => applyCommand('strikeThrough')}
+          />,
+          '给选中的文字添加删除线',
+        )}
+        {renderToolbarTooltip(
+          '正文样式：斜体',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<ItalicOutlined />}
+            aria-label="斜体"
+            onClick={() => applyCommand('italic')}
+          />,
+          '让选中的文字倾斜',
+        )}
+        {renderToolbarTooltip(
+          '正文样式：下划线',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<UnderlineOutlined />}
+            aria-label="下划线"
+            onClick={() => applyCommand('underline')}
+          />,
+          '给选中的文字添加下划线',
+        )}
+        {renderToolbarTooltip(
+          '正文样式：有序列表',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<OrderedListOutlined />}
+            aria-label="有序列表"
+            onClick={() => applyCommand('insertOrderedList')}
+          />,
+          '把当前段落变成编号列表',
+        )}
+        {renderToolbarTooltip(
+          '正文样式：无序列表',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<UnorderedListOutlined />}
+            aria-label="无序列表"
+            onClick={() => applyCommand('insertUnorderedList')}
+          />,
+          '把当前段落变成项目符号列表',
+        )}
+        {renderToolbarTooltip(
+          '正文样式：引用',
+          <Button
+            type="text"
+            size="small"
+            className="task-rich-input-tool-btn"
+            icon={<ContainerOutlined />}
+            aria-label="引用"
+            onClick={() => applyCommand('formatBlock', 'blockquote')}
+          />,
+          '把当前段落设置为引用块',
+        )}
       </div>
       <div className="task-rich-input-toolbar-right">
-        <Button
-          type="text"
-          size="small"
-          className="task-rich-input-tool-btn"
-          icon={<SmileOutlined />}
-          title="表情"
-          onClick={() => message.info('表情功能开发中')}
-        />
+        <Popover
+          open={emojiOpen}
+          onOpenChange={setEmojiOpen}
+          trigger="click"
+          placement="topLeft"
+          overlayClassName="task-rich-input-overlay task-rich-input-emoji-overlay"
+          getPopupContainer={getOverlayPopupContainer}
+          content={
+            <div className="task-rich-input-emoji-panel">
+              <Text strong>常用表情</Text>
+              <div className="task-rich-input-emoji-grid">
+                {TASK_RICH_INPUT_EMOJIS.map((emoji) => (
+                  <Button
+                    key={emoji}
+                    type="text"
+                    size="small"
+                    className="task-rich-input-emoji-btn"
+                    aria-label="插入表情"
+                    onClick={() => handleSelectEmoji(emoji)}
+                  >
+                    {emoji}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          }
+        >
+          {renderToolbarTooltip(
+            '表情：插入表情符号',
+            <Button
+              type="text"
+              size="small"
+              className="task-rich-input-tool-btn"
+              icon={<SmileOutlined />}
+              aria-label="表情"
+              onMouseDown={(event) => {
+                event.preventDefault()
+                saveSelection()
+              }}
+              onClick={() => setEmojiOpen(true)}
+            />,
+            '用于给评论补充表情',
+          )}
+        </Popover>
         <Popover
           open={mentionOpen}
           onOpenChange={setMentionOpen}
           trigger="click"
           placement="topLeft"
           overlayClassName="task-rich-input-overlay task-rich-input-mention-overlay"
-          getPopupContainer={() => wrapperRef.current ?? document.body}
+          getPopupContainer={getOverlayPopupContainer}
           content={
             <div className="task-rich-input-mention-panel">
               <Text strong>选择人员</Text>
@@ -671,27 +874,31 @@ export default function TaskRichInput({
                   value: user.id,
                   label: user.name,
                 }))}
-                getPopupContainer={() => wrapperRef.current ?? document.body}
+                getPopupContainer={getOverlayPopupContainer}
                 style={{ width: '100%' }}
               />
             </div>
           }
         >
-          <Button
-            type="text"
-            size="small"
-            className="task-rich-input-tool-btn"
-            icon={<MentionOutlined />}
-            title="@ 选人"
-            onMouseDown={(event) => {
-              event.preventDefault()
-              saveSelection()
-            }}
-            onClick={() => {
-              setMentionOpen(true)
-              setMentionSearch('')
-            }}
-          />
+          {renderToolbarTooltip(
+            '@ 提及：选择任务成员',
+            <Button
+              type="text"
+              size="small"
+              className="task-rich-input-tool-btn"
+              icon={<MentionOutlined />}
+              aria-label="@ 提及"
+              onMouseDown={(event) => {
+                event.preventDefault()
+                saveSelection()
+              }}
+              onClick={() => {
+                setMentionOpen(true)
+                setMentionSearch('')
+              }}
+            />,
+            '在正文中插入 @ 人员',
+          )}
         </Popover>
         <Popover
           open={linkOpen}
@@ -699,7 +906,7 @@ export default function TaskRichInput({
           trigger="click"
           placement="topLeft"
           overlayClassName="task-rich-input-overlay task-rich-input-link-overlay"
-          getPopupContainer={() => wrapperRef.current ?? document.body}
+          getPopupContainer={getOverlayPopupContainer}
           content={
             <div className="task-rich-input-link-popover">
               <Text strong>插入链接</Text>
@@ -727,44 +934,30 @@ export default function TaskRichInput({
             </div>
           }
         >
-          <Button
-            type="text"
-            size="small"
-            className="task-rich-input-tool-btn"
-            icon={<LinkOutlined />}
-            title="插入链接"
-            onMouseDown={(event) => {
-              event.preventDefault()
-              saveSelection()
-              setLinkLabel(selectionRef.current?.toString().trim() ?? '')
-            }}
-            onClick={() => setLinkOpen(true)}
-          />
+          {renderToolbarTooltip(
+            '插入链接：添加网页地址',
+            <Button
+              type="text"
+              size="small"
+              className="task-rich-input-tool-btn"
+              icon={<LinkOutlined />}
+              aria-label="插入链接"
+              onMouseDown={(event) => {
+                event.preventDefault()
+                saveSelection()
+                setLinkLabel(selectionRef.current?.toString().trim() ?? '')
+              }}
+              onClick={() => setLinkOpen(true)}
+            />,
+            '可以给选中的文字绑定链接',
+          )}
         </Popover>
-        <Upload
-          multiple
-          showUploadList={false}
-          accept="image/*"
-          disabled={disabled || !onRequestAttachmentUpload}
-          beforeUpload={(file) => {
-            void handleUploadAttachment(file as File)
-            return false
-          }}
-        >
-          <Button
-            type="text"
-            size="small"
-            className="task-rich-input-tool-btn"
-            icon={<PictureOutlined />}
-            title="插入图片"
-            disabled={disabled || !onRequestAttachmentUpload}
-            loading={attachmentUploading}
-          />
-        </Upload>
-        {mode !== 'description' && (
+        {renderToolbarTooltip(
+          '添加图片：上传或粘贴图片',
           <Upload
             multiple
             showUploadList={false}
+            accept="image/*"
             disabled={disabled || !onRequestAttachmentUpload}
             beforeUpload={(file) => {
               void handleUploadAttachment(file as File)
@@ -775,27 +968,58 @@ export default function TaskRichInput({
               type="text"
               size="small"
               className="task-rich-input-tool-btn"
-              icon={<PaperClipOutlined />}
-              title="添加附件"
+              icon={<PictureOutlined />}
+              aria-label="添加图片"
               disabled={disabled || !onRequestAttachmentUpload}
               loading={attachmentUploading}
             />
-          </Upload>
+          </Upload>,
+          '图片会按当前输入场景插入或作为评论附件',
+        )}
+        {mode !== 'description' && (
+          renderToolbarTooltip(
+            '添加评论附件：上传文件',
+            <Upload
+              multiple
+              showUploadList={false}
+              disabled={disabled || !onRequestAttachmentUpload}
+              beforeUpload={(file) => {
+                void handleUploadAttachment(file as File)
+                return false
+              }}
+            >
+              <Button
+                type="text"
+                size="small"
+                className="task-rich-input-tool-btn"
+                icon={<PaperClipOutlined />}
+                aria-label="添加评论附件"
+                disabled={disabled || !onRequestAttachmentUpload}
+                loading={attachmentUploading}
+              />
+            </Upload>,
+            '把文件附加到当前评论',
+          )
         )}
       </div>
       {(mode === 'comment' || mode === 'comment-edit') && (
         <>
           <span className="task-rich-input-toolbar-divider" />
-          <Button
-            type="text"
-            size="small"
-            className="task-rich-input-submit-btn"
-            icon={<SendOutlined />}
-            disabled={disabled || isRichContentEmpty(editorHtmlRef.current, attachments.length)}
-            onClick={() => void onSubmit?.(editorHtmlRef.current, currentMentionIds)}
-          >
-            {submitLabel}
-          </Button>
+          {renderToolbarTooltip(
+            '发送评论：提交当前内容',
+            <Button
+              type="text"
+              size="small"
+              className="task-rich-input-submit-btn"
+              icon={<SendOutlined />}
+              aria-label="发送评论"
+              disabled={disabled || isRichContentEmpty(editorHtmlRef.current, attachments.length)}
+              onClick={() => void onSubmit?.(editorHtmlRef.current, currentMentionIds)}
+            >
+              {submitLabel}
+            </Button>,
+            '点击按钮发送，Enter 用于换行',
+          )}
         </>
       )}
     </div>
@@ -807,30 +1031,24 @@ export default function TaskRichInput({
       className={className ? `task-rich-input ${className}` : 'task-rich-input'}
       onBlurCapture={handleRootBlur}
     >
-      <Tooltip
-        title={TASK_RICH_INPUT_TOOLTIP_TITLE[mode]}
-        placement="topLeft"
-        mouseEnterDelay={0.4}
-        getPopupContainer={() => wrapperRef.current ?? document.body}
-      >
-        <div className="task-rich-input-shell">
-          <div
-            ref={editorRef}
-            className="task-rich-input-editor"
-            contentEditable={!disabled}
-            suppressContentEditableWarning
-            data-placeholder={placeholder}
-            role="textbox"
-            aria-multiline="true"
-            onFocus={saveSelection}
-            onMouseUp={saveSelection}
-            onKeyUp={saveSelection}
-            onInput={syncFromEditor}
-            onPaste={handlePaste}
-            onKeyDown={handleEditorKeyDown}
-          />
-        </div>
-      </Tooltip>
+      <div className="task-rich-input-shell">
+        <div
+          ref={editorRef}
+          className="task-rich-input-editor"
+          contentEditable={!disabled}
+          suppressContentEditableWarning
+          data-placeholder={placeholder}
+          role="textbox"
+          aria-multiline="true"
+          onFocus={saveSelection}
+          onMouseUp={saveSelection}
+          onKeyUp={saveSelection}
+          onInput={syncFromEditor}
+          onClick={handleEditorClick}
+          onPaste={handlePaste}
+          onKeyDown={handleEditorKeyDown}
+        />
+      </div>
       {renderToolbar()}
       {attachments.length > 0 && (
         <div className="detail-attachment-list task-rich-input-attachment-list">

@@ -13,6 +13,10 @@ async function readRichInputStyleSource() {
   return readFile(new URL('../src/components/TaskRichInput/index.less', import.meta.url), 'utf8')
 }
 
+async function readTaskDetailStyleSource() {
+  return readFile(new URL('../src/components/TaskDetailPanel/index.less', import.meta.url), 'utf8')
+}
+
 async function testTaskDetailUsesSharedRichInput() {
   const source = await readTaskDetailSource()
 
@@ -35,6 +39,47 @@ async function testTaskDetailUsesSharedRichInput() {
     source,
     /<TaskRichInput[\s\S]*mode="comment-edit"/,
     '评论编辑态也应该复用统一输入框组件，避免三套输入逻辑继续分叉',
+  )
+}
+
+async function testTaskDescriptionUsesReadOnlyViewUntilEditing() {
+  const source = await readTaskDetailSource()
+  const styleSource = await readTaskDetailStyleSource()
+
+  assert.match(
+    source,
+    /const \[descriptionEditing, setDescriptionEditing\] = useState\(false\)/,
+    '任务描述应该有独立的展示态开关，保存后回到只读展示',
+  )
+  assert.match(
+    source,
+    /<TaskRichText html=\{descriptionDraft\} className="detail-description-text" \/>/,
+    '任务描述默认应该用只读富文本渲染，链接才能直接点击跳转',
+  )
+  assert.match(
+    source,
+    /setDescriptionEditing\(true\)/,
+    '任务描述点击后应该切到编辑态，而不是一直保持输入框边框',
+  )
+  assert.match(
+    source,
+    /setDescriptionEditing\(false\)/,
+    '任务描述保存后应该回到只读展示态，避免编辑边框残留',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-description-view \{/,
+    '任务描述只读态应该有独立容器样式，避免显示成输入框',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-description-editor \{/,
+    '任务描述编辑态应该保留单独样式，只在编辑时显示输入边框',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-description-view \{[\s\S]*display: flow-root;[\s\S]*padding: 2px 0 16px;[\s\S]*min-height: 24px;/,
+    '任务描述只读态应该给内容块留出底部间距，避免压到下面的字段',
   )
 }
 
@@ -81,10 +126,10 @@ async function testRichInputSupportsMentionLinkAndPasteImage() {
     /onRequestAttachmentUpload/,
     '统一输入框应该把图片上传能力透出给上层复用现有附件接口',
   )
-  assert.match(
+  assert.doesNotMatch(
     source,
     /getAttachmentFileNameValidationError\(file\.name\)/,
-    '统一输入框应该先拦截带空格的附件文件名，避免继续走上传和 preview',
+    '统一输入框上传附件时不应该再拦截文件名空格，避免和当前上传需求冲突',
   )
   assert.match(
     source,
@@ -96,40 +141,231 @@ async function testRichInputSupportsMentionLinkAndPasteImage() {
     /onSubmit/,
     '统一输入框应该支持提交动作，给评论发送和描述保存共用',
   )
+  assert.match(
+    source,
+    /focusVersion\?: number/,
+    '统一输入框应该支持外部通过 focusVersion 主动触发聚焦，方便评论回复按钮把光标拉回输入框',
+  )
 }
 
-async function testRichInputProvidesModeAwareHoverTooltip() {
+async function testRichInputDoesNotSendOnEnter() {
+  const source = await readRichInputSource()
+  const keydownStart = source.indexOf('const handleEditorKeyDown')
+  const keydownEnd = source.indexOf('const handleRootBlur', keydownStart)
+  const keydownSource = source.slice(keydownStart, keydownEnd)
+
+  assert.ok(
+    keydownStart !== -1 && keydownEnd !== -1,
+    '统一输入框应该保留键盘处理入口，方便处理 @ 和 Escape 等快捷操作',
+  )
+  assert.doesNotMatch(
+    keydownSource,
+    /event\.key === 'Enter'/,
+    '评论输入框不应该再拦截 Enter 发送，Enter 应该留给富文本编辑区正常换行',
+  )
+  assert.doesNotMatch(
+    keydownSource,
+    /onSubmit\?\./,
+    '键盘事件里不应该再调用 onSubmit，避免回车换行和发送冲突',
+  )
+  assert.doesNotMatch(
+    source,
+    /也可以按 Enter 发送/,
+    '发送按钮浮窗不能再提示按 Enter 发送',
+  )
+  assert.match(
+    source,
+    /onClick=\{\(\) => void onSubmit\?\.\(editorHtmlRef\.current, currentMentionIds\)\}/,
+    '评论仍然应该保留点击发送按钮提交',
+  )
+}
+
+async function testDescriptionEditorBlursOnOutsideClick() {
+  const source = await readRichInputSource()
+
+  assert.match(
+    source,
+    /document\.addEventListener\('pointerdown', handleDocumentPointerDown\)/,
+    '描述输入框应该监听外部点击，避免浏览器没有自动触发 blur',
+  )
+  assert.match(
+    source,
+    /editorRef\.current\?\.blur\(\)/,
+    '描述输入框点击组件外时应该主动让编辑器失焦',
+  )
+  assert.match(
+    source,
+    /mode !== 'description' \|\| disabled/,
+    '只有描述模式才需要这条自动保存失焦逻辑',
+  )
+}
+
+async function testRichInputProvidesToolbarTooltips() {
   const source = await readRichInputSource()
 
   assert.match(
     source,
     /import Tooltip from 'antd\/es\/tooltip'/,
-    '任务详情输入框的鼠标浮窗提示应该使用 antd Tooltip',
+    '任务详情输入框底部工具组件的鼠标浮窗提示应该使用 antd Tooltip',
+  )
+  const inputShellIndex = source.indexOf('<div className="task-rich-input-shell">')
+  const previousTooltipOpenIndex = source.lastIndexOf('<Tooltip', inputShellIndex)
+  const previousTooltipCloseIndex = source.lastIndexOf('</Tooltip>', inputShellIndex)
+  assert.ok(
+    inputShellIndex !== -1 && previousTooltipOpenIndex <= previousTooltipCloseIndex,
+    '不能再把 Tooltip 包在整个输入框上，避免鼠标滑过编辑区就弹提示',
+  )
+  ;[
+    '正文样式：加粗',
+    '正文样式：删除线',
+    '正文样式：斜体',
+    '正文样式：下划线',
+    '正文样式：有序列表',
+    '正文样式：无序列表',
+    '正文样式：引用',
+    '表情：插入表情符号',
+    '@ 提及：选择任务成员',
+    '插入链接：添加网页地址',
+    '添加图片：上传或粘贴图片',
+    '添加评论附件：上传文件',
+    '发送评论：提交当前内容',
+  ].forEach((title) => {
+    assert.match(
+      source,
+      new RegExp(`renderToolbarTooltip\\(\\s*'${title}`),
+      `底部工具组件应该有“${title}”鼠标浮窗提示`,
+    )
+  })
+  assert.match(
+    source,
+    /renderToolbarTooltip\(\s*'正文样式：加粗'/,
+    '格式按钮提示应该参考飞书样式，展示“组件作用：具体功能”的文字',
   )
   assert.match(
     source,
-    /TASK_RICH_INPUT_TOOLTIP_TITLE/,
-    '统一输入框应该按 description、comment、comment-edit 区分提示内容',
+    /placement="top"/,
+    '底部工具组件提示应该从按钮上方弹出，贴近参考图效果',
+  )
+}
+
+async function testLinkPopoverInputsCanReceiveMouseDown() {
+  const source = await readRichInputSource()
+  const handlerStart = source.indexOf('const handleToolbarMouseDown')
+  const handlerEnd = source.indexOf('const renderToolbar =', handlerStart)
+  const handlerSource = source.slice(handlerStart, handlerEnd)
+
+  assert.ok(
+    handlerStart !== -1 && handlerEnd !== -1,
+    '统一输入框工具栏应该用独立 mouseDown 处理函数，避免把弹层输入框事件也拦截掉',
+  )
+  assert.match(
+    handlerSource,
+    /closest\('\.task-rich-input-overlay'\)/,
+    '链接弹层通过 React portal 渲染，mousedown 仍会冒泡到工具栏，工具栏需要识别并放过弹层内部事件',
+  )
+  assert.match(
+    handlerSource,
+    /closest\('\.task-rich-input-overlay'\)[\s\S]*return[\s\S]*event\.preventDefault\(\)/,
+    '工具栏只能拦截自身按钮的默认聚焦行为，不能阻止链接弹层输入框获取焦点',
   )
   assert.match(
     source,
-    /任务描述输入框/,
-    '描述输入框浮窗应该说明这是用于编辑任务描述的组件',
+    /<div className="task-rich-input-toolbar" onMouseDown=\{handleToolbarMouseDown\}>/,
+    '工具栏应该挂载安全的 mouseDown 处理函数，而不是继续内联无条件 preventDefault',
+  )
+}
+
+async function testRichInputLinksCanOpenAndOverlayRendersAboveEditor() {
+  const source = await readRichInputSource()
+  const pointerDownStart = source.indexOf('const handleDocumentPointerDown')
+  const pointerDownEnd = source.indexOf('document.addEventListener', pointerDownStart)
+  const pointerDownSource = source.slice(pointerDownStart, pointerDownEnd)
+
+  assert.match(
+    source,
+    /const getOverlayPopupContainer = \(\) => document\.body/,
+    '链接和提及弹层应该优先挂到 document.body，避免在详情页底部输入区里被局部容器遮挡',
   )
   assert.match(
     source,
-    /评论输入框/,
-    '评论输入框浮窗应该说明这是用于补充任务评论的组件',
+    /getPopupContainer=\{getOverlayPopupContainer\}/,
+    '工具栏里的 Popover 和搜索下拉层应该统一复用 body 容器，保证浮层层级稳定',
+  )
+  assert.match(
+    pointerDownSource,
+    /closest\('\.task-rich-input-overlay'\)/,
+    '描述输入框点击浮层内部时不应该误触发外部失焦保存，否则改到 body 后会一边编辑一边关闭弹层',
   )
   assert.match(
     source,
-    /评论编辑输入框/,
-    '评论编辑态浮窗应该说明这是用于修改已有评论的组件',
+    /const handleEditorClick = \(event: MouseEvent<HTMLDivElement>\) => \{/,
+    '统一输入框应该显式接管编辑区里的链接点击行为',
   )
   assert.match(
     source,
-    /<Tooltip[\s\S]*title=\{TASK_RICH_INPUT_TOOLTIP_TITLE\[mode\]\}[\s\S]*placement="topLeft"/,
-    '鼠标移到输入区域时应该展示当前组件用途提示',
+    /target\.closest\('a\[href\]'\)/,
+    '点击编辑区里的链接时应该识别锚点元素，而不是当普通文本处理',
+  )
+  assert.match(
+    source,
+    /window\.open\(anchor\.href, '_blank', 'noopener,noreferrer'\)/,
+    '点击编辑区里的链接后应该新开页面跳转',
+  )
+  assert.match(
+    source,
+    /onClick=\{handleEditorClick\}/,
+    '富文本编辑区应该挂上链接点击处理，避免插入链接后只能看不能点',
+  )
+}
+
+async function testRichInputSupportsEmojiInsertion() {
+  const source = await readRichInputSource()
+  const styleSource = await readRichInputStyleSource()
+  const emojiCount = source.match(/String\.fromCodePoint/g)?.length ?? 0
+
+  assert.match(
+    source,
+    /const TASK_RICH_INPUT_EMOJIS = \[/,
+    '统一输入框应该内置一组常用表情，不依赖还不存在的 antd 表情选择器',
+  )
+  assert.ok(
+    emojiCount >= 56,
+    '表情面板不能只提供十几个表情，至少应该覆盖 56 个常用表情',
+  )
+  assert.match(
+    source,
+    /const \[emojiOpen, setEmojiOpen\] = useState\(false\)/,
+    '表情按钮应该打开一个可控的 antd Popover，而不是只弹开发中提示',
+  )
+  assert.match(
+    source,
+    /const handleSelectEmoji = \(emoji: string\) => \{[\s\S]*insertHtml\(escapeHtml\(emoji\)\)/,
+    '选择表情后应该把表情插入当前富文本光标位置',
+  )
+  assert.match(
+    source,
+    /overlayClassName="task-rich-input-overlay task-rich-input-emoji-overlay"/,
+    '表情选择面板应该复用统一的浮层容器，避免描述自动保存误触发',
+  )
+  assert.doesNotMatch(
+    source,
+    /message\.info\('表情功能开发中'\)/,
+    '表情按钮不能继续停留在开发中提示，应该真正可输入表情',
+  )
+  assert.match(
+    styleSource,
+    /\.task-rich-input-emoji-panel \{/,
+    '表情选择面板应该有独立样式，避免直接堆一排按钮',
+  )
+  assert.match(
+    styleSource,
+    /\.task-rich-input-emoji-grid \{/,
+    '表情选择面板应该使用网格布局展示常用表情',
+  )
+  assert.match(
+    styleSource,
+    /\.task-rich-input-emoji-grid \{[\s\S]*max-height: 220px;[\s\S]*overflow-y: auto;/,
+    '扩充表情后面板应该支持内部滚动，避免弹层撑得太高',
   )
 }
 
@@ -193,6 +429,16 @@ async function testRichInputProvidesLinkPopoverAndMentionPanelStyles() {
   )
   assert.match(
     styleSource,
+    /\.task-rich-input-tooltip-title \{/,
+    '统一输入框底部工具提示应该有独立样式，保证接近飞书黑色浮层效果',
+  )
+  assert.match(
+    styleSource,
+    /\.task-rich-input-tooltip-hint \{/,
+    '统一输入框底部工具提示应该支持第二行辅助说明',
+  )
+  assert.match(
+    styleSource,
     /\.task-rich-input-editor \{[\s\S]*min-height: 112px;/,
     '描述输入框应该提供接近参考图的大编辑区，不能退回单行评论输入',
   )
@@ -200,8 +446,14 @@ async function testRichInputProvidesLinkPopoverAndMentionPanelStyles() {
 
 async function main() {
   await testTaskDetailUsesSharedRichInput()
+  await testTaskDescriptionUsesReadOnlyViewUntilEditing()
   await testRichInputSupportsMentionLinkAndPasteImage()
-  await testRichInputProvidesModeAwareHoverTooltip()
+  await testRichInputDoesNotSendOnEnter()
+  await testDescriptionEditorBlursOnOutsideClick()
+  await testRichInputProvidesToolbarTooltips()
+  await testLinkPopoverInputsCanReceiveMouseDown()
+  await testRichInputLinksCanOpenAndOverlayRendersAboveEditor()
+  await testRichInputSupportsEmojiInsertion()
   await testCommentComposerAttachmentsUseFileCardLayout()
   await testRichInputProvidesLinkPopoverAndMentionPanelStyles()
   console.log('task detail rich input regressions ok')

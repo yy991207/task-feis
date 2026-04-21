@@ -81,13 +81,6 @@ export async function completeAttachment(
   )
 }
 
-/**
- * preview 接口对带空格的文件名兼容不好，前端先拦住，避免上传后无法预览。
- */
-export function getAttachmentFileNameValidationError(fileName: string): string | null {
-  return /\s/.test(fileName) ? '文件名包含空格，请修改名称后再上传' : null
-}
-
 async function putFileToOss(
   file: File,
   uploadUrl: string,

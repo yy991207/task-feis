@@ -54,7 +54,6 @@ import {
   deleteAttachment,
   downloadAttachment,
   buildAttachmentPreviewUrl,
-  getAttachmentFileNameValidationError,
   isImageAttachment,
   type ApiAttachment,
 } from '@/services/attachmentService'
@@ -78,6 +77,7 @@ import {
 import { FilePreviewRenderer } from '@/components/file-preview'
 import TaskRichInput, {
   TaskRichText,
+  normalizeRichContent,
   type TaskRichAttachmentSource,
 } from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
@@ -125,11 +125,13 @@ export default function TaskDetailPanel({
   )
   const [commentValue, setCommentValue] = useState('')
   const [commentMentions, setCommentMentions] = useState<string[]>([])
+  const [commentFocusVersion, setCommentFocusVersion] = useState(0)
   const [comments, setComments] = useState<ApiComment[]>([])
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentValue, setEditingCommentValue] = useState('')
   const [editingCommentMentions, setEditingCommentMentions] = useState<string[]>([])
   const [descriptionDraft, setDescriptionDraft] = useState(task.description)
+  const [descriptionEditing, setDescriptionEditing] = useState(false)
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
@@ -143,6 +145,8 @@ export default function TaskDetailPanel({
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
   const subtaskInteractingRef = useRef(false)
   const subtaskSubmittingRef = useRef(false)
+  const detailScrollRef = useRef<HTMLDivElement | null>(null)
+  const pendingCommentScrollRef = useRef(false)
   const [, setAttachmentCount] = useState(0)
   const [attachments, setAttachments] = useState<ApiAttachment[]>([])
   const [attachmentUploading, setAttachmentUploading] = useState(false)
@@ -257,6 +261,14 @@ export default function TaskDetailPanel({
   }, [task.guid])
 
   useEffect(() => {
+    setDescriptionDraft(task.description)
+  }, [task.description, task.guid])
+
+  useEffect(() => {
+    setDescriptionEditing(false)
+  }, [task.guid])
+
+  useEffect(() => {
     let cancelled = false
     void listAttachments(task.guid)
       .then((items) => {
@@ -275,6 +287,14 @@ export default function TaskDetailPanel({
       cancelled = true
     }
   }, [task.guid])
+
+  useEffect(() => {
+    if (!pendingCommentScrollRef.current) return
+    if (!detailScrollRef.current) return
+
+    detailScrollRef.current.scrollTo({ top: detailScrollRef.current.scrollHeight, behavior: 'smooth' })
+    pendingCommentScrollRef.current = false
+  }, [comments])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -348,6 +368,9 @@ export default function TaskDetailPanel({
     const apiTask = await updateTaskApi(task.guid, apiPatch)
     const nextTask = apiTaskToTask(apiTask)
     onTaskUpdated?.(nextTask)
+    if (patch.description !== undefined) {
+      setDescriptionEditing(false)
+    }
     if (!onTaskUpdated) {
       onRefresh?.()
     }
@@ -675,12 +698,6 @@ export default function TaskDetailPanel({
   }
 
   const handleAttachmentUpload = async (file: File) => {
-    const fileNameError = getAttachmentFileNameValidationError(file.name)
-    if (fileNameError) {
-      message.error(fileNameError)
-      return null
-    }
-
     setAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file)
@@ -697,12 +714,6 @@ export default function TaskDetailPanel({
   }
 
   const handleCommentAttachmentUpload = async (file: File) => {
-    const fileNameError = getAttachmentFileNameValidationError(file.name)
-    if (fileNameError) {
-      message.error(fileNameError)
-      return null
-    }
-
     setCommentAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file, { ownerType: 'comment' })
@@ -903,6 +914,7 @@ export default function TaskDetailPanel({
         nextMentions.length > 0 ? nextMentions : undefined,
         attachmentIds.length > 0 ? attachmentIds : undefined,
       )
+      pendingCommentScrollRef.current = true
       setComments((prev) => [...prev, created])
       setCommentValue('')
       setCommentMentions([])
@@ -927,6 +939,24 @@ export default function TaskDetailPanel({
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')
     }
+  }
+
+  const handleReplyComment = (comment: ApiComment) => {
+    const targetUserId = comment.author_id ?? comment.user_id ?? ''
+    if (!targetUserId) return
+
+    const mentionHtml = `<span class="task-rich-input-mention" data-mention-id="${targetUserId}" contenteditable="false">@${targetUserId}</span>&nbsp;`
+
+    setCommentMentions((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]))
+    setCommentValue((prev) => {
+      const nextValue = normalizeRichContent(prev)
+      if (nextValue.includes(`data-mention-id="${targetUserId}"`)) {
+        return nextValue
+      }
+      return `${nextValue}${mentionHtml}`
+    })
+    pendingCommentScrollRef.current = true
+    setCommentFocusVersion((prev) => prev + 1)
   }
 
   const handleDeleteTask = async () => {
@@ -1056,7 +1086,7 @@ export default function TaskDetailPanel({
       </div>
 
       {/* Scrollable body + comments */}
-      <div className="detail-scroll">
+      <div className="detail-scroll" ref={detailScrollRef}>
         <div className="detail-body">
           {isSubtask && parentTaskChain.length > 0 && (
             <Breadcrumb
@@ -1309,25 +1339,55 @@ export default function TaskDetailPanel({
             <Tooltip title="任务描述" placement="top">
               <AlignLeftOutlined className="field-icon" />
             </Tooltip>
-            <div className="field-content">
-              <TaskRichInput
-                mode="description"
-                value={descriptionDraft}
-                users={commentInputUsers}
-                placeholder="输入任务描述"
-                className="detail-description-editor"
-                onChange={setDescriptionDraft}
-                onBlurCommit={async (nextValue) => {
-                  const next = nextValue.trim()
-                  if (next !== (task.description ?? '')) {
-                    await handleTaskPatch({ description: next })
-                  }
-                }}
-                onRequestAttachmentUpload={(file) => handleAttachmentUpload(file)}
-                onPreviewAttachment={handleOpenAttachmentPreview}
-                onDownloadAttachment={(attachment) => void handleAttachmentDownload(attachment)}
-                onRemoveAttachment={handleAttachmentDelete}
-              />
+            <div className="field-content detail-description-content">
+              {descriptionEditing ? (
+                <TaskRichInput
+                  mode="description"
+                  value={descriptionDraft}
+                  users={commentInputUsers}
+                  placeholder="输入任务描述"
+                  className="detail-description-editor"
+                  autoFocus
+                  onChange={setDescriptionDraft}
+                  onBlurCommit={async (nextValue) => {
+                    const next = nextValue.trim()
+                    if (next !== (task.description ?? '')) {
+                      await handleTaskPatch({ description: next })
+                    } else {
+                      setDescriptionEditing(false)
+                    }
+                  }}
+                  onRequestAttachmentUpload={(file) => handleAttachmentUpload(file)}
+                  onPreviewAttachment={handleOpenAttachmentPreview}
+                  onDownloadAttachment={(attachment) => void handleAttachmentDownload(attachment)}
+                  onRemoveAttachment={handleAttachmentDelete}
+                />
+              ) : (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className={`detail-description-view ${!descriptionDraft.trim() ? 'is-empty' : ''}`}
+                  onClick={(event) => {
+                    const target = event.target
+                    if (target instanceof Element && target.closest('a[href]')) {
+                      return
+                    }
+                    setDescriptionEditing(true)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setDescriptionEditing(true)
+                    }
+                  }}
+                >
+                  {descriptionDraft.trim() ? (
+                    <TaskRichText html={descriptionDraft} className="detail-description-text" />
+                  ) : (
+                    <span className="detail-description-placeholder">输入任务描述</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1703,6 +1763,16 @@ export default function TaskDetailPanel({
                         comment.updated_at !== comment.created_at && (
                           <span className="comment-edited">（已编辑）</span>
                         )}
+                      <Tooltip title="评论当前评论">
+                        <Button
+                          type="text"
+                          size="small"
+                          className="comment-reply-btn"
+                          onClick={() => handleReplyComment(comment)}
+                        >
+                          评论
+                        </Button>
+                      </Tooltip>
                       {isMine && !isEditing && (
                         <Dropdown
                           trigger={['click']}
@@ -1854,6 +1924,7 @@ export default function TaskDetailPanel({
           users={commentInputUsers}
           placeholder="输入评论"
           className="comment-input-wrapper"
+          focusVersion={commentFocusVersion}
           attachments={commentAttachments}
           attachmentOrigins={commentAttachmentOrigins}
           attachmentUploading={commentAttachmentUploading}

@@ -144,6 +144,7 @@ async function testDetailFollowersSupportAddAndRemove() {
 
 async function testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips() {
   const detailSource = await readSource('../src/components/TaskDetailPanel/index.tsx')
+  const richInputSource = await readSource('../src/components/TaskRichInput/index.tsx')
   const assigneeIndex = detailSource.indexOf('{/* Assignee row */}')
   const followersIndex = detailSource.indexOf('detail-followers-row')
   const dateIndex = detailSource.indexOf('{/* Date row */}')
@@ -180,18 +181,26 @@ async function testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips() {
     '下载附件',
     '删除附件',
     '更多评论操作',
-    '移除评论图片',
-    '正文样式',
-    '表情',
-    '@ 提及',
-    '添加图片',
-    '添加评论附件',
-    '发送评论',
   ].forEach((title) => {
     assert.match(
       detailSource,
       new RegExp(`<Tooltip title="${title}"`),
       `详情页图标应该有“${title}”浮窗提示`,
+    )
+  })
+  ;[
+    '移除评论图片',
+    '正文样式：加粗',
+    '表情：插入表情符号',
+    '@ 提及：选择任务成员',
+    '添加图片：上传或粘贴图片',
+    '添加评论附件：上传文件',
+    '发送评论：提交当前内容',
+  ].forEach((title) => {
+    assert.match(
+      richInputSource,
+      new RegExp(title),
+      `统一输入框工具组件应该有“${title}”浮窗提示`,
     )
   })
 }

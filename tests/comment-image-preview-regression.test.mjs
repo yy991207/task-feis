@@ -22,7 +22,7 @@ async function testCommentInputSupportsPasteImageUpload() {
 
   assert.match(
     source,
-    /import TaskRichInput, \{ TaskRichText \} from '@\/components\/TaskRichInput'/,
+    /import TaskRichInput, \{[\s\S]*TaskRichText[\s\S]*\} from '@\/components\/TaskRichInput'/,
     '任务详情应该复用统一的 TaskRichInput 输入框，而不是继续保留单独的评论 TextArea',
   )
   assert.match(
@@ -204,24 +204,24 @@ async function testAttachmentPreviewUsesServiceHelpers() {
   )
 }
 
-async function testAttachmentUploadsRejectWhitespaceFileNames() {
+async function testAttachmentUploadsAllowWhitespaceFileNames() {
   const detailSource = await readTaskDetailSource()
   const serviceSource = await readAttachmentServiceSource()
 
-  assert.match(
+  assert.doesNotMatch(
     serviceSource,
-    /export function getAttachmentFileNameValidationError\(fileName: string\): string \| null/,
-    '附件服务应该提供文件名校验 helper',
+    /getAttachmentFileNameValidationError/,
+    '附件服务不应该再保留文件名空格校验 helper',
   )
-  assert.match(
+  assert.doesNotMatch(
     detailSource,
     /getAttachmentFileNameValidationError\(file\.name\)/,
-    '任务详情上传入口应该先拦截带空格的文件名',
+    '任务详情上传入口不应该再拦截带空格的文件名',
   )
-  assert.match(
+  assert.doesNotMatch(
     serviceSource,
     /文件名包含空格，请修改名称后再上传/,
-    '上传失败提示应该明确要求修改名称',
+    '上传流程不应该再提示文件名空格非法',
   )
 }
 
@@ -246,14 +246,107 @@ async function testTaskDetailUsesSharedFilePreviewRenderer() {
   )
 }
 
+async function testCommentListAutoScrollsToLatestAfterSend() {
+  const detailSource = await readTaskDetailSource()
+
+  assert.match(
+    detailSource,
+    /const detailScrollRef = useRef<HTMLDivElement \| null>\(null\)/,
+    '任务详情应该拿到评论区滚动容器 ref，评论发送后才能主动滚到底部',
+  )
+  assert.match(
+    detailSource,
+    /const pendingCommentScrollRef = useRef\(false\)/,
+    '任务详情应该用独立标记控制评论发送后的自动滚动，避免每次渲染都强制跳到底部',
+  )
+  assert.match(
+    detailSource,
+    /pendingCommentScrollRef\.current = true[\s\S]*setComments\(\(prev\) => \[\.\.\.prev, created\]\)/,
+    '评论发送成功后应该先标记自动滚动，再把新评论追加到列表',
+  )
+  assert.match(
+    detailSource,
+    /useEffect\(\(\) => \{[\s\S]*if \(!pendingCommentScrollRef\.current\) return[\s\S]*detailScrollRef\.current[\s\S]*scrollTo\(\{ top: detailScrollRef\.current\.scrollHeight/,
+    '评论列表更新后应该把详情页滚动容器滚到最底部，方便立即看到最新评论',
+  )
+  assert.match(
+    detailSource,
+    /<div className="detail-scroll" ref=\{detailScrollRef\}>/,
+    '详情页滚动容器应该挂载 detailScrollRef，不能只在评论列表内部滚动',
+  )
+}
+
+async function testCommentCardsSupportReplyPrefill() {
+  const detailSource = await readTaskDetailSource()
+  const styleSource = await readTaskDetailStyleSource()
+
+  assert.match(
+    detailSource,
+    /const handleReplyComment = \(comment: ApiComment\) => \{/,
+    '任务详情应该提供单独的评论回复处理函数，避免把回复预填逻辑散落到 JSX 里',
+  )
+  assert.match(
+    detailSource,
+    /const \[commentFocusVersion, setCommentFocusVersion\] = useState\(0\)/,
+    '评论回复后应该通过独立 focusVersion 让底部输入框重新聚焦',
+  )
+  assert.match(
+    detailSource,
+    /setCommentMentions\(\(prev\) => .*comment\.author_id.*comment\.user_id/s,
+    '点击评论按钮后应该把目标评论作者加入 mentionIds，后续发送时一起提交给评论接口',
+  )
+  assert.match(
+    detailSource,
+    /const mentionHtml = `\<span class="task-rich-input-mention"[\s\S]*setCommentValue\(\(prev\) => \{[\s\S]*return `\$\{nextValue\}\$\{mentionHtml\}`/s,
+    '点击评论按钮后应该把 @ 目标评论作者插入到底部评论输入框内容里',
+  )
+  assert.match(
+    detailSource,
+    /评论当前评论/,
+    '每条评论卡片应该提供“评论当前评论”按钮提示',
+  )
+  assert.match(
+    detailSource,
+    /<div className="comment-meta">[\s\S]*className="comment-reply-btn"[\s\S]*className="comment-more-btn"/,
+    '评论按钮应该放在评论头部右侧，并且紧挨着更多按钮显示',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /className="comment-actions"/,
+    '评论按钮不应该继续放在评论正文下面，避免占掉内容区域',
+  )
+  assert.match(
+    detailSource,
+    /className="comment-reply-btn"/,
+    '评论互动按钮应该有独立样式类，避免和更多操作按钮混在一起',
+  )
+  assert.match(
+    detailSource,
+    /setCommentFocusVersion\(\(prev\) => prev \+ 1\)/,
+    '点击评论按钮后应该主动递增 focusVersion，让底部输入框光标回到编辑区',
+  )
+  assert.match(
+    styleSource,
+    /\.comment-reply-btn \{/,
+    '评论互动按钮应该有独立样式，保证 hover 后可见且不显得突兀',
+  )
+  assert.match(
+    detailSource,
+    /<TaskRichInput[\s\S]*mode="comment"[\s\S]*focusVersion=\{commentFocusVersion\}[\s\S]*mentionIds=\{commentMentions\}/,
+    '底部评论输入框应该继续走统一输入组件，并接住回复预填后的 mentionIds',
+  )
+}
+
 async function main() {
   await testCommentInputSupportsPasteImageUpload()
   await testCommentAttachmentsRenderInlineImagePreview()
   await testTaskAttachmentsExposePreviewAndDownloadActions()
   await testTaskDetailAvatarsUseTaskTablePurple()
   await testAttachmentPreviewUsesServiceHelpers()
-  await testAttachmentUploadsRejectWhitespaceFileNames()
+  await testAttachmentUploadsAllowWhitespaceFileNames()
   await testTaskDetailUsesSharedFilePreviewRenderer()
+  await testCommentListAutoScrollsToLatestAfterSend()
+  await testCommentCardsSupportReplyPrefill()
   console.log('comment image preview regressions ok')
 }
 
