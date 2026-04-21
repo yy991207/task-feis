@@ -78,6 +78,7 @@ import {
 } from '@/services/projectService'
 import { FilePreviewRenderer } from '@/components/file-preview'
 import UserSearchSelect from '@/components/UserSearchSelect'
+import { inheritParentStartForTasks } from '@/utils/taskDate'
 import './index.less'
 
 const { Text } = Typography
@@ -170,9 +171,9 @@ export default function TaskDetailPanel({
   )
   useEffect(() => {
     void listSubtasks(task.guid).then((items) =>
-      setSubtaskDrafts(items.map((t) => apiTaskToTask(t))),
+      setSubtaskDrafts(inheritParentStartForTasks(items.map((t) => apiTaskToTask(t)), task)),
     )
-  }, [task.guid])
+  }, [task.guid, task.start?.timestamp])
 
   useEffect(() => {
     let cancelled = false
@@ -472,7 +473,7 @@ export default function TaskDetailPanel({
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
-      const createdTask = apiTaskToTask(apiTask)
+      const createdTask = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => [...prev, createdTask])
       resetSubtaskCreateDraft()
       setSubtaskCreating(true)

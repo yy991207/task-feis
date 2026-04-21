@@ -25,8 +25,6 @@ import {
   UnorderedListOutlined,
   FolderOutlined,
   FolderOpenOutlined,
-  FileAddOutlined,
-  FileTextFilled,
   EllipsisOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -124,7 +122,6 @@ export default function Sidebar({
   const [editingTasklistGuid, setEditingTasklistGuid] = useState<string | null>(null)
   const [openedGroupMenuId, setOpenedGroupMenuId] = useState<string | null>(null)
   const [openedProjectMenuId, setOpenedProjectMenuId] = useState<string | null>(null)
-  const [openedCreateTarget, setOpenedCreateTarget] = useState<CreatingTarget | null>(null)
   const [customFieldsProjectId, setCustomFieldsProjectId] = useState<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
 
@@ -419,25 +416,6 @@ export default function Sidebar({
     [projects, groups, defaultGroup, projectsByGroup],
   )
 
-  const buildCreateMenu = (target: CreatingTarget) => ({
-    items: [
-      {
-        key: 'blank',
-        label: '空白清单',
-        icon: <FileAddOutlined />,
-        onClick: () => {
-          void startCreateTasklist(target)
-        },
-      },
-      {
-        key: 'template',
-        label: '使用模板',
-        icon: <FileTextFilled />,
-        onClick: () => message.info('模板功能开发中'),
-      },
-    ],
-  })
-
   const buildGroupActionMenu = (group: ProjectGroup) => ({
     items: [
       {
@@ -532,23 +510,17 @@ export default function Sidebar({
               onClick={(e) => e.stopPropagation()}
             />
           </Dropdown>
-          <Dropdown
-            menu={buildCreateMenu(group.group_id)}
-            trigger={['click']}
-            onOpenChange={(open) => {
-              setOpenedCreateTarget(open ? group.group_id : null)
+          <Button
+            type="text"
+            size="small"
+            icon={<PlusOutlined />}
+            className="group-action-btn"
+            loading={creatingTarget === group.group_id}
+            onClick={(e) => {
+              e.stopPropagation()
+              void startCreateTasklist(group.group_id)
             }}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<PlusOutlined />}
-              className={`group-action-btn ${
-                openedCreateTarget === group.group_id ? 'always-visible' : ''
-              }`}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </Dropdown>
+          />
         </Space>
       </Flex>
     )
@@ -560,23 +532,17 @@ export default function Sidebar({
         任务清单
       </Text>
       <Space size={2} className="group-actions">
-        <Dropdown
-          menu={buildCreateMenu('root')}
-          trigger={['click']}
-          onOpenChange={(open) => {
-            setOpenedCreateTarget(open ? 'root' : null)
+        <Button
+          type="text"
+          size="small"
+          icon={<PlusOutlined />}
+          className="group-action-btn"
+          loading={creatingTarget === 'root'}
+          onClick={(e) => {
+            e.stopPropagation()
+            void startCreateTasklist('root')
           }}
-        >
-          <Button
-            type="text"
-            size="small"
-            icon={<PlusOutlined />}
-            className={`group-action-btn ${
-              openedCreateTarget === 'root' ? 'always-visible' : ''
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </Dropdown>
+        />
       </Space>
     </Flex>
   )
@@ -704,7 +670,6 @@ export default function Sidebar({
     editingTasklistGuid,
     openedGroupMenuId,
     openedProjectMenuId,
-    openedCreateTarget,
     activeKey,
   ])
 

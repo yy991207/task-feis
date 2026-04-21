@@ -96,6 +96,7 @@ import EditableInput from '@/components/EditableInput'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
 import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
 import UserSearchSelect from '@/components/UserSearchSelect'
+import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
   listCustomFields,
   updateCustomField,
@@ -582,13 +583,18 @@ export default function TaskTable({
         const childrenByParent = new Map<string, Task[]>()
         for (const item of tasks) {
           if (!item.parent_task_guid) continue
+          const parent = taskByGuid.get(item.parent_task_guid)
+          const child = parent
+            ? inheritParentStartForTasks([item], parent)[0]
+            : item
           const children = childrenByParent.get(item.parent_task_guid) ?? []
-          children.push(item)
+          children.push(child)
           childrenByParent.set(item.parent_task_guid, children)
         }
 
         const next: Record<string, Task[]> = {}
         for (const [pid, list] of Object.entries(prev)) {
+          const parent = taskByGuid.get(pid)
           const cachedChildren = list.flatMap((child) => {
             const fresh = taskByGuid.get(child.guid)
             if (!fresh) {
@@ -597,9 +603,9 @@ export default function TaskTable({
             }
             if (fresh !== child) {
               changed = true
-              return [fresh]
+              return [parent ? inheritParentStartForTasks([fresh], parent)[0] : fresh]
             }
-            return [child]
+            return [parent ? inheritParentStartForTasks([child], parent)[0] : child]
           })
           const cachedGuidSet = new Set(cachedChildren.map((child) => child.guid))
           const externalChildren = childrenByParent.get(pid) ?? []
@@ -632,7 +638,7 @@ export default function TaskTable({
         const items = await listSubtasks(guid)
         setSubtasksByGuid((prev) => ({
           ...prev,
-          [guid]: items.map((t) => apiTaskToTask(t)),
+          [guid]: inheritParentStartForTasks(items.map((t) => apiTaskToTask(t)), parent),
         }))
       } catch {
         setSubtasksByGuid((prev) => ({ ...prev, [guid]: [] }))
@@ -657,11 +663,16 @@ export default function TaskTable({
     })
 
     if (!subtasksByGuid[pendingExpandTaskGuid]) {
+      const parentTask = tasks.find((task) => task.guid === pendingExpandTaskGuid)
+      if (!parentTask) {
+        onPendingExpandConsumed?.(pendingExpandTaskGuid)
+        return
+      }
       void listSubtasks(pendingExpandTaskGuid)
         .then((items) => {
           setSubtasksByGuid((prev) => ({
             ...prev,
-            [pendingExpandTaskGuid]: items.map((t) => apiTaskToTask(t)),
+            [pendingExpandTaskGuid]: inheritParentStartForTasks(items.map((t) => apiTaskToTask(t)), parentTask),
           }))
         })
         .catch(() => {

@@ -157,6 +157,20 @@ export default function CustomFieldEditorModal({
     }
   }
 
+  const handleDeleteCurrentField = async () => {
+    if (!field) {
+      return
+    }
+    try {
+      await deleteCustomField(field.field_id)
+      message.success('已删除字段')
+      onDeleted?.(field.field_id)
+      onClose()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }
+
   const typeLabel = (t: CustomFieldType) =>
     TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t
 
@@ -305,6 +319,19 @@ export default function CustomFieldEditorModal({
       footer={
         activeTab === 'new' ? (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            {isEdit && (
+              <Popconfirm
+                title="删除该字段？"
+                description="删除后当前清单和任务里的这个字段都会一起移除。"
+                okText="删除字段"
+                cancelText="取消"
+                onConfirm={() => handleDeleteCurrentField()}
+              >
+                <Button danger icon={<DeleteOutlined />}>
+                  删除字段
+                </Button>
+              </Popconfirm>
+            )}
             <Button onClick={onClose}>取消</Button>
             <Button type="primary" loading={submitting} onClick={handleSubmit}>
               {isEdit ? '保存' : '创建字段'}
