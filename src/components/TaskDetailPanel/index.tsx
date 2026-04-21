@@ -9,6 +9,8 @@ import Popover from 'antd/es/popover'
 import Select from 'antd/es/select'
 import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
+import Modal from 'antd/es/modal'
+import Tooltip from 'antd/es/tooltip'
 import {
   CloseOutlined,
   MoreOutlined,
@@ -50,6 +52,8 @@ import {
   getAttachment,
   deleteAttachment,
   downloadAttachment,
+  buildAttachmentPreviewUrl,
+  isImageAttachment,
   type ApiAttachment,
 } from '@/services/attachmentService'
 import Upload from 'antd/es/upload'
@@ -69,6 +73,7 @@ import {
 import {
   updateProject as apiUpdateProject,
 } from '@/services/projectService'
+import { FilePreviewRenderer } from '@/components/file-preview'
 import './index.less'
 
 const { Text } = Typography
@@ -118,8 +123,9 @@ export default function TaskDetailPanel({
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
-  const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
+  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState<string | undefined>(undefined)
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
+  const [selectedFollowerIds, setSelectedFollowerIds] = useState<string[]>([])
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
   const subtaskInteractingRef = useRef(false)
   const subtaskSubmittingRef = useRef(false)
@@ -131,6 +137,7 @@ export default function TaskDetailPanel({
   const [commentAttachmentMap, setCommentAttachmentMap] = useState<
     Record<string, ApiAttachment>
   >({})
+  const [previewAttachment, setPreviewAttachment] = useState<ApiAttachment | null>(null)
   const [tasklistRenaming, setTasklistRenaming] = useState(false)
   const [tasklistRenameValue, setTasklistRenameValue] = useState('')
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
@@ -139,9 +146,7 @@ export default function TaskDetailPanel({
     startWidth: 360,
   })
   const assignees = task.members.filter((m) => m.role === 'assignee')
-  const followers = task.members.filter((m) => m.role === 'follower')
   const isSubtask = Boolean(task.parent_task_guid)
-  const currentUser: User = { id: appConfig.user_id, name: appConfig.user_id }
   const creator: User = { id: task.creator.id, name: task.creator.id }
   const tasklistRef = task.tasklists[0]
   const creatorName = creator.name
@@ -155,7 +160,6 @@ export default function TaskDetailPanel({
   const selectedSection = selectedTasklist?.sections.find(
     (item) => item.guid === selectedSectionGuid,
   )
-
   useEffect(() => {
     void listSubtasks(task.guid).then((items) =>
       setSubtaskDrafts(items.map((t) => apiTaskToTask(t))),
@@ -241,6 +245,22 @@ export default function TaskDetailPanel({
       .catch(() => {})
   }, [])
 
+  const followedUserIds = Array.from(new Set([
+    ...(task.participant_ids ?? []),
+    ...task.members
+      .filter((member) => member.role === 'follower')
+      .map((member) => member.id),
+  ]))
+  const followedUserIdsKey = followedUserIds.join(',')
+  const followedUsers = followedUserIds.map((userId) => {
+    const matched = availableUsers.find((user) => user.id === userId)
+    return matched ?? { id: userId, name: userId }
+  })
+
+  useEffect(() => {
+    setSelectedFollowerIds(followedUserIds)
+  }, [task.guid, followedUserIdsKey])
+
   const handleTaskPatch = async (patch: Partial<Task>) => {
     const apiPatch: Record<string, unknown> = {}
     if (patch.summary !== undefined) apiPatch.title = patch.summary
@@ -263,27 +283,12 @@ export default function TaskDetailPanel({
     }
   }
 
-  const handleAssigneeChange = async (values: string[]) => {
-    const currentAssignees = task.members
-      .filter((m) => m.role === 'assignee')
-      .map((m) => m.id)
-    const currentPrimary = currentAssignees[0] ?? null
-    const desiredPrimary = values[0] ?? null
-
-    const toAdd = values.slice(1).filter((id) => !currentAssignees.includes(id))
-    const toRemove = currentAssignees
-      .slice(1)
-      .filter((id) => !values.includes(id))
-
+  const handleAssigneeChange = async (value?: string) => {
+    const currentPrimary = assignees[0]?.id ?? null
+    const desiredPrimary = value ?? null
     try {
       if (desiredPrimary !== currentPrimary) {
         await patchTaskAssignee(task.guid, desiredPrimary)
-      }
-      if (toAdd.length > 0) {
-        await addParticipants(task.guid, toAdd)
-      }
-      for (const uid of toRemove) {
-        await removeParticipant(task.guid, uid)
       }
       const fresh = await getTask(task.guid)
       const nextTask = apiTaskToTask(fresh)
@@ -291,6 +296,37 @@ export default function TaskDetailPanel({
       if (!onTaskUpdated) onRefresh?.()
     } catch {
       message.error('更新负责人失败')
+    }
+  }
+
+  const handleAddFollowers = async () => {
+    const toAdd = selectedFollowerIds.filter((id) => !followedUserIds.includes(id))
+    if (toAdd.length === 0) {
+      return
+    }
+
+    try {
+      await addParticipants(task.guid, toAdd)
+      const fresh = await getTask(task.guid)
+      const nextTask = apiTaskToTask(fresh)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) onRefresh?.()
+      message.success('已添加关注人')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '添加关注人失败')
+    }
+  }
+
+  const handleRemoveFollower = async (targetUserId: string) => {
+    try {
+      await removeParticipant(task.guid, targetUserId)
+      const fresh = await getTask(task.guid)
+      const nextTask = apiTaskToTask(fresh)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) onRefresh?.()
+      message.success('已移除关注人')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '移除关注人失败')
     }
   }
 
@@ -317,7 +353,7 @@ export default function TaskDetailPanel({
 
   const resetSubtaskCreateDraft = () => {
     setSubtaskTitle('')
-    setSubtaskAssigneeIds([])
+    setSubtaskAssigneeId(undefined)
     setSubtaskDue(null)
   }
 
@@ -352,7 +388,7 @@ export default function TaskDetailPanel({
         title: summary,
         parent_task_id: task.guid,
         section_id: selectedSectionGuid || tasklistRef?.section_guid,
-        assignee_id: subtaskAssigneeIds[0],
+        assignee_id: subtaskAssigneeId,
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
@@ -474,6 +510,26 @@ export default function TaskDetailPanel({
 
   const handleRemoveCommentAttachment = (attachmentId: string) => {
     setCommentAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
+  }
+
+  const handleCommentPaste = (
+    event: React.ClipboardEvent<HTMLTextAreaElement>,
+  ) => {
+    const items = Array.from(event.clipboardData.items)
+    const imageItems = items.filter((item) => item.type.startsWith('image/'))
+    if (imageItems.length === 0) {
+      return
+    }
+
+    event.preventDefault()
+    imageItems.forEach((item) => {
+      const file = item.getAsFile()
+      if (!file) {
+        return
+      }
+      // 这里直接复用评论附件上传链路，避免粘贴图片再维护第二套上传逻辑。
+      void handleCommentAttachmentUpload(file)
+    })
   }
 
   const handleAttachmentDelete = async (attachmentId: string) => {
@@ -776,10 +832,11 @@ export default function TaskDetailPanel({
                 <div className="detail-popover-panel">
                   <Text strong>添加负责人</Text>
                   <Select
-                    mode="multiple"
                     size="small"
-                    value={assignees.map((item) => item.id)}
-                    onChange={(values) => void handleAssigneeChange(values)}
+                    showSearch
+                    allowClear
+                    value={assignees[0]?.id}
+                    onChange={(value) => void handleAssigneeChange(value)}
                     options={availableUsers.map((user) => ({
                       value: user.id,
                       label: user.name,
@@ -1116,8 +1173,8 @@ export default function TaskDetailPanel({
                                 showSearch
                                 size="small"
                                 placeholder="选择负责人"
-                                value={subtaskAssigneeIds[0]}
-                                onChange={(v) => setSubtaskAssigneeIds(v ? [v] : [])}
+                                value={subtaskAssigneeId}
+                                onChange={(value) => setSubtaskAssigneeId(value ?? undefined)}
                                 options={availableUsers.map((u) => ({
                                   value: u.id,
                                   label: u.name,
@@ -1129,7 +1186,7 @@ export default function TaskDetailPanel({
                           }
                         >
                           <UsergroupAddOutlined
-                            className={`subtask-icon-btn ${subtaskAssigneeIds[0] ? 'active' : ''}`}
+                            className={`subtask-icon-btn ${subtaskAssigneeId ? 'active' : ''}`}
                           />
                         </Popover>
                       </span>
@@ -1318,6 +1375,22 @@ export default function TaskDetailPanel({
                           <div className="detail-attachment-list comment-attachment-list--posted">
                             {(comment.attachment_ids ?? []).map((id) => {
                               const att = commentAttachmentMap[id]
+                              if (isImageAttachment(att)) {
+                                return (
+                                  <button
+                                    key={id}
+                                    type="button"
+                                    className="comment-image-card"
+                                    onClick={() => att && setPreviewAttachment(att)}
+                                  >
+                                    <img
+                                      className="comment-image-thumb"
+                                      src={att ? buildAttachmentPreviewUrl(att) : ''}
+                                      alt={att?.file_name ?? '评论图片'}
+                                    />
+                                  </button>
+                                )
+                              }
                               const ext = (att?.file_name.split('.').pop() ?? '').toLowerCase()
                               const sizeKB = (att?.file_size ?? 0) / 1024
                               const sizeLabel = att
@@ -1361,17 +1434,46 @@ export default function TaskDetailPanel({
       {/* Footer */}
       <div className="detail-footer">
         <div className="comment-input-wrapper">
-          <Input
+          <Input.TextArea
             placeholder="输入评论"
             className="comment-input"
             value={commentValue}
             onChange={(e) => setCommentValue(e.target.value)}
-            onPressEnter={handleSendComment}
+            onPaste={handleCommentPaste}
+            autoSize={{ minRows: 1, maxRows: 6 }}
+            onPressEnter={(e) => {
+              if (e.shiftKey) {
+                return
+              }
+              e.preventDefault()
+              void handleSendComment()
+            }}
             variant="borderless"
           />
           {commentAttachments.length > 0 && (
-            <div className="detail-attachment-list">
+            <div className="detail-attachment-list detail-comment-preview-list">
               {commentAttachments.map((att) => {
+                if (isImageAttachment(att)) {
+                  return (
+                    <div key={att.attachment_id} className="comment-image-preview-item">
+                      <button
+                        type="button"
+                        className="comment-image-card"
+                        onClick={() => setPreviewAttachment(att)}
+                      >
+                        <img
+                          className="comment-image-thumb"
+                          src={buildAttachmentPreviewUrl(att)}
+                          alt={att.file_name}
+                        />
+                      </button>
+                      <DeleteOutlined
+                        className="attachment-delete comment-image-delete"
+                        onClick={() => handleRemoveCommentAttachment(att.attachment_id)}
+                      />
+                    </div>
+                  )
+                }
                 const ext = (att.file_name.split('.').pop() ?? '').toLowerCase()
                 const sizeKB = att.file_size / 1024
                 const sizeLabel =
@@ -1426,12 +1528,90 @@ export default function TaskDetailPanel({
             />
           </div>
         </div>
+        <Modal
+          open={Boolean(previewAttachment)}
+          footer={null}
+          onCancel={() => setPreviewAttachment(null)}
+          width={920}
+          destroyOnHidden
+          className="comment-preview-modal"
+        >
+          {previewAttachment && (
+            <div className="comment-preview-shell">
+              <FilePreviewRenderer
+                content=""
+                language={null}
+                fileName={previewAttachment.file_name}
+                isImage={isImageAttachment(previewAttachment)}
+                isCodeFile={false}
+                previewable={false}
+                loading={false}
+                imageUrl={buildAttachmentPreviewUrl(previewAttachment)}
+                onOpenInNewTab={() => {
+                  window.open(
+                    buildAttachmentPreviewUrl(previewAttachment),
+                    '_blank',
+                  )
+                }}
+                onDownload={() => void handleAttachmentDownload(previewAttachment)}
+                onClose={() => setPreviewAttachment(null)}
+              />
+            </div>
+          )}
+        </Modal>
         <div className="detail-followers">
-          <Avatar size={20} style={{ backgroundColor: '#f5a623' }}>
-            {(currentUser.name ?? '').slice(0, 1)}
-          </Avatar>
-          <span className="followers-text">{followers.length + 1} 人关注</span>
-          <PlusOutlined className="followers-add" />
+          <span className="followers-text">{followedUsers.length} 人关注</span>
+          <Space size={6} wrap>
+            {followedUsers.map((user) => (
+              <span key={user.id} className="follower-chip">
+                <Avatar size={20} style={{ backgroundColor: '#f5a623' }}>
+                  {(user.name ?? user.id).slice(0, 1)}
+                </Avatar>
+                <span className="follower-name">{user.name ?? user.id}</span>
+                <Tooltip title="移除关注人">
+                  <CloseOutlined
+                    className="follower-remove"
+                    onClick={() => void handleRemoveFollower(user.id)}
+                  />
+                </Tooltip>
+              </span>
+            ))}
+            <Popover
+              trigger="click"
+              placement="topLeft"
+              destroyOnHidden
+              content={
+                <div className="detail-popover-panel follower-popover-panel">
+                  <Text strong>添加关注的人</Text>
+                  <Select
+                    mode="multiple"
+                    size="small"
+                    showSearch
+                    placeholder="选择要关注的人"
+                    value={selectedFollowerIds}
+                    onChange={setSelectedFollowerIds}
+                    options={availableUsers.map((user) => ({
+                      value: user.id,
+                      label: user.name,
+                    }))}
+                  />
+                  <div className="follower-popover-actions">
+                    <Button size="small" onClick={() => setSelectedFollowerIds(followedUserIds)}>
+                      重置
+                    </Button>
+                    <Button type="primary" size="small" onClick={() => void handleAddFollowers()}>
+                      添加
+                    </Button>
+                  </div>
+                </div>
+              }
+            >
+              <span className="followers-add">
+                <PlusOutlined />
+                <span>添加关注的人</span>
+              </span>
+            </Popover>
+          </Space>
         </div>
       </div>
     </div>

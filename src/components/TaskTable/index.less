@@ -116,7 +116,6 @@
   align-items: center;
   gap: 8px;
   padding: 10px 24px;
-  border-bottom: 1px solid #f2f3f5;
   background: #fff;
 
   .toolbar-right {
@@ -156,73 +155,35 @@
   }
 }
 
-.table-columns {
-  display: flex;
-  align-items: center;
-  min-height: 38px;
-  padding: 0 24px;
-  border-bottom: 1px solid #e7e9ee;
-  background: #fff;
-  color: #8f959e;
-  font-size: 12px;
-  flex-shrink: 0;
-
-  .col {
-    display: flex;
-    align-items: center;
-    min-height: 38px;
-  }
-
-  .col-title {
-    flex: 1;
-    min-width: 320px;
-    padding-left: 32px;
-  }
-
-  .col-priority {
-    width: 84px;
-  }
-
-  .col-assignee {
-    width: 132px;
-  }
-
-  .col-estimate {
-    width: 104px;
-  }
-
-  .col-start,
-  .col-due,
-  .col-creator {
-    width: 104px;
-  }
-
-  .col-created {
-    width: 120px;
-  }
-
-  .col-custom {
-    width: 120px;
-  }
-}
-
-.tasklist-columns {
-  background: #fff;
-}
-
 .table-body {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 24px;
 }
 
+.table-column-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.table-column-title-main {
+  padding-left: 12px;
+}
+
 .section-group {
+  margin: 0 16px 10px;
+  border: 1px solid #eef1f6;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+
   .section-row {
     display: flex;
     align-items: center;
     gap: 6px;
     min-height: 34px;
-    padding: 0 24px;
+    padding: 0 16px;
     color: #1f2329;
     font-size: 13px;
     font-weight: 500;
@@ -297,58 +258,76 @@
 
   &.drag-target-task {
     background: rgba(51, 112, 255, 0.06);
-    border-radius: 4px;
-  }
-
-  .task-row-wrap {
-    &.dragging {
-      opacity: 0.4;
-    }
+    border-radius: 12px;
   }
 }
 
-.task-row {
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 0 24px;
-  border-bottom: 1px solid #f2f3f5;
+.task-grid-table {
+  .ant-table {
+    background: transparent;
+  }
+
+  .ant-table-container {
+    border-inline-start: none !important;
+    border-start-start-radius: 0 !important;
+    border-start-end-radius: 0 !important;
+  }
+
+  .ant-table-content {
+    overflow-x: auto;
+  }
+
+  .ant-table-thead > tr > th {
+    height: 38px;
+    padding: 0 12px;
+    background: #fff;
+    color: #8f959e;
+    font-size: 12px;
+    font-weight: 400;
+    border-bottom: 1px solid #eef1f6;
+  }
+
+  .ant-table-tbody > tr > td {
+    padding: 0 12px;
+    border-bottom: 1px solid #f2f3f5;
+    background: #fff;
+    transition: background 0.15s ease;
+  }
+
+  .ant-table-tbody > tr:last-child > td {
+    border-bottom: none;
+  }
+
+  .ant-table-expanded-row > .ant-table-cell {
+    padding: 0 !important;
+  }
+}
+
+.task-table-row {
   cursor: pointer;
-  transition: background 0.15s ease;
 
-  &:hover {
-    background: #fafbfc;
+  &:hover > td {
+    background: #fafbfc !important;
   }
 
-  &.selected {
-    background: #edf3ff;
+  &.selected > td {
+    background: #edf3ff !important;
   }
 
-  &.done {
-    .done-text {
-      color: #8f959e;
-      text-decoration: line-through;
-    }
+  &.dragging {
+    opacity: 0.4;
   }
 
-  &.creating {
-    background: #f5f8ff;
-  }
-
-  &.task-row-enter {
-    animation: taskRowEnter var(--task-create-duration, 0.24s)
-      var(--task-create-ease, ease-out);
-    transform-origin: top center;
-  }
-
-  &.task-row-new {
+  &.task-row-new > td {
     animation:
       taskRowEnter var(--task-create-duration, 0.24s)
         var(--task-create-ease, ease-out),
       taskRowFlash 0.9s ease;
     transform-origin: top center;
   }
+}
 
+.task-title-cell {
   .cell {
     display: flex;
     align-items: center;
@@ -360,8 +339,9 @@
     display: flex;
     align-items: center;
     flex: 1;
-    min-width: 352px;
+    min-width: 0;
     overflow: hidden;
+    min-height: 40px;
   }
 
   .cell-checkbox {
@@ -372,7 +352,7 @@
 
   .cell-title {
     flex: 1;
-    min-width: 320px;
+    min-width: 0;
     gap: 6px;
     overflow: hidden;
 
@@ -605,6 +585,32 @@
     .cell-more {
       opacity: 1;
     }
+  }
+}
+
+.task-title-cell.done {
+  .done-text {
+    color: #8f959e;
+    text-decoration: line-through;
+  }
+}
+
+.task-grid-table {
+  .cell-priority {
+    width: auto;
+  }
+
+  .cell-assignee {
+    width: auto;
+  }
+
+  .cell-estimate,
+  .cell-start,
+  .cell-due,
+  .cell-creator,
+  .cell-created,
+  .cell-custom {
+    width: auto;
   }
 }
 
@@ -1053,7 +1059,7 @@
   background: #fff !important;
   box-shadow: inset 0 0 0 1px #3370ff;
   border-radius: 6px;
-  margin: 0 24px;
+  margin: 0 12px 12px;
   padding: 0 !important;
 
   .cell-checkbox {
@@ -1087,6 +1093,12 @@
       background: #f2f3f5;
     }
   }
+}
+
+.table-empty-state {
+  padding: 28px 0;
+  color: #8f959e;
+  font-size: 13px;
 }
 
 .task-tree-guide {

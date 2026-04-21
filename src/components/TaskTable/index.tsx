@@ -7,6 +7,7 @@ import Select from 'antd/es/select'
 import DatePicker from 'antd/es/date-picker'
 import Button from 'antd/es/button'
 import Dropdown from 'antd/es/dropdown'
+import Table from 'antd/es/table'
 import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
 import Avatar from 'antd/es/avatar'
@@ -56,6 +57,7 @@ import {
   EyeOutlined,
   EyeInvisibleOutlined,
 } from '@ant-design/icons'
+import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
   Priority,
@@ -73,8 +75,6 @@ import {
   updateTaskApi,
   patchTaskStatus,
   patchTaskAssignee,
-  addParticipants,
-  removeParticipant,
   getTask,
   apiTaskToTask,
   toPriorityString,
@@ -117,6 +117,11 @@ type ExtraColumnKey =
   | 'sourceCategory'
 type CustomFieldColumnKey = `custom:${string}`
 type ExtendedColumnKey = ColumnKey | ExtraColumnKey | CustomFieldColumnKey
+type TaskTableRow = Task & {
+  key: string
+  tableDepth: number
+  children?: TaskTableRow[]
+}
 
 interface FieldOption {
   key: ExtendedColumnKey
@@ -234,18 +239,17 @@ interface DateConfigPanelProps {
 interface AssigneePickerProps {
   pickerKey: string
   open: boolean
-  value: string[]
+  value?: string
   users: User[]
   placeholderIcon: React.ReactNode
   isTasklistView: boolean
   triggerClassName?: string
-  onChange: (values: string[]) => void
+  onChange: (value?: string) => void
   onInteract?: () => void
   onOpenChange?: (open: boolean) => void
 }
 
 function AssigneePicker({
-  pickerKey,
   open,
   value,
   users,
@@ -257,14 +261,8 @@ function AssigneePicker({
   onOpenChange,
 }: AssigneePickerProps) {
   const popupContainerRef = useRef<HTMLDivElement | null>(null)
-  const [selectOpen, setSelectOpen] = useState(false)
-  const selectedUsers = value
-    .map((id) => users.find((user) => user.id === id))
-    .filter((user): user is User => Boolean(user))
-
-  useEffect(() => {
-    setSelectOpen(open)
-  }, [open, pickerKey])
+  const [selectOpen, setSelectOpen] = useState(open)
+  const selectedUser = value ? users.find((user) => user.id === value) : undefined
 
   const handlePopoverOpenChange = (open: boolean) => {
     setSelectOpen(open)
@@ -288,15 +286,15 @@ function AssigneePicker({
             添加负责人
           </Typography.Text>
           <Select
-            mode="multiple"
             size="small"
-            open={selectOpen}
+            open={open ? selectOpen : false}
             onOpenChange={setSelectOpen}
             getPopupContainer={() => popupContainerRef.current ?? document.body}
             style={{ width: '100%', marginTop: 8 }}
             placeholder="搜索用户"
             value={value}
             onChange={onChange}
+            allowClear
             options={users.map((user) => ({ label: user.name, value: user.id }))}
             autoFocus
             showSearch
@@ -308,34 +306,26 @@ function AssigneePicker({
         className={triggerClassName ? `assignee-cell ${triggerClassName}` : 'assignee-cell'}
         onMouseDown={onInteract}
       >
-        {selectedUsers.length > 0 ? (
+        {selectedUser ? (
           isTasklistView ? (
-            <div className="tasklist-assignee-group">
-              {selectedUsers.map((user) => (
-                <Tooltip key={user.id} title={user.name ?? user.id}>
-                  <Avatar
-                    size={20}
-                    className="tasklist-assignee-avatar"
-                    style={{ backgroundColor: '#7b67ee', color: '#fff', fontSize: 11 }}
-                  >
-                    {(user.name ?? user.id).slice(0, 1)}
-                  </Avatar>
-                </Tooltip>
-              ))}
-            </div>
+            <Tooltip title={selectedUser.name ?? selectedUser.id}>
+              <Avatar
+                size={20}
+                className="tasklist-assignee-avatar"
+                style={{ backgroundColor: '#7b67ee', color: '#fff', fontSize: 11 }}
+              >
+                {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
+              </Avatar>
+            </Tooltip>
           ) : (
-            <Avatar.Group max={{ count: 3 }} size={24}>
-              {selectedUsers.map((user) => (
-                <Tooltip key={user.id} title={user.name ?? user.id}>
-                  <Avatar
-                    size={24}
-                    style={{ backgroundColor: '#7b67ee', fontSize: 12 }}
-                  >
-                    {(user.name ?? user.id).slice(0, 1)}
-                  </Avatar>
-                </Tooltip>
-              ))}
-            </Avatar.Group>
+            <Tooltip title={selectedUser.name ?? selectedUser.id}>
+              <Avatar
+                size={24}
+                style={{ backgroundColor: '#7b67ee', fontSize: 12 }}
+              >
+                {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
+              </Avatar>
+            </Tooltip>
           )
         ) : (
           placeholderIcon
@@ -498,7 +488,6 @@ export default function TaskTable({
   onTaskUpdated,
   onTasklistUpdated,
   onTaskCreatedDetailOpen,
-  onTaskDeleted,
 }: TaskTableProps) {
   const { token } = theme.useToken()
   const currentUser: User = { id: appConfig.user_id, name: appConfig.user_id }
@@ -512,7 +501,7 @@ export default function TaskTable({
   })
   const [creatingInSection, setCreatingInSection] = useState<string | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskAssigneeIds, setNewTaskAssigneeIds] = useState<string[]>([])
+  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string | undefined>(undefined)
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>(Priority.None)
   const [newTaskStart, setNewTaskStart] = useState<dayjs.Dayjs | null>(null)
   const [newTaskDue, setNewTaskDue] = useState<dayjs.Dayjs | null>(null)
@@ -560,45 +549,47 @@ export default function TaskTable({
 
   // 外部 tasks 是权威数据源：详情页增删子任务后，要同步已展开父任务的子任务缓存。
   useEffect(() => {
-    setSubtasksByGuid((prev) => {
-      let changed = false
-      const taskByGuid = new Map(tasks.map((item) => [item.guid, item]))
-      const childrenByParent = new Map<string, Task[]>()
-      for (const item of tasks) {
-        if (!item.parent_task_guid) continue
-        const children = childrenByParent.get(item.parent_task_guid) ?? []
-        children.push(item)
-        childrenByParent.set(item.parent_task_guid, children)
-      }
-
-      const next: Record<string, Task[]> = {}
-      for (const [pid, list] of Object.entries(prev)) {
-        const cachedChildren = list.flatMap((child) => {
-          const fresh = taskByGuid.get(child.guid)
-          if (!fresh) {
-            changed = true
-            return []
-          }
-          if (fresh !== child) {
-            changed = true
-            return [fresh]
-          }
-          return [child]
-        })
-        const cachedGuidSet = new Set(cachedChildren.map((child) => child.guid))
-        const externalChildren = childrenByParent.get(pid) ?? []
-        const merged = [...cachedChildren]
-        for (const child of externalChildren) {
-          if (cachedGuidSet.has(child.guid)) {
-            continue
-          }
-          changed = true
-          merged.push(child)
+    queueMicrotask(() => {
+      setSubtasksByGuid((prev) => {
+        let changed = false
+        const taskByGuid = new Map(tasks.map((item) => [item.guid, item]))
+        const childrenByParent = new Map<string, Task[]>()
+        for (const item of tasks) {
+          if (!item.parent_task_guid) continue
+          const children = childrenByParent.get(item.parent_task_guid) ?? []
+          children.push(item)
+          childrenByParent.set(item.parent_task_guid, children)
         }
 
-        next[pid] = merged
-      }
-      return changed ? next : prev
+        const next: Record<string, Task[]> = {}
+        for (const [pid, list] of Object.entries(prev)) {
+          const cachedChildren = list.flatMap((child) => {
+            const fresh = taskByGuid.get(child.guid)
+            if (!fresh) {
+              changed = true
+              return []
+            }
+            if (fresh !== child) {
+              changed = true
+              return [fresh]
+            }
+            return [child]
+          })
+          const cachedGuidSet = new Set(cachedChildren.map((child) => child.guid))
+          const externalChildren = childrenByParent.get(pid) ?? []
+          const merged = [...cachedChildren]
+          for (const child of externalChildren) {
+            if (cachedGuidSet.has(child.guid)) {
+              continue
+            }
+            changed = true
+            merged.push(child)
+          }
+
+          next[pid] = merged
+        }
+        return changed ? next : prev
+      })
     })
   }, [tasks])
 
@@ -623,39 +614,20 @@ export default function TaskTable({
     }
   }, [subtasksByGuid])
 
-  const handleStartCreateSubtask = useCallback((parentTask: Task) => {
-    setExpandedTaskGuids((prev) => {
-      if (prev.has(parentTask.guid)) {
-        return prev
-      }
-      const next = new Set(prev)
-      next.add(parentTask.guid)
-      return next
-    })
-    setSubtasksByGuid((prev) => {
-      if (prev[parentTask.guid]) {
-        return prev
-      }
-      return {
-        ...prev,
-        [parentTask.guid]: [],
-      }
-    })
-    onTaskClick(parentTask)
-  }, [onTaskClick])
-
   useEffect(() => {
     if (!pendingExpandTaskGuid) {
       return
     }
 
-    setExpandedTaskGuids((prev) => {
-      if (prev.has(pendingExpandTaskGuid)) {
-        return prev
-      }
-      const next = new Set(prev)
-      next.add(pendingExpandTaskGuid)
-      return next
+    queueMicrotask(() => {
+      setExpandedTaskGuids((prev) => {
+        if (prev.has(pendingExpandTaskGuid)) {
+          return prev
+        }
+        const next = new Set(prev)
+        next.add(pendingExpandTaskGuid)
+        return next
+      })
     })
 
     if (!subtasksByGuid[pendingExpandTaskGuid]) {
@@ -763,7 +735,7 @@ export default function TaskTable({
       next.delete(sectionGuid)
       return next
     })
-    setNewTaskAssigneeIds([currentUser.id])
+    setNewTaskAssigneeId(currentUser.id)
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
@@ -783,7 +755,7 @@ export default function TaskTable({
   const resetInlineCreate = () => {
     setCreatingInSection(null)
     setNewTaskTitle('')
-    setNewTaskAssigneeIds([])
+    setNewTaskAssigneeId(undefined)
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
@@ -791,7 +763,7 @@ export default function TaskTable({
     setActiveAssigneePickerKey(null)
   }
 
-  const handleInlineCreate = async (sectionGuid?: string) => {
+  const handleInlineCreate = useCallback(async (sectionGuid?: string) => {
     const submittingKey = sectionGuid ?? '__default__'
     if (inlineCreateSubmittingRef.current === submittingKey || submittingSectionGuid === sectionGuid) {
       return
@@ -804,9 +776,7 @@ export default function TaskTable({
     inlineCreateSubmittingRef.current = submittingKey
     setSubmittingSectionGuid(sectionGuid ?? null)
     try {
-      const assigneeId = newTaskAssigneeIds.length > 0
-        ? newTaskAssigneeIds[0]
-        : currentUser.id
+      const assigneeId = newTaskAssigneeId ?? currentUser.id
       const apiTask = await createTaskApi({
         project_id: tasklist!.guid,
         title: summary,
@@ -860,11 +830,24 @@ export default function TaskTable({
       inlineCreateSubmittingRef.current = null
       setSubmittingSectionGuid(null)
     }
-  }
+  }, [
+    currentUser.id,
+    newTaskTitle,
+    submittingSectionGuid,
+    newTaskAssigneeId,
+    newTaskPriority,
+    newTaskStart,
+    newTaskDue,
+    tasklist,
+    sections,
+    onTaskCreated,
+    onRefresh,
+    onTaskCreatedDetailOpen,
+  ])
 
-  const handleInlineCreateSubmit = (sectionGuid?: string) => {
+  const handleInlineCreateSubmit = useCallback((sectionGuid?: string) => {
     void handleInlineCreate(sectionGuid)
-  }
+  }, [handleInlineCreate])
 
   useEffect(() => {
     if (!creatingInSection) {
@@ -924,13 +907,13 @@ export default function TaskTable({
     })
   }
 
-  const handleTaskUpdate = (nextTask: Task) => {
+  const handleTaskUpdate = useCallback((nextTask: Task) => {
     updateSubtaskInCache(nextTask)
     onTaskUpdated?.(nextTask)
     if (!onTaskUpdated) {
       onRefresh()
     }
-  }
+  }, [onRefresh, onTaskUpdated])
 
   const tasksAfterFilter = tasks.filter((task) => {
     // 过滤掉有父任务的子任务，子任务通过父行展开显示
@@ -1349,7 +1332,6 @@ export default function TaskTable({
     }
   }
 
-  const visibleColumns = visibleColumnKeys.length
   const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
   const taskCreateMotionStyle = {
     ['--task-create-duration' as string]: token.motionDurationMid,
@@ -1425,7 +1407,6 @@ export default function TaskTable({
   ]
 
   const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
-  const [headerAddOpen, setHeaderAddOpen] = useState(false)
   const [customFieldTypeMenuOpen, setCustomFieldTypeMenuOpen] = useState(false)
 
   const handleFieldConfigOpenChange = (open: boolean) => {
@@ -1437,7 +1418,6 @@ export default function TaskTable({
 
   const closeFieldConfig = () => {
     setFieldConfigOpen(false)
-    setHeaderAddOpen(false)
     setCustomFieldTypeMenuOpen(false)
   }
 
@@ -1645,7 +1625,7 @@ export default function TaskTable({
           <AssigneePicker
             pickerKey={`inline-assignee-${sectionGuid}`}
             open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
-            value={newTaskAssigneeIds}
+            value={newTaskAssigneeId}
             users={users}
             isTasklistView={isTasklistView}
             placeholderIcon={
@@ -1654,7 +1634,7 @@ export default function TaskTable({
                 style={{ color: '#b8bcc5', fontSize: 16 }}
               />
             }
-            onChange={setNewTaskAssigneeIds}
+            onChange={setNewTaskAssigneeId}
             onInteract={markInlineCreateInteracting}
             onOpenChange={(open) => {
               setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
@@ -1733,6 +1713,353 @@ export default function TaskTable({
       {showColumn('created') && <div className="cell cell-created" />}
       {isTasklistView && <div className="cell cell-more" />}
     </div>
+  )
+
+  const handleCustomFieldValueChange = useCallback(
+    async (task: Task, field: CustomFieldDef, value: CustomFieldValue) => {
+      const nextCustomFields = [
+        ...task.custom_fields.filter((item) => item.guid !== field.guid),
+        value,
+      ]
+      const nextTask = {
+        ...task,
+        custom_fields: nextCustomFields,
+      }
+      handleTaskUpdate(nextTask)
+
+      const payload: Record<string, unknown> = {
+        [field.guid]: value,
+      }
+
+      try {
+        // 这里统一走字段值补丁接口，避免新建字段后还要跳到别处才能录入值。
+        await patchTaskCustomFields(task.guid, payload)
+      } catch {
+        handleTaskUpdate(task)
+        message.error('更新自定义字段失败')
+      }
+    },
+    [handleTaskUpdate],
+  )
+
+  function buildTaskTreeRows(list: Task[], depth = 0): TaskTableRow[] {
+    return list.map((task) => {
+      const children = subtasksByGuid[task.guid] ?? []
+      return {
+        ...task,
+        key: task.guid,
+        tableDepth: depth,
+        children: children.length > 0 ? buildTaskTreeRows(children, depth + 1) : undefined,
+      }
+    })
+  }
+
+  const taskColumns: ColumnsType<TaskTableRow> = [
+    {
+      key: 'title',
+      dataIndex: 'summary',
+      title: (
+        <span className="table-column-title table-column-title-main">
+          <FontSizeOutlined />
+          <span>任务标题</span>
+        </span>
+      ),
+      width: 420,
+      render: (_value, record) => (
+        <TaskTitleCell
+          task={record}
+          depth={record.tableDepth}
+          expanded={expandedTaskGuids.has(record.guid)}
+          loadedSubtaskCount={(subtasksByGuid[record.guid] ?? []).length}
+          onToggleExpand={handleToggleExpand}
+          onToggleStatus={handleToggleStatus}
+          onOpenDetail={() => onTaskClick(record)}
+          onUpdate={handleTaskUpdate}
+        />
+      ),
+    },
+  ]
+
+  if (showColumn('priority')) {
+    taskColumns.push({
+      key: 'priority',
+      dataIndex: 'priority',
+      title: <span>优先级</span>,
+      width: 96,
+      render: (_value, record) => <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />,
+    })
+  }
+
+  if (showColumn('assignee')) {
+    taskColumns.push({
+      key: 'assignee',
+      dataIndex: 'members',
+      title: (
+        <span className="table-column-title">
+          <UserOutlined />
+          <span>负责人</span>
+        </span>
+      ),
+      width: 156,
+      render: (_value, record) => (
+        <TaskAssigneeCell
+          task={record}
+          users={users}
+          isTasklistView={isTasklistView}
+          activeAssigneePickerKey={activeAssigneePickerKey}
+          onUpdate={handleTaskUpdate}
+          onAssigneePickerOpenChange={setActiveAssigneePickerKey}
+        />
+      ),
+    })
+  }
+
+  if (showColumn('estimate')) {
+    taskColumns.push({
+      key: 'estimate',
+      dataIndex: 'estimate',
+      title: <span>预估工时</span>,
+      width: 104,
+      render: () => <span className="custom-field-text">-</span>,
+    })
+  }
+
+  if (showColumn('start')) {
+    taskColumns.push({
+      key: 'start',
+      dataIndex: 'start',
+      title: (
+        <span className="table-column-title">
+          <ClockCircleOutlined />
+          <span>开始时间</span>
+        </span>
+      ),
+      width: 120,
+      render: (_value, record) => (
+        <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
+      ),
+    })
+  }
+
+  if (showColumn('due')) {
+    taskColumns.push({
+      key: 'due',
+      dataIndex: 'due',
+      title: (
+        <span className="table-column-title">
+          <CalendarOutlined />
+          <span>截止时间</span>
+        </span>
+      ),
+      width: 120,
+      render: (_value, record) => (
+        <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
+      ),
+    })
+  }
+
+  if (showColumn('creator')) {
+    taskColumns.push({
+      key: 'creator',
+      dataIndex: 'creator',
+      title: (
+        <span className="table-column-title">
+          <UserOutlined />
+          <span>创建人</span>
+        </span>
+      ),
+      width: 108,
+      render: (_value, record) => {
+        const creatorUser = users.find((u) => u.id === record.creator.id)
+        return creatorUser ? (
+          <Tooltip title={creatorUser.name}>
+            <Avatar
+              size={20}
+              style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
+            >
+              {creatorUser.name.slice(0, 1)}
+            </Avatar>
+          </Tooltip>
+        ) : null
+      },
+    })
+  }
+
+  if (showColumn('created')) {
+    taskColumns.push({
+      key: 'created',
+      dataIndex: 'created_at',
+      title: <span>创建时间</span>,
+      width: 140,
+      render: (value: string) => dayjs(Number(value)).format('M月D日 HH:mm'),
+    })
+  }
+
+  if (visibleColumnKeys.includes('subtaskProgress')) {
+    taskColumns.push({
+      key: 'subtaskProgress',
+      dataIndex: 'subtask_count',
+      title: <span>子任务进度</span>,
+      width: 120,
+      render: (value: number) => (
+        <span className="custom-field-text">{value > 0 ? `0 / ${value}` : '-'}</span>
+      ),
+    })
+  }
+
+  if (visibleColumnKeys.includes('taskSource')) {
+    taskColumns.push({
+      key: 'taskSource',
+      dataIndex: 'source',
+      title: <span>任务来源</span>,
+      width: 120,
+      render: () => <span className="custom-field-text">任务</span>,
+    })
+  }
+
+  if (visibleColumnKeys.includes('assigner')) {
+    taskColumns.push({
+      key: 'assigner',
+      dataIndex: 'creator',
+      title: <span>分配人</span>,
+      width: 120,
+      render: (_value, record) => {
+        const creatorUser = users.find((u) => u.id === record.creator.id)
+        return <span className="custom-field-text">{creatorUser?.name ?? '-'}</span>
+      },
+    })
+  }
+
+  if (visibleColumnKeys.includes('followers')) {
+    taskColumns.push({
+      key: 'followers',
+      dataIndex: 'members',
+      title: <span>关注人</span>,
+      width: 108,
+      render: (_value, record) => {
+        const followerCount = new Set([
+          ...(record.participant_ids ?? []),
+          ...record.members
+            .filter((member) => member.role === 'follower')
+            .map((member) => member.id),
+        ]).size
+        return <span className="custom-field-text">{followerCount || '-'}</span>
+      },
+    })
+  }
+
+  if (visibleColumnKeys.includes('completed')) {
+    taskColumns.push({
+      key: 'completed',
+      dataIndex: 'completed_at',
+      title: <span>完成时间</span>,
+      width: 140,
+      render: (value: string) => (
+        <span className="custom-field-text">
+          {value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-'}
+        </span>
+      ),
+    })
+  }
+
+  if (visibleColumnKeys.includes('updated')) {
+    taskColumns.push({
+      key: 'updated',
+      dataIndex: 'updated_at',
+      title: <span>更新时间</span>,
+      width: 140,
+      render: (value: string) => (
+        <span className="custom-field-text">
+          {dayjs(Number(value)).format('M月D日 HH:mm')}
+        </span>
+      ),
+    })
+  }
+
+  if (visibleColumnKeys.includes('taskId')) {
+    taskColumns.push({
+      key: 'taskId',
+      dataIndex: 'task_id',
+      title: <span>任务 ID</span>,
+      width: 140,
+      render: (value: string) => <span className="custom-field-text">{value}</span>,
+    })
+  }
+
+  if (visibleColumnKeys.includes('sourceCategory')) {
+    taskColumns.push({
+      key: 'sourceCategory',
+      dataIndex: 'sourceCategory',
+      title: <span>来源类别</span>,
+      width: 120,
+      render: () => <span className="custom-field-text">任务列表</span>,
+    })
+  }
+
+  visibleCustomFieldDefs.forEach((field) => {
+    taskColumns.push({
+      key: field.guid,
+      dataIndex: field.guid,
+      title: <span>{field.name}</span>,
+      width: 160,
+      render: (_value, record) => (
+        <CustomFieldCell
+          field={field}
+          task={record}
+          users={users}
+          onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
+        />
+      ),
+    })
+  })
+
+  const visibleSectionGroups = groupedTasks.filter(
+    ({ section }) => !shouldGroupBySection || !collapsedSections.has(section.guid),
+  )
+
+  const renderSectionTable = (sectionTasks: Task[], showHeader: boolean) => (
+    <Table<TaskTableRow>
+      className="task-grid-table"
+      rowKey="guid"
+      size="small"
+      pagination={false}
+      showHeader={showHeader}
+      columns={taskColumns}
+      dataSource={buildTaskTreeRows(sectionTasks)}
+      scroll={{ x: 'max-content' }}
+      expandable={{
+        expandedRowKeys: Array.from(expandedTaskGuids),
+        showExpandColumn: false,
+        indentSize: 20,
+        rowExpandable: (record) => record.subtask_count > 0,
+        onExpand: (_expanded, record) => {
+          void handleToggleExpand(record)
+        },
+      }}
+      rowClassName={(record) =>
+        [
+          'task-table-row',
+          record.status === 'done' ? 'done' : '',
+          record.guid === animatedTaskGuid ? 'task-row-new' : '',
+          record.guid === selectedTaskGuid ? 'selected' : '',
+          draggingTaskGuid === record.guid ? 'dragging' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+      }
+      onRow={(record) => ({
+        draggable: isTasklistView && record.tableDepth === 0,
+        onDragStart:
+          isTasklistView && record.tableDepth === 0
+            ? (event) => handleTaskDragStart(event, record.guid)
+            : undefined,
+        onDragEnd:
+          isTasklistView && record.tableDepth === 0 ? clearDragState : undefined,
+      })}
+      locale={{
+        emptyText: <div className="table-empty-state">{config.emptyState?.title ?? '暂无任务'}</div>,
+      }}
+    />
   )
 
   return (
@@ -1851,99 +2178,6 @@ export default function TaskTable({
           </>
         )}
       </div>
-
-      {config.showColumnHeader !== false && (
-        <div
-          className={`table-columns ${isTasklistView ? 'tasklist-columns' : ''}`}
-          style={{ ['--visible-columns' as string]: visibleColumns }}
-        >
-          {showColumn('title') && (
-            <div className="col col-title">
-              <FontSizeOutlined style={{ marginRight: 4 }} /><span>任务标题</span>
-            </div>
-          )}
-          {showColumn('priority') && (
-            <div className="col col-priority">
-              <span>优先级</span>
-            </div>
-          )}
-          {showColumn('assignee') && (
-            <div className="col col-assignee">
-              <UserOutlined style={{ marginRight: 4 }} /><span>负责人</span>
-            </div>
-          )}
-          {showColumn('estimate') && (
-            <div className="col col-estimate">
-              <span>预估工时</span>
-            </div>
-          )}
-          {showColumn('start') && (
-            <div className="col col-start">
-              <ClockCircleOutlined style={{ marginRight: 4 }} /><span>开始时间</span>
-            </div>
-          )}
-          {showColumn('due') && (
-            <div className="col col-due">
-              <CalendarOutlined style={{ marginRight: 4 }} /><span>截止时间</span>
-            </div>
-          )}
-          {showColumn('creator') && (
-            <div className="col col-creator">
-              <UserOutlined style={{ marginRight: 4 }} /><span>创建人</span>
-            </div>
-          )}
-          {showColumn('created') && (
-            <div className="col col-created">
-              <span>创建时间</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('subtaskProgress') && (
-            <div className="col col-custom">
-              <span>子任务进度</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('taskSource') && (
-            <div className="col col-custom">
-              <span>任务来源</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('assigner') && (
-            <div className="col col-custom">
-              <span>分配人</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('followers') && (
-            <div className="col col-custom">
-              <span>关注人</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('completed') && (
-            <div className="col col-custom">
-              <span>完成时间</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('updated') && (
-            <div className="col col-custom">
-              <span>更新时间</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('taskId') && (
-            <div className="col col-custom">
-              <span>任务 ID</span>
-            </div>
-          )}
-          {visibleColumnKeys.includes('sourceCategory') && (
-            <div className="col col-custom">
-              <span>来源类别</span>
-            </div>
-          )}
-          {visibleCustomFieldDefs.map((field) => (
-            <div key={field.guid} className="col col-custom">
-              <span>{field.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="table-body">
         <>
@@ -2069,55 +2303,13 @@ export default function TaskTable({
 
               {(!shouldGroupBySection || !collapsedSections.has(section.guid)) && (
                 <>
-                  {(() => {
-                    const renderTask = (
-                      task: Task,
-                      depth: number,
-                    ): React.ReactNode => {
-                      const isExpanded = expandedTaskGuids.has(task.guid)
-                      const children = subtasksByGuid[task.guid] ?? []
-                      return (
-                        <div key={task.guid}>
-                          <div
-                            draggable={isTasklistView && depth === 0}
-                            onDragStart={
-                              depth === 0
-                                ? (e) => handleTaskDragStart(e, task.guid)
-                                : undefined
-                            }
-                            onDragEnd={clearDragState}
-                            className={`task-row-wrap ${
-                              draggingTaskGuid === task.guid ? 'dragging' : ''
-                            }`}
-                          >
-                            <TaskRow
-                              task={task}
-                              users={users}
-                              columns={visibleColumnKeys}
-                              customFields={visibleCustomFieldDefs}
-                              isTasklistView={isTasklistView}
-                              activeAssigneePickerKey={activeAssigneePickerKey}
-                              isNew={task.guid === animatedTaskGuid}
-                              isSelected={task.guid === selectedTaskGuid}
-                              depth={depth}
-                              expanded={isExpanded}
-                              loadedSubtaskCount={children.length}
-                              onToggleExpand={handleToggleExpand}
-                              onToggleStatus={handleToggleStatus}
-                              onOpenDetail={() => onTaskClick(task)}
-                              onUpdate={handleTaskUpdate}
-                              onAssigneePickerOpenChange={setActiveAssigneePickerKey}
-                              onStartCreateSubtask={handleStartCreateSubtask}
-                              onTaskDeleted={onTaskDeleted}
-                            />
-                          </div>
-                          {isExpanded &&
-                            children.map((child) => renderTask(child, depth + 1))}
-                        </div>
-                      )
-                    }
-                    return sectionTasks.map((task) => renderTask(task, 0))
-                  })()}
+                  {renderSectionTable(
+                    sectionTasks,
+                    config.showColumnHeader !== false &&
+                      visibleSectionGroups.findIndex(
+                        (group) => group.section.guid === section.guid,
+                      ) === 0,
+                  )}
 
                   {shouldGroupBySection && creatingInSection === section.guid ? (
                     createTaskInlineRow(section.guid)
@@ -2180,15 +2372,8 @@ export default function TaskTable({
   )
 }
 
-interface TaskRowProps {
+interface TaskTitleCellProps {
   task: Task
-  users: User[]
-  columns: ExtendedColumnKey[]
-  customFields: CustomFieldDef[]
-  isTasklistView: boolean
-  activeAssigneePickerKey: string | null
-  isNew?: boolean
-  isSelected?: boolean
   depth?: number
   expanded?: boolean
   loadedSubtaskCount?: number
@@ -2196,9 +2381,26 @@ interface TaskRowProps {
   onToggleStatus: (e: React.MouseEvent, task: Task) => void
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
+}
+
+interface TaskPriorityCellProps {
+  task: Task
+  onUpdate: (task: Task) => void
+}
+
+interface TaskAssigneeCellProps {
+  task: Task
+  users: User[]
+  isTasklistView: boolean
+  activeAssigneePickerKey: string | null
+  onUpdate: (task: Task) => void
   onAssigneePickerOpenChange: (key: string | null) => void
-  onStartCreateSubtask?: (task: Task) => void
-  onTaskDeleted?: (taskGuid: string) => void
+}
+
+interface TaskDateCellProps {
+  task: Task
+  field: 'start' | 'due'
+  onUpdate: (task: Task) => void
 }
 
 interface CustomFieldCellProps {
@@ -2324,15 +2526,8 @@ function CustomFieldCell({
   )
 }
 
-function TaskRow({
+function TaskTitleCell({
   task,
-  users,
-  columns,
-  customFields,
-  isTasklistView,
-  activeAssigneePickerKey,
-  isNew,
-  isSelected,
   depth = 0,
   expanded = false,
   loadedSubtaskCount,
@@ -2340,18 +2535,8 @@ function TaskRow({
   onToggleStatus,
   onOpenDetail,
   onUpdate,
-  onAssigneePickerOpenChange,
-}: TaskRowProps) {
+}: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
-  const assignees = task.members.filter((m) => m.role === 'assignee')
-  const assigneeIds = assignees.map((assignee) => assignee.id)
-  const assigneePickerKey = `task-assignee-${task.guid}`
-  const creatorUser = users.find((u) => u.id === task.creator.id)
-  const has = (col: ColumnKey) => columns.includes(col)
-  const showPriority = task.priority !== Priority.None
-  const isSubtask = Boolean(task.parent_task_guid)
-  const startDate = task.start ? dayjs(Number(task.start.timestamp)) : null
-  const dueDate = task.due ? dayjs(Number(task.due.timestamp)) : null
 
   const handleRenameSummary = async (rawName: string) => {
     setEditingName(false)
@@ -2366,6 +2551,87 @@ function TaskRow({
       message.error('重命名任务失败')
     }
   }
+
+  return (
+    <div className={`task-title-cell ${task.status === 'done' ? 'done' : ''}`}>
+      <div className="task-row-main">
+        {depth > 0 && (
+          <span
+            className="task-tree-guide"
+            style={{ width: depth * 20 }}
+            aria-hidden
+          />
+        )}
+        <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={task.status === 'done'}
+            onClick={(e) => onToggleStatus(e, task)}
+          />
+        </div>
+        <div className="cell cell-title">
+          {task.subtask_count > 0 ? (
+            <CaretRightOutlined
+              className="subtask-icon"
+              style={{
+                cursor: 'pointer',
+                transform: expanded ? 'rotate(90deg)' : 'rotate(0)',
+                transition: 'transform 0.15s',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleExpand?.(task)
+              }}
+            />
+          ) : depth > 0 ? (
+            <span className="subtask-icon" style={{ visibility: 'hidden' }}>
+              <CaretRightOutlined />
+            </span>
+          ) : null}
+          {editingName ? (
+            <div className="task-name-editor">
+              <EditableInput
+                placeholder="输入任务名称"
+                defaultValue={task.summary}
+                onSubmit={(value) => {
+                  void handleRenameSummary(value)
+                }}
+              />
+            </div>
+          ) : (
+            <span
+              className={task.status === 'done' ? 'done-text' : 'title-text'}
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingName(true)
+              }}
+            >
+              {task.summary}
+            </span>
+          )}
+          {task.subtask_count > 0 && !editingName && (
+            <Tag className="subtask-tag">
+              {loadedSubtaskCount ?? 0} / {task.subtask_count}
+            </Tag>
+          )}
+          <Button
+            type="text"
+            size="small"
+            className="task-detail-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenDetail()
+            }}
+          >
+            详情
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
+  const showPriority = task.priority !== Priority.None
 
   const handlePriorityChange = async (nextPriority: Priority) => {
     if (nextPriority === task.priority) return
@@ -2382,37 +2648,81 @@ function TaskRow({
     }
   }
 
-  const handleAssigneeChange = async (values: string[]) => {
-    const currentAssignees = task.members
-      .filter((m) => m.role === 'assignee')
-      .map((m) => m.id)
-    const currentPrimary = currentAssignees[0] ?? null
-    const desiredPrimary = values[0] ?? null
+  return (
+    <div className="cell cell-priority" onClick={(e) => e.stopPropagation()}>
+      <Dropdown
+        trigger={['click']}
+        menu={{
+          selectable: true,
+          selectedKeys: [String(task.priority)],
+          items: [
+            { key: String(Priority.None), label: '无优先级' },
+            { key: String(Priority.Low), label: '低' },
+            { key: String(Priority.Medium), label: '中' },
+            { key: String(Priority.High), label: '高' },
+            { key: String(Priority.Urgent), label: '紧急' },
+          ],
+          onClick: ({ key }) => {
+            void handlePriorityChange(Number(key) as Priority)
+          },
+        }}
+      >
+        {showPriority ? (
+          <Tag
+            variant="filled"
+            className="priority-tag priority-tag-editable"
+            style={{
+              color: PriorityColor[task.priority],
+              backgroundColor: `${PriorityColor[task.priority]}1a`,
+              cursor: 'pointer',
+            }}
+          >
+            <FlagFilled />
+            <span>{PriorityLabel[task.priority]}</span>
+          </Tag>
+        ) : (
+          <span
+            className="priority-placeholder"
+            style={{ cursor: 'pointer', display: 'inline-block', minWidth: 24 }}
+          >
+            -
+          </span>
+        )}
+      </Dropdown>
+    </div>
+  )
+}
 
-    const toAdd = values.slice(1).filter((id) => !currentAssignees.includes(id))
-    const toRemove = currentAssignees
-      .slice(1)
-      .filter((id) => !values.includes(id))
+function TaskAssigneeCell({
+  task,
+  users,
+  isTasklistView,
+  activeAssigneePickerKey,
+  onUpdate,
+  onAssigneePickerOpenChange,
+}: TaskAssigneeCellProps) {
+  const assignees = task.members.filter((m) => m.role === 'assignee')
+  const assigneeId = assignees[0]?.id
+  const assigneePickerKey = `task-assignee-${task.guid}`
 
+  const handleAssigneeChange = async (value?: string) => {
+    const currentPrimary = assigneeId ?? null
+    const desiredPrimary = value ?? null
     const newMembers = [
-      ...values.map((id) => ({
-        id,
-        role: 'assignee' as const,
-        type: 'user' as const,
-        name: users.find((u) => u.id === id)?.name,
-      })),
+      ...(desiredPrimary
+        ? [{
+          id: desiredPrimary,
+          role: 'assignee' as const,
+          type: 'user' as const,
+          name: users.find((u) => u.id === desiredPrimary)?.name,
+        }]
+        : []),
       ...task.members.filter((m) => m.role === 'follower'),
     ]
     onUpdate({ ...task, members: newMembers })
     try {
       if (desiredPrimary !== currentPrimary) {
         await patchTaskAssignee(task.guid, desiredPrimary)
-      }
-      if (toAdd.length > 0) {
-        await addParticipants(task.guid, toAdd)
-      }
-      for (const uid of toRemove) {
-        await removeParticipant(task.guid, uid)
       }
       const fresh = await getTask(task.guid)
       onUpdate(apiTaskToTask(fresh))
@@ -2422,26 +2732,46 @@ function TaskRow({
     }
   }
 
-  const handleDateChange = async (
-    field: 'start' | 'due',
-    date: dayjs.Dayjs | null,
-  ) => {
+  return (
+    <div className="cell cell-assignee" onClick={(e) => e.stopPropagation()}>
+      <AssigneePicker
+        pickerKey={assigneePickerKey}
+        open={activeAssigneePickerKey === assigneePickerKey}
+        value={assigneeId}
+        users={users}
+        isTasklistView={isTasklistView}
+        triggerClassName="assignee-trigger"
+        placeholderIcon={<UserOutlined className="empty-assignee" />}
+        onChange={(value) => void handleAssigneeChange(value)}
+        onOpenChange={(open) => {
+          onAssigneePickerOpenChange(open ? assigneePickerKey : null)
+        }}
+      />
+    </div>
+  )
+}
+
+function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
+  const isSubtask = Boolean(task.parent_task_guid)
+  const date = task[field] ? dayjs(Number(task[field]!.timestamp)) : null
+
+  const handleDateChange = async (nextDate: dayjs.Dayjs | null) => {
     if (field === 'start' && isSubtask) {
       message.warning('子任务开始时间跟随父任务，不能单独修改')
       return
     }
 
     const patch: Partial<Task> = {}
-    if (date) {
-      patch[field] = { timestamp: date.valueOf().toString(), is_all_day: false }
+    if (nextDate) {
+      patch[field] = { timestamp: nextDate.valueOf().toString(), is_all_day: false }
     } else {
       patch[field] = undefined
     }
     onUpdate({ ...task, ...patch })
     try {
       const apiPatch: Record<string, string | null> = {}
-      if (field === 'start') apiPatch.start_date = date ? date.toISOString() : null
-      else apiPatch.due_date = date ? date.toISOString() : null
+      if (field === 'start') apiPatch.start_date = nextDate ? nextDate.toISOString() : null
+      else apiPatch.due_date = nextDate ? nextDate.toISOString() : null
       const apiTask = await updateTaskApi(task.guid, apiPatch)
       onUpdate(apiTaskToTask(apiTask))
     } catch {
@@ -2450,344 +2780,58 @@ function TaskRow({
     }
   }
 
-  const handleCustomFieldValueChange = async (
-    field: CustomFieldDef,
-    value: CustomFieldValue,
-  ) => {
-    const nextCustomFields = [
-      ...task.custom_fields.filter((item) => item.guid !== field.guid),
-      value,
-    ]
-    const nextTask = {
-      ...task,
-      custom_fields: nextCustomFields,
-    }
-    onUpdate(nextTask)
-
-    const payload: Record<string, unknown> = {
-      [field.guid]: value,
-    }
-
-    try {
-      // 这里统一走字段值补丁接口，避免新建字段后还要跳到别处才能录入值。
-      await patchTaskCustomFields(task.guid, payload)
-    } catch {
-      onUpdate(task)
-      message.error('更新自定义字段失败')
-    }
-  }
-
   return (
-    <div
-      className={`task-row ${task.status === 'done' ? 'done' : ''} ${isNew ? 'task-row-new' : ''} ${isSelected ? 'selected' : ''}`}
-    >
-      <div className="task-row-main">
-        {depth > 0 && (
-          <span
-            className="task-tree-guide"
-            style={{ width: depth * 20 }}
-            aria-hidden
-          />
-        )}
-        <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={task.status === 'done'}
-            onClick={(e) => onToggleStatus(e, task)}
-          />
-        </div>
-        {has('title') && (
-          <div className="cell cell-title">
-            {task.subtask_count > 0 ? (
-              <CaretRightOutlined
-                className="subtask-icon"
-                style={{
-                  cursor: 'pointer',
-                  transform: expanded ? 'rotate(90deg)' : 'rotate(0)',
-                  transition: 'transform 0.15s',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onToggleExpand?.(task)
-                }}
-              />
-            ) : depth > 0 ? (
-              <span className="subtask-icon" style={{ visibility: 'hidden' }}>
-                <CaretRightOutlined />
-              </span>
-            ) : null}
-            {editingName ? (
-              <div className="task-name-editor">
-                <EditableInput
-                  placeholder="输入任务名称"
-                  defaultValue={task.summary}
-                  onSubmit={(value) => {
-                    void handleRenameSummary(value)
-                  }}
-                />
-              </div>
-            ) : (
-              <span
-                className={task.status === 'done' ? 'done-text' : 'title-text'}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setEditingName(true)
-                }}
-              >
-                {task.summary}
-              </span>
-            )}
-            {task.subtask_count > 0 && !editingName && (
-              <Tag className="subtask-tag">
-                {loadedSubtaskCount ?? 0} / {task.subtask_count}
-              </Tag>
-            )}
-            <Button
-              type="text"
-              size="small"
-              className="task-detail-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenDetail()
-              }}
-            >
-              详情
-            </Button>
-          </div>
-        )}
-      </div>
-      {has('priority') && (
-        <div className="cell cell-priority" onClick={(e) => e.stopPropagation()}>
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              selectable: true,
-              selectedKeys: [String(task.priority)],
-              items: [
-                { key: String(Priority.None), label: '无优先级' },
-                { key: String(Priority.Low), label: '低' },
-                { key: String(Priority.Medium), label: '中' },
-                { key: String(Priority.High), label: '高' },
-                { key: String(Priority.Urgent), label: '紧急' },
-              ],
-              onClick: ({ key }) => {
-                void handlePriorityChange(Number(key) as Priority)
-              },
-            }}
-          >
-            {showPriority ? (
-              <Tag
-                variant="filled"
-                className="priority-tag priority-tag-editable"
-                style={{
-                  color: PriorityColor[task.priority],
-                  backgroundColor: `${PriorityColor[task.priority]}1a`,
-                  cursor: 'pointer',
-                }}
-              >
-                <FlagFilled />
-                <span>{PriorityLabel[task.priority]}</span>
-              </Tag>
-            ) : (
-              <span
-                className="priority-placeholder"
-                style={{ cursor: 'pointer', display: 'inline-block', minWidth: 24 }}
-              >
-                -
-              </span>
-            )}
-          </Dropdown>
-        </div>
-      )}
-      {has('assignee') && (
-        <div className="cell cell-assignee" onClick={(e) => e.stopPropagation()}>
-          <AssigneePicker
-            pickerKey={assigneePickerKey}
-            open={activeAssigneePickerKey === assigneePickerKey}
-            value={assigneeIds}
-            users={users}
-            isTasklistView={isTasklistView}
-            triggerClassName="assignee-trigger"
-            placeholderIcon={<UserOutlined className="empty-assignee" />}
-            onChange={(values) => void handleAssigneeChange(values)}
-            onOpenChange={(open) => {
-              onAssigneePickerOpenChange(open ? assigneePickerKey : null)
-            }}
-          />
-        </div>
-      )}
-      {has('estimate') && (
-        <div className="cell cell-estimate">
-          <span className="date-text" />
-        </div>
-      )}
-      {has('start') && (
-        <div className="cell cell-start" onClick={(e) => e.stopPropagation()}>
-          {isSubtask ? (
-            <div
-              className="date-trigger date-trigger-readonly"
-              title="子任务开始时间跟随父任务，不能单独修改"
-            >
-              {startDate ? (
-                <span className="date-text">{startDate.format('M月D日')}</span>
-              ) : (
-                <CalendarOutlined className="empty-date-icon" />
-              )}
-            </div>
+    <div className={`cell cell-${field}`} onClick={(e) => e.stopPropagation()}>
+      {field === 'start' && isSubtask ? (
+        <div
+          className="date-trigger date-trigger-readonly"
+          title="子任务开始时间跟随父任务，不能单独修改"
+        >
+          {date ? (
+            <span className="date-text">{date.format('M月D日')}</span>
           ) : (
-            <Popover
-              trigger="click"
-              placement="bottomLeft"
-              content={
-                <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-                  <Calendar
-                    fullscreen={false}
-                    value={startDate ?? undefined}
-                    onSelect={(value) => void handleDateChange('start', value)}
-                  />
-                  {startDate && (
-                    <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={() => void handleDateChange('start', null)}
-                      >
-                        清除
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              }
-            >
-              <div className="date-trigger">
-                {startDate ? (
-                  <span className="date-text">{startDate.format('M月D日')}</span>
-                ) : (
-                  <CalendarOutlined className="empty-date-icon" />
-                )}
-              </div>
-            </Popover>
+            <CalendarOutlined className="empty-date-icon" />
           )}
         </div>
-      )}
-      {has('due') && (
-        <div className="cell cell-due" onClick={(e) => e.stopPropagation()}>
-          <Popover
-            trigger="click"
-            placement="bottomLeft"
-            content={
-              <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-                <Calendar
-                  fullscreen={false}
-                  value={dueDate ?? undefined}
-                  onSelect={(value) => void handleDateChange('due', value)}
-                  disabledDate={(current) =>
-                    current && current < dayjs().startOf('day')
-                  }
-                />
-                {dueDate && (
-                  <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                    <Button
-                      type="link"
-                      size="small"
-                      onClick={() => void handleDateChange('due', null)}
-                    >
-                      清除
-                    </Button>
-                  </div>
-                )}
-              </div>
-            }
-          >
-            <div className="date-trigger">
-              {dueDate ? (
-                <span className="date-text">{dueDate.format('M月D日')}</span>
-              ) : (
-                <CalendarOutlined className="empty-date-icon" />
+      ) : (
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          content={
+            <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+              <Calendar
+                fullscreen={false}
+                value={date ?? undefined}
+                onSelect={(value) => void handleDateChange(value)}
+                disabledDate={
+                  field === 'due'
+                    ? (current) => current && current < dayjs().startOf('day')
+                    : undefined
+                }
+              />
+              {date && (
+                <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => void handleDateChange(null)}
+                  >
+                    清除
+                  </Button>
+                </div>
               )}
             </div>
-          </Popover>
-        </div>
+          }
+        >
+          <div className="date-trigger">
+            {date ? (
+              <span className="date-text">{date.format('M月D日')}</span>
+            ) : (
+              <CalendarOutlined className="empty-date-icon" />
+            )}
+          </div>
+        </Popover>
       )}
-      {has('creator') && (
-        <div className="cell cell-creator">
-          {creatorUser ? (
-            <Tooltip title={creatorUser.name}>
-              <Avatar
-                size={20}
-                style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
-              >
-                {creatorUser.name.slice(0, 1)}
-              </Avatar>
-            </Tooltip>
-          ) : null}
-        </div>
-      )}
-      {has('created') && (
-        <div className="cell cell-created">
-          {dayjs(Number(task.created_at)).format('M月D日 HH:mm')}
-        </div>
-      )}
-      {columns.includes('subtaskProgress') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">
-            {task.subtask_count > 0 ? `0 / ${task.subtask_count}` : '-'}
-          </span>
-        </div>
-      )}
-      {columns.includes('taskSource') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">任务</span>
-        </div>
-      )}
-      {columns.includes('assigner') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">{creatorUser?.name ?? '-'}</span>
-        </div>
-      )}
-      {columns.includes('followers') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">
-            {task.members.filter((member) => member.role === 'follower').length || '-'}
-          </span>
-        </div>
-      )}
-      {columns.includes('completed') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">
-            {task.completed_at && task.completed_at !== '0'
-              ? dayjs(Number(task.completed_at)).format('M月D日 HH:mm')
-              : '-'}
-          </span>
-        </div>
-      )}
-      {columns.includes('updated') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">
-            {dayjs(Number(task.updated_at)).format('M月D日 HH:mm')}
-          </span>
-        </div>
-      )}
-      {columns.includes('taskId') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">{task.task_id}</span>
-        </div>
-      )}
-      {columns.includes('sourceCategory') && (
-        <div className="cell cell-custom">
-          <span className="custom-field-text">任务列表</span>
-        </div>
-      )}
-      {customFields.map((field) => (
-        <div key={field.guid} className="cell cell-custom">
-          <CustomFieldCell
-            field={field}
-            task={task}
-            users={users}
-            onChange={(value) => void handleCustomFieldValueChange(field, value)}
-          />
-        </div>
-      ))}
-      {isTasklistView && <div className="cell cell-more" />}
     </div>
   )
 }

@@ -59,10 +59,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     ...(api.assignee_id
       ? [{ id: api.assignee_id, role: 'assignee' as const, type: 'user' as const }]
       : []),
-    ...api.participant_ids
-      .filter((id) => id !== api.assignee_id)
-      .map((id) => ({ id, role: 'assignee' as const, type: 'user' as const })),
-    ...api.follower_ids.map((id) => ({
+    ...[...api.participant_ids, ...api.follower_ids].map((id) => ({
       id,
       role: 'follower' as const,
       type: 'user' as const,
@@ -90,6 +87,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     parent_task_guid: api.parent_task_id ?? '',
     depth: api.depth,
     subtask_count: api.subtask_count,
+    participant_ids: [...api.participant_ids],
     members,
     tasklists: [{ tasklist_guid: tlGuid, section_guid: api.section_id }],
     dependencies: [],

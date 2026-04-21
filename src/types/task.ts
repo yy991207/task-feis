@@ -104,6 +104,7 @@ export interface Task {
   parent_task_guid: string
   depth?: number
   subtask_count: number
+  participant_ids?: string[]
   members: Member[]
   tasklists: TasklistRef[]
   dependencies: Dependency[]

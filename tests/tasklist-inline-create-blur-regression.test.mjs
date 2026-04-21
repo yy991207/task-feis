@@ -65,7 +65,7 @@ async function testInlineCreateSubmitDoesNotAssignRefDuringRender() {
   )
   assert.match(
     source,
-    /const handleInlineCreateSubmit = \(sectionGuid\?: string\) => \{/,
+    /const handleInlineCreateSubmit = useCallback\(\(sectionGuid\?: string\) => \{/,
     '任务清单行内新建应该用稳定函数封装提交逻辑，再给外部点击和 blur 共用',
   )
 }

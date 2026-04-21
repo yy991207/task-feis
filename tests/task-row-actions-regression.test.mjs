@@ -7,7 +7,7 @@ async function readTaskTableSource() {
 
 async function testTaskRowDoesNotRenderPlusOrMoreActions() {
   const source = await readTaskTableSource()
-  const taskRowStart = source.indexOf('function TaskRow(')
+  const taskRowStart = source.indexOf('function TaskTitleCell(')
   const taskRowEnd = source.indexOf('function formatCustomFieldValue(')
   const taskRowSource = source.slice(taskRowStart, taskRowEnd)
 
@@ -25,7 +25,7 @@ async function testTaskRowDoesNotRenderPlusOrMoreActions() {
 
 async function testTaskRowUsesExplicitDetailButtonInsteadOfBlankAreaClick() {
   const source = await readTaskTableSource()
-  const taskRowStart = source.indexOf('function TaskRow(')
+  const taskRowStart = source.indexOf('function TaskTitleCell(')
   const taskRowEnd = source.indexOf('function formatCustomFieldValue(')
   const taskRowSource = source.slice(taskRowStart, taskRowEnd)
 

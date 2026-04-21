@@ -3,14 +3,27 @@ import { request } from './request'
 
 export interface ApiAttachment {
   attachment_id: string
+  owner_type?: string
+  owner_id?: string
   task_id: string
+  team_id?: string
   file_name: string
+  file_ext?: string | null
   file_size: number
-  mime_type: string | null
-  url: string
+  mime_type?: string | null
+  content_type?: string | null
+  is_image?: boolean
+  url?: string | null
+  final_url?: string | null
+  file_url?: string | null
+  download_url?: string | null
+  oss_key?: string | null
+  oss_bucket?: string | null
   resource_id: string | null
   uploader_id: string
+  status?: string
   created_at: string
+  updated_at?: string
   is_deleted?: boolean
 }
 
@@ -108,7 +121,11 @@ export async function uploadAttachment(
   const ownerType = options?.ownerType ?? 'task'
   const presigned = await presignAttachment(taskId, file, ownerType)
   await putFileToOss(file, presigned.upload_url, presigned.upload_headers, options?.onProgress)
-  return completeAttachment(presigned.attachment_id)
+  const completed = await completeAttachment(presigned.attachment_id)
+  return {
+    ...completed,
+    final_url: completed.final_url ?? completed.url ?? presigned.final_url,
+  }
 }
 
 export async function deleteAttachment(attachmentId: string): Promise<void> {
@@ -121,6 +138,43 @@ export async function deleteAttachment(attachmentId: string): Promise<void> {
 export function buildAttachmentDownloadUrl(attachmentId: string): string {
   const base = appConfig.url.replace(/\/+$/, '')
   return `${base}/api/v1/task-center/attachments/${attachmentId}/download?user_id=${uid()}`
+}
+
+export function buildAttachmentPreviewUrl(attachment: ApiAttachment): string {
+  const base = appConfig.url.replace(/\/+$/, '')
+  return `${base}/api/v1/chat/files/preview?url=${encodeURIComponent(
+    getAttachmentPreviewSourceUrl(attachment),
+  )}`
+}
+
+function getAttachmentPreviewSourceUrl(attachment: ApiAttachment): string {
+  return (
+    attachment.download_url ||
+    attachment.url ||
+    attachment.file_url ||
+    attachment.final_url ||
+    buildAttachmentDownloadUrl(attachment.attachment_id)
+  )
+}
+
+export function isImageAttachment(attachment: ApiAttachment | null | undefined): boolean {
+  if (!attachment) {
+    return false
+  }
+
+  if (attachment.is_image === true) {
+    return true
+  }
+
+  if (attachment.content_type?.startsWith('image/')) {
+    return true
+  }
+
+  if (attachment.mime_type?.startsWith('image/')) {
+    return true
+  }
+
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.file_name)
 }
 
 export async function downloadAttachment(

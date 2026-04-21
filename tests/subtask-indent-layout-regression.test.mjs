@@ -39,13 +39,13 @@ async function testTaskRowMainAreaAppliesIndentVariable() {
 
   assert.match(
     source,
-    /\.task-row-main \{[\s\S]*display: flex;[\s\S]*flex: 1;[\s\S]*min-width: 352px;/,
+    /\.task-title-cell \{[\s\S]*\.task-row-main \{[\s\S]*display: flex;[\s\S]*flex: 1;[\s\S]*min-width: 0;/,
     '任务行样式应该给主信息区单独布局，保证树形缩进只影响勾选框和标题这一块',
   )
   assert.match(
     source,
-    /\.cell-more \{[\s\S]*width: 64px;/,
-    '任务行尾部操作区应该继续保持独立列，避免跟父子层级缩进混在一起',
+    /\.task-tree-guide \{[\s\S]*position: relative;[\s\S]*right: 12px;/,
+    '子任务缩进样式应该继续保留树形引导线，避免 antd Table 重构后丢掉层级视觉',
   )
 }
 
