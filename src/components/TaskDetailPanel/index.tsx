@@ -66,6 +66,11 @@ import {
   getTask,
   apiTaskToTask,
 } from '@/services/taskService'
+import {
+  updateProject as apiUpdateProject,
+  deleteProject as apiDeleteProject,
+  archiveProject as apiArchiveProject,
+} from '@/services/projectService'
 import './index.less'
 
 const { Text } = Typography
@@ -129,6 +134,8 @@ export default function TaskDetailPanel({
   const [commentAttachmentMap, setCommentAttachmentMap] = useState<
     Record<string, ApiAttachment>
   >({})
+  const [tasklistRenaming, setTasklistRenaming] = useState(false)
+  const [tasklistRenameValue, setTasklistRenameValue] = useState('')
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
@@ -520,6 +527,92 @@ export default function TaskDetailPanel({
     })
   }
 
+  const handleRenameTasklistSubmit = async () => {
+    if (!currentTasklist) return
+    const nextName = tasklistRenameValue.trim()
+    if (!nextName || nextName === currentTasklist.name) {
+      setTasklistRenaming(false)
+      return
+    }
+    try {
+      await apiUpdateProject(currentTasklist.guid, { name: nextName })
+      message.success('已重命名清单')
+      setTasklistRenaming(false)
+      onRefresh?.()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '重命名清单失败')
+    }
+  }
+
+  const handleCopyTasklistLink = async () => {
+    if (!currentTasklist) return
+    const url = `${window.location.origin}/?tasklist=${currentTasklist.guid}`
+    try {
+      await navigator.clipboard.writeText(url)
+      message.success('已复制链接')
+    } catch {
+      message.error('复制失败')
+    }
+  }
+
+  const handleArchiveTasklist = async () => {
+    if (!currentTasklist) return
+    try {
+      await apiArchiveProject(currentTasklist.guid)
+      message.success('已归档清单')
+      onRefresh?.()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '归档清单失败')
+    }
+  }
+
+  const handleRemoveTasklist = async () => {
+    if (!currentTasklist) return
+    try {
+      await apiDeleteProject(currentTasklist.guid)
+      message.success('已删除清单')
+      onRefresh?.()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除清单失败')
+    }
+  }
+
+  const tasklistActionMenu = {
+    items: [
+      {
+        key: 'rename',
+        label: '重命名清单',
+        onClick: () => {
+          setTasklistRenameValue(currentTasklist?.name ?? '')
+          setTasklistRenaming(true)
+        },
+      },
+      {
+        key: 'copy-link',
+        label: '复制链接',
+        onClick: () => {
+          void handleCopyTasklistLink()
+        },
+      },
+      { type: 'divider' as const },
+      {
+        key: 'archive',
+        label: '归档清单',
+        onClick: () => {
+          void handleArchiveTasklist()
+        },
+      },
+      {
+        key: 'delete',
+        label: '移除清单',
+        danger: true,
+        onClick: () => {
+          void handleRemoveTasklist()
+        },
+      },
+    ],
+  }
+
   useEffect(() => {
     let cancelled = false
     void listComments(task.guid)
@@ -693,11 +786,15 @@ export default function TaskDetailPanel({
               borderRadius: 6,
             }}
             onClick={() => {
-              void patchTaskStatus(task.guid, 'todo').then((apiTask) => {
-                const nextTask = apiTaskToTask(apiTask)
-                onTaskUpdated?.(nextTask)
-                if (!onTaskUpdated) onRefresh?.()
-              })
+              void patchTaskStatus(task.guid, 'todo')
+                .then((apiTask) => {
+                  const nextTask = apiTaskToTask(apiTask)
+                  onTaskUpdated?.(nextTask)
+                  if (!onTaskUpdated) onRefresh?.()
+                })
+                .catch((err) => {
+                  message.error(err instanceof Error ? err.message : '状态更新失败')
+                })
             }}
           >
             任务已完成
@@ -708,18 +805,22 @@ export default function TaskDetailPanel({
             icon={<CheckOutlined />}
             className="complete-btn"
             onClick={() => {
-              void patchTaskStatus(task.guid, 'done').then((apiTask) => {
-                const nextTask = apiTaskToTask(apiTask)
-                onTaskUpdated?.(nextTask)
-                if (!onTaskUpdated) onRefresh?.()
-              })
+              void patchTaskStatus(task.guid, 'done')
+                .then((apiTask) => {
+                  const nextTask = apiTaskToTask(apiTask)
+                  onTaskUpdated?.(nextTask)
+                  if (!onTaskUpdated) onRefresh?.()
+                })
+                .catch((err) => {
+                  message.error(err instanceof Error ? err.message : '状态更新失败')
+                })
             }}
           >
             完成任务
           </Button>
         )}
         <div className="detail-actions">
-          <Dropdown menu={moreMenu} trigger={['click']} placement="bottomRight">
+          <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
             <span className="detail-action-icon">
               <MoreOutlined />
             </span>
@@ -880,9 +981,21 @@ export default function TaskDetailPanel({
                 <UnorderedListOutlined className="field-icon" />
                 <div className="field-content">
                   <span className="tasklist-info">
-                    <span className="tasklist-name">
-                      {selectedTasklist?.name ?? currentTasklist.name}
-                    </span>
+                    {tasklistRenaming ? (
+                      <Input
+                        size="small"
+                        autoFocus
+                        value={tasklistRenameValue}
+                        onChange={(e) => setTasklistRenameValue(e.target.value)}
+                        onPressEnter={() => void handleRenameTasklistSubmit()}
+                        onBlur={() => void handleRenameTasklistSubmit()}
+                        style={{ maxWidth: 180 }}
+                      />
+                    ) : (
+                      <span className="tasklist-name">
+                        {selectedTasklist?.name ?? currentTasklist.name}
+                      </span>
+                    )}
                     <span className="tasklist-divider">|</span>
                     <Popover
                       trigger="click"
@@ -907,6 +1020,21 @@ export default function TaskDetailPanel({
                         <DownOutlined className="tasklist-arrow" />
                       </span>
                     </Popover>
+                    <Dropdown
+                      menu={tasklistActionMenu}
+                      trigger={['click']}
+                      placement="bottomLeft"
+                    >
+                      <MoreOutlined
+                        className="tasklist-more"
+                        style={{
+                          marginLeft: 'auto',
+                          color: '#8f959e',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                        }}
+                      />
+                    </Dropdown>
                   </span>
                 </div>
               </div>
@@ -1034,7 +1162,7 @@ export default function TaskDetailPanel({
                       >
                         <Popover
                           trigger="click"
-                          placement="bottomRight"
+                          placement="bottomLeft"
                           content={
                             <div
                               style={{ width: 260 }}
@@ -1060,7 +1188,7 @@ export default function TaskDetailPanel({
                         </Popover>
                         <Popover
                           trigger="click"
-                          placement="bottomRight"
+                          placement="bottomLeft"
                           content={
                             <div
                               style={{ width: 200 }}
@@ -1213,7 +1341,7 @@ export default function TaskDetailPanel({
                       {isMine && !isEditing && (
                         <Dropdown
                           trigger={['click']}
-                          placement="bottomRight"
+                          placement="bottomLeft"
                           menu={{
                             items: [
                               {

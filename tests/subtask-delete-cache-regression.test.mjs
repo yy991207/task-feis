@@ -19,13 +19,33 @@ async function testSubtaskCacheRemovesDeletedTasks() {
   )
   assert.match(
     source,
-    /const updated = list\.flatMap/,
+    /const cachedChildren = list\.flatMap/,
     '任务表格同步子任务缓存时，应该能过滤掉已从外部 tasks 删除的子任务',
   )
   assert.match(
     source,
     /if \(!fresh\) \{[\s\S]*changed = true[\s\S]*return \[\]/,
     '任务表格同步子任务缓存时，外部 tasks 已不存在的子任务应该从展开缓存移除',
+  )
+}
+
+async function testSubtaskCacheAddsCreatedTasks() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /const childrenByParent = new Map<string, Task\[\]>\(\)/,
+    '任务表格同步子任务缓存时，应该按 parent_task_guid 收集外部新增的子任务',
+  )
+  assert.match(
+    source,
+    /const externalChildren = childrenByParent\.get\(pid\) \?\? \[\]/,
+    '任务表格同步已展开父任务缓存时，应该读取外部 tasks 里的最新子任务列表',
+  )
+  assert.match(
+    source,
+    /for \(const child of externalChildren\)/,
+    '任务表格同步已展开父任务缓存时，应该把外部新增子任务合并进展开缓存',
   )
 }
 
@@ -49,9 +69,68 @@ async function testDeletingSubtaskUpdatesParentCount() {
   )
 }
 
+async function testCreatingSubtaskUpdatesOuterTasks() {
+  const source = await readTaskListSource()
+
+  assert.match(
+    source,
+    /const handleSubtaskCreated = useCallback/,
+    '任务详情创建子任务后，页面层应该有专门回调同步主列表状态',
+  )
+  assert.match(
+    source,
+    /setTasks\(\(prev\) => \[createdTask, \.\.\.prev\]\)/,
+    '任务详情创建子任务后，页面层应该立即把新子任务写入外部 tasks',
+  )
+  assert.match(
+    source,
+    /getTask\(createdTask\.parent_task_guid\)/,
+    '任务详情创建子任务后，页面层应该重新拉取父任务，刷新父任务 subtask_count',
+  )
+}
+
+async function testCreatingSubtaskExpandsParentInMainTable() {
+  const taskListSource = await readTaskListSource()
+  const taskTableSource = await readTaskTableSource()
+
+  assert.match(
+    taskListSource,
+    /const \[pendingExpandTaskGuid, setPendingExpandTaskGuid\] = useState<string \| null>\(null\)/,
+    '任务详情创建子任务后，页面层应该记录待展开父任务 id',
+  )
+  assert.match(
+    taskListSource,
+    /setPendingExpandTaskGuid\(createdTask\.parent_task_guid\)/,
+    '任务详情创建子任务后，页面层应该把父任务标记为待展开',
+  )
+  assert.match(
+    taskListSource,
+    /pendingExpandTaskGuid=\{pendingExpandTaskGuid\}/,
+    '页面层应该把待展开父任务 id 传给 TaskTable',
+  )
+  assert.match(
+    taskTableSource,
+    /pendingExpandTaskGuid\?: string \| null/,
+    'TaskTable 应该接收待展开父任务 id',
+  )
+  assert.match(
+    taskTableSource,
+    /setExpandedTaskGuids\(\(prev\) =>/,
+    'TaskTable 收到待展开父任务 id 后应该更新展开集合',
+  )
+  assert.match(
+    taskTableSource,
+    /onPendingExpandConsumed\?\.\(pendingExpandTaskGuid\)/,
+    'TaskTable 处理完待展开父任务后应该通知页面层消费该信号',
+  )
+}
+
 async function main() {
   await testSubtaskCacheRemovesDeletedTasks()
+  await testSubtaskCacheAddsCreatedTasks()
   await testDeletingSubtaskUpdatesParentCount()
+  await testCreatingSubtaskUpdatesOuterTasks()
+  await testCreatingSubtaskExpandsParentInMainTable()
   console.log('subtask delete cache regressions ok')
 }
 

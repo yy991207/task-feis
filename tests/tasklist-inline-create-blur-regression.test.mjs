@@ -40,9 +40,25 @@ async function testInlineCreateHasSyncSubmitGuard() {
   )
 }
 
+async function testSectionHeaderPlusCanShowInlineCreateWhenToolbarCreateHidden() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /className="section-action-btn"[\s\S]*onClick=\{\(\) => startInlineCreate\(section\.guid\)\}/,
+    '分组头部加号按钮应该继续直接触发行内新建任务',
+  )
+  assert.match(
+    source,
+    /shouldGroupBySection && creatingInSection === section\.guid \? \(\s*createTaskInlineRow\(section\.guid\)\s*\)/,
+    '分组头部加号触发行内新建后，输入行不应该再依赖 toolbar.showCreate 才能显示',
+  )
+}
+
 async function main() {
   await testInlineCreateListensForOutsidePointerDown()
   await testInlineCreateHasSyncSubmitGuard()
+  await testSectionHeaderPlusCanShowInlineCreateWhenToolbarCreateHidden()
   console.log('tasklist inline create blur regressions ok')
 }
 

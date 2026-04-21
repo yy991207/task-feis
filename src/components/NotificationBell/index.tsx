@@ -191,7 +191,7 @@ export default function NotificationBell() {
   return (
     <Popover
       trigger="click"
-      placement="bottomRight"
+      placement="bottomLeft"
       open={open}
       onOpenChange={setOpen}
       content={content}

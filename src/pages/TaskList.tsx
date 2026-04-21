@@ -3,6 +3,7 @@ import Layout from 'antd/es/layout'
 import Button from 'antd/es/button'
 import Skeleton from 'antd/es/skeleton'
 import Tooltip from 'antd/es/tooltip'
+import message from 'antd/es/message'
 import { UnorderedListOutlined } from '@ant-design/icons'
 import type { Task, Tasklist } from '@/types/task'
 import type { Project } from '@/types/project'
@@ -55,6 +56,7 @@ export default function TaskListPage() {
     'custom',
   )
   const [mineOnly, setMineOnly] = useState(false)
+  const [pendingExpandTaskGuid, setPendingExpandTaskGuid] = useState<string | null>(null)
   const latestRequestIdRef = useRef(0)
 
   const currentUserId = appConfig.user_id
@@ -70,7 +72,19 @@ export default function TaskListPage() {
     const loadData = async () => {
       setLoading(true)
 
-      const projects = await listProjects()
+      let projects: Awaited<ReturnType<typeof listProjects>> = []
+      try {
+        projects = await listProjects()
+      } catch (err) {
+        if (requestId !== latestRequestIdRef.current) {
+          return
+        }
+        message.error(err instanceof Error ? err.message : '加载清单失败')
+        setTasklists([])
+        setTasks([])
+        setLoading(false)
+        return
+      }
       let tls = projects.map(projectToTasklist)
 
       // Load sections for the active tasklist so drag-and-drop has real section_id
@@ -248,6 +262,7 @@ export default function TaskListPage() {
     (createdTask: Task) => {
       setTasks((prev) => [createdTask, ...prev])
       if (createdTask.parent_task_guid) {
+        setPendingExpandTaskGuid(createdTask.parent_task_guid)
         getTask(createdTask.parent_task_guid)
           .then((apiTask) => updateTaskInState(apiTaskToTask(apiTask)))
           .catch(() => {})
@@ -322,6 +337,10 @@ export default function TaskListPage() {
         onTaskUpdated={updateTaskInState}
         onTasklistUpdated={updateTasklistInState}
         onTaskCreatedDetailOpen={handleOpenTaskDetail}
+        pendingExpandTaskGuid={pendingExpandTaskGuid}
+        onPendingExpandConsumed={(taskGuid) => {
+          setPendingExpandTaskGuid((prev) => (prev === taskGuid ? null : prev))
+        }}
       />
     )
   }

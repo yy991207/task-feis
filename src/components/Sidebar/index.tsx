@@ -469,14 +469,6 @@ export default function Sidebar({
           void handleCopyTasklistLink(proj.project_id)
         },
       },
-      {
-        key: 'custom-fields',
-        icon: <AppstoreOutlined />,
-        label: '自定义字段',
-        onClick: () => {
-          setCustomFieldsProjectId(proj.project_id)
-        },
-      },
       { type: 'divider' },
       {
         key: 'archive',

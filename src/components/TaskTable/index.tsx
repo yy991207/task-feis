@@ -4,8 +4,10 @@ import Checkbox from 'antd/es/checkbox'
 import Popover from 'antd/es/popover'
 import Calendar from 'antd/es/calendar'
 import Select from 'antd/es/select'
+import DatePicker from 'antd/es/date-picker'
 import Button from 'antd/es/button'
 import Dropdown from 'antd/es/dropdown'
+import type { MenuProps } from 'antd/es/menu'
 import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
 import Avatar from 'antd/es/avatar'
@@ -20,7 +22,6 @@ import {
   FilterOutlined,
   SortAscendingOutlined,
   SettingOutlined,
-  EyeOutlined,
   EditOutlined,
   CaretDownOutlined,
   CaretRightOutlined,
@@ -43,6 +44,19 @@ import {
   RightOutlined,
   ReloadOutlined,
   UpOutlined,
+  FlagOutlined,
+  TeamOutlined,
+  NumberOutlined,
+  UnorderedListOutlined,
+  HourglassOutlined,
+  BranchesOutlined,
+  TagOutlined,
+  HistoryOutlined,
+  IdcardOutlined,
+  BarsOutlined,
+  HolderOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
@@ -54,6 +68,7 @@ import {
   type Tasklist,
   type Section,
   type CustomFieldDef,
+  type CustomFieldValue,
 } from '@/types/task'
 import {
   createTaskApi,
@@ -67,7 +82,7 @@ import {
   toPriorityString,
   listSubtasks,
 } from '@/services/taskService'
-import { updateProject } from '@/services/projectService'
+import { updateProject, deleteProject, archiveProject } from '@/services/projectService'
 import { listMembers } from '@/services/teamService'
 import { appConfig } from '@/config/appConfig'
 import {
@@ -84,6 +99,7 @@ import CustomFieldsModal from '@/components/CustomFieldsModal'
 import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
 import {
   listCustomFields,
+  patchTaskCustomFields,
   type ApiCustomField,
   type CustomFieldType as ApiCustomFieldType,
 } from '@/services/customFieldService'
@@ -194,9 +210,11 @@ interface TaskTableProps {
   statusFilter?: StatusFilterKey
   sortMode?: SortModeKey
   mineOnly?: boolean
+  pendingExpandTaskGuid?: string | null
   onStatusFilterChange?: (v: StatusFilterKey) => void
   onSortModeChange?: (v: SortModeKey) => void
   onMineOnlyChange?: (v: boolean) => void
+  onPendingExpandConsumed?: (taskGuid: string) => void
   onTaskClick: (task: Task) => void
   onRefresh: () => void
   onTaskCreated?: (task: Task, section?: Section) => void
@@ -470,9 +488,11 @@ export default function TaskTable({
   statusFilter: controlledStatusFilter,
   sortMode: controlledSortMode,
   mineOnly: controlledMineOnly,
+  pendingExpandTaskGuid,
   onStatusFilterChange,
   onSortModeChange,
   onMineOnlyChange,
+  onPendingExpandConsumed,
   onTaskClick,
   onRefresh,
   onTaskCreated,
@@ -539,14 +559,22 @@ export default function TaskTable({
   const [expandedTaskGuids, setExpandedTaskGuids] = useState<Set<string>>(new Set())
   const [subtasksByGuid, setSubtasksByGuid] = useState<Record<string, Task[]>>({})
 
-  // 外部 tasks 是权威数据源：详情页删除子任务后，要同步清掉展开缓存里的旧子任务。
+  // 外部 tasks 是权威数据源：详情页增删子任务后，要同步已展开父任务的子任务缓存。
   useEffect(() => {
     setSubtasksByGuid((prev) => {
       let changed = false
       const taskByGuid = new Map(tasks.map((item) => [item.guid, item]))
+      const childrenByParent = new Map<string, Task[]>()
+      for (const item of tasks) {
+        if (!item.parent_task_guid) continue
+        const children = childrenByParent.get(item.parent_task_guid) ?? []
+        children.push(item)
+        childrenByParent.set(item.parent_task_guid, children)
+      }
+
       const next: Record<string, Task[]> = {}
       for (const [pid, list] of Object.entries(prev)) {
-        const updated = list.flatMap((child) => {
+        const cachedChildren = list.flatMap((child) => {
           const fresh = taskByGuid.get(child.guid)
           if (!fresh) {
             changed = true
@@ -558,7 +586,18 @@ export default function TaskTable({
           }
           return [child]
         })
-        next[pid] = updated
+        const cachedGuidSet = new Set(cachedChildren.map((child) => child.guid))
+        const externalChildren = childrenByParent.get(pid) ?? []
+        const merged = [...cachedChildren]
+        for (const child of externalChildren) {
+          if (cachedGuidSet.has(child.guid)) {
+            continue
+          }
+          changed = true
+          merged.push(child)
+        }
+
+        next[pid] = merged
       }
       return changed ? next : prev
     })
@@ -584,6 +623,36 @@ export default function TaskTable({
       }
     }
   }, [subtasksByGuid])
+
+  useEffect(() => {
+    if (!pendingExpandTaskGuid) {
+      return
+    }
+
+    setExpandedTaskGuids((prev) => {
+      if (prev.has(pendingExpandTaskGuid)) {
+        return prev
+      }
+      const next = new Set(prev)
+      next.add(pendingExpandTaskGuid)
+      return next
+    })
+
+    if (!subtasksByGuid[pendingExpandTaskGuid]) {
+      void listSubtasks(pendingExpandTaskGuid)
+        .then((items) => {
+          setSubtasksByGuid((prev) => ({
+            ...prev,
+            [pendingExpandTaskGuid]: items.map((t) => apiTaskToTask(t)),
+          }))
+        })
+        .catch(() => {
+          setSubtasksByGuid((prev) => ({ ...prev, [pendingExpandTaskGuid]: [] }))
+        })
+    }
+
+    onPendingExpandConsumed?.(pendingExpandTaskGuid)
+  }, [onPendingExpandConsumed, pendingExpandTaskGuid, subtasksByGuid])
   const [creatingCustomField, setCreatingCustomField] = useState(false)
   const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -642,6 +711,7 @@ export default function TaskTable({
       // ignore
     }
   }
+
   const animationTimerRef = useRef<number | null>(null)
   const inlineCreateInteractingRef = useRef(false)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -1234,6 +1304,11 @@ export default function TaskTable({
     })
   }
 
+  const handleCustomFieldSaved = async (field: ApiCustomField) => {
+    await reloadCustomFields()
+    handleAddVisibleColumn(toCustomFieldColumnKey(field.field_id))
+  }
+
   const handleRemoveVisibleColumn = (column: ExtendedColumnKey) => {
     if (column === 'title') {
       return
@@ -1252,6 +1327,72 @@ export default function TaskTable({
     } catch {
       message.error('重命名清单失败')
     }
+  }
+
+  const handleCopyTasklistLink = async () => {
+    if (!tasklist) return
+    const url = `${window.location.origin}/?tasklist=${tasklist.guid}`
+    try {
+      await navigator.clipboard.writeText(url)
+      message.success('已复制链接')
+    } catch {
+      message.error('复制失败')
+    }
+  }
+
+  const handleArchiveTasklist = async () => {
+    if (!tasklist) return
+    try {
+      await archiveProject(tasklist.guid)
+      message.success('已归档清单')
+      onRefresh()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '归档清单失败')
+    }
+  }
+
+  const handleDeleteTasklist = async () => {
+    if (!tasklist) return
+    try {
+      await deleteProject(tasklist.guid)
+      message.success('已删除清单')
+      onRefresh()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除清单失败')
+    }
+  }
+
+  const tasklistActionMenu: MenuProps = {
+    items: [
+      {
+        key: 'rename',
+        label: '重命名清单',
+        onClick: () => setEditingTitle(true),
+      },
+      {
+        key: 'copy-link',
+        label: '复制链接',
+        onClick: () => {
+          void handleCopyTasklistLink()
+        },
+      },
+      { type: 'divider' as const },
+      {
+        key: 'archive',
+        label: '归档清单',
+        onClick: () => {
+          void handleArchiveTasklist()
+        },
+      },
+      {
+        key: 'delete',
+        label: '移除清单',
+        danger: true,
+        onClick: () => {
+          void handleDeleteTasklist()
+        },
+      },
+    ],
   }
   const visibleColumns = visibleColumnKeys.length
   const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
@@ -1320,20 +1461,29 @@ export default function TaskTable({
   )
 
   const customFieldTypeMenuItems = [
-    { key: 'text', label: '文本', type: 'text' as ApiCustomFieldType },
-    { key: 'number', label: '数字', type: 'number' as ApiCustomFieldType },
-    { key: 'date', label: '日期', type: 'date' as ApiCustomFieldType },
-    { key: 'select', label: '单选', type: 'select' as ApiCustomFieldType },
-    { key: 'multi_select', label: '多选', type: 'multi_select' as ApiCustomFieldType },
-    { key: 'member', label: '成员', type: 'member' as ApiCustomFieldType },
+    { key: 'select', label: '单选', type: 'select' as ApiCustomFieldType, icon: <CheckCircleOutlined /> },
+    { key: 'multi_select', label: '多选', type: 'multi_select' as ApiCustomFieldType, icon: <CheckSquareFilled /> },
+    { key: 'member', label: '人员', type: 'member' as ApiCustomFieldType, icon: <UserOutlined /> },
+    { key: 'number', label: '数值', type: 'number' as ApiCustomFieldType, icon: <NumberOutlined /> },
+    { key: 'date', label: '日期', type: 'date' as ApiCustomFieldType, icon: <CalendarOutlined /> },
+    { key: 'text', label: '文本', type: 'text' as ApiCustomFieldType, icon: <FontSizeOutlined /> },
   ]
 
   const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
   const [headerAddOpen, setHeaderAddOpen] = useState(false)
+  const [customFieldTypeMenuOpen, setCustomFieldTypeMenuOpen] = useState(false)
+
+  const handleFieldConfigOpenChange = (open: boolean) => {
+    setFieldConfigOpen(open)
+    if (!open) {
+      setCustomFieldTypeMenuOpen(false)
+    }
+  }
 
   const closeFieldConfig = () => {
     setFieldConfigOpen(false)
     setHeaderAddOpen(false)
+    setCustomFieldTypeMenuOpen(false)
   }
 
   const handlePickType = (t: ApiCustomFieldType) => {
@@ -1350,87 +1500,129 @@ export default function TaskTable({
     setEditorOpen(true)
   }
 
-  const fieldConfigPanel = (
-    <div className="toolbar-popover-panel field-config-panel">
-      <Typography.Text strong className="popover-title">
-        字段配置
-      </Typography.Text>
-      {isTasklistView && (
-        <Dropdown
-          trigger={['hover']}
-          placement="topRight"
-          menu={{
-            items: customFieldTypeMenuItems.map((it) => ({
-              key: it.key,
-              label: it.label,
-              onClick: () => handlePickType(it.type),
-            })),
-          }}
-        >
+  const fieldIconMap: Record<string, React.ReactNode> = {
+    priority: <FlagOutlined />,
+    assignee: <UserOutlined />,
+    estimate: <HourglassOutlined />,
+    start: <CalendarOutlined />,
+    due: <ClockCircleOutlined />,
+    creator: <UserOutlined />,
+    created: <CalendarOutlined />,
+    subtaskProgress: <BranchesOutlined />,
+    taskSource: <TagOutlined />,
+    assigner: <UserOutlined />,
+    followers: <TeamOutlined />,
+    completed: <CalendarOutlined />,
+    updated: <HistoryOutlined />,
+    taskId: <IdcardOutlined />,
+    sourceCategory: <BarsOutlined />,
+  }
+
+  const getFieldIcon = (key: ExtendedColumnKey): React.ReactNode => {
+    if (typeof key === 'string' && key.startsWith('custom:')) {
+      return <NumberOutlined />
+    }
+    return fieldIconMap[key as string] ?? <UnorderedListOutlined />
+  }
+
+  const handleToggleField = (field: FieldOption) => {
+    if (field.isVisible) {
+      handleRemoveVisibleColumn(field.key)
+    } else {
+      handleAddVisibleColumn(field.key)
+    }
+  }
+
+  const filteredFieldOptions = allFieldOptions
+
+  const renderFieldConfigRow = (field: FieldOption) => {
+    const cfGuid =
+      typeof field.key === 'string' && field.key.startsWith('custom:')
+        ? field.key.slice(7)
+        : null
+    const cfRaw = cfGuid ? rawCustomFields.find((r) => r.field_id === cfGuid) : null
+    return (
+      <div key={field.key} className="field-config-row-v2">
+        <span className="field-config-row-drag">
+          <HolderOutlined />
+        </span>
+        <span className="field-config-row-icon">{getFieldIcon(field.key)}</span>
+        <span className="field-config-row-label">{field.label}</span>
+        {cfRaw && (
           <Button
             type="text"
             size="small"
-            className="field-config-create-btn"
-            icon={<PlusOutlined />}
-          >
-            新建自定义字段
-          </Button>
-        </Dropdown>
-      )}
-      <div className="field-config-list">
-        {allFieldOptions.map((field) => {
-          const cfGuid =
-            typeof field.key === 'string' && field.key.startsWith('custom:')
-              ? field.key.slice(7)
-              : null
-          const cfRaw = cfGuid
-            ? rawCustomFields.find((r) => r.field_id === cfGuid)
-            : null
-          return (
-            <div
-              key={field.key}
-              className={`field-config-row${field.isVisible ? ' is-visible' : ''}`}
-            >
-              <button
-                type="button"
-                className="field-config-row-main"
-                onClick={() => handleAddVisibleColumn(field.key)}
-              >
-                <span className="field-config-row-label">{field.label}</span>
-              </button>
-              {cfRaw && (
-                <Button
-                  type="text"
-                  size="small"
-                  className="field-config-row-action"
-                  icon={<EditOutlined />}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleEditField(cfRaw)
-                  }}
-                />
-              )}
-              {field.isVisible ? (
-                <Button
-                  type="text"
-                  size="small"
-                  className="field-config-row-action"
-                  icon={<EyeOutlined />}
-                  onClick={() => handleRemoveVisibleColumn(field.key)}
-                />
-              ) : (
-                <Button
-                  type="text"
-                  size="small"
-                  className="field-config-row-action"
-                  icon={<PlusOutlined />}
-                  onClick={() => handleAddVisibleColumn(field.key)}
-                />
-              )}
-            </div>
-          )
-        })}
+            className="field-config-row-action"
+            icon={<EditOutlined />}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleEditField(cfRaw)
+            }}
+          />
+        )}
+        <Button
+          type="text"
+          size="small"
+          className="field-config-row-visibility"
+          icon={field.isVisible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleToggleField(field)
+          }}
+        />
       </div>
+    )
+  }
+
+  const fieldConfigPanel = (
+    <div className="field-config-layout">
+      <div className="field-config-main-panel">
+        <div className="field-config-header">
+          <Typography.Text strong className="field-config-title">
+            字段配置
+          </Typography.Text>
+        </div>
+        {isTasklistView && (
+          <div
+            className={`field-config-add-row${customFieldTypeMenuOpen ? ' active' : ''}`}
+            onMouseEnter={() => setCustomFieldTypeMenuOpen(true)}
+            onClick={() => setCustomFieldTypeMenuOpen(true)}
+          >
+            <PlusOutlined className="field-config-add-icon" />
+            <span className="field-config-add-label">添加自定义字段</span>
+            <RightOutlined className="field-config-add-arrow" />
+          </div>
+        )}
+        <div
+          className="field-config-scroll"
+          onMouseEnter={() => setCustomFieldTypeMenuOpen(false)}
+        >
+          {filteredFieldOptions.length > 0 ? (
+            <div className="field-config-section-list">
+              {filteredFieldOptions.map(renderFieldConfigRow)}
+            </div>
+          ) : (
+            <div className="field-config-empty">无匹配字段</div>
+          )}
+        </div>
+      </div>
+      {isTasklistView && customFieldTypeMenuOpen && (
+        <div className="field-config-side-panel field-config-type-menu">
+          <div className="field-config-side-section-title">基础字段</div>
+          <div className="field-config-side-list">
+            {customFieldTypeMenuItems.map((item) => (
+              <div
+                key={item.key}
+                className="field-config-side-item"
+                onClick={() => handlePickType(item.type)}
+              >
+                <span className="field-config-side-item-icon">{item.icon}</span>
+                <span className="field-config-side-item-label">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 
@@ -1615,7 +1807,9 @@ export default function TaskTable({
                 </Title>
               )}
               {isTasklistView && !editingTitle && (
-                <Button type="text" size="small" icon={<EllipsisOutlined />} style={{ color: '#646a73' }} />
+                <Dropdown menu={tasklistActionMenu} trigger={['click']} placement="bottomLeft">
+                  <Button type="text" size="small" icon={<EllipsisOutlined />} style={{ color: '#646a73' }} />
+                </Dropdown>
               )}
             </div>
           </div>
@@ -1653,7 +1847,7 @@ export default function TaskTable({
                   分组: {groupLabelMap[groupMode]}
                 </Button>
               </Dropdown>
-              <Popover trigger="click" placement="bottomRight" open={fieldConfigOpen} onOpenChange={setFieldConfigOpen} content={fieldConfigPanel}>
+              <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<SettingOutlined />}>
                   字段配置
                 </Button>
@@ -1678,7 +1872,7 @@ export default function TaskTable({
                   </Badge>
                 </Dropdown>
               )}
-              <Popover trigger="click" placement="bottomRight" content={filterPanel}>
+              <Popover trigger="click" placement="bottomLeft" content={filterPanel}>
                 <Badge count={activeFilterCount} size="small" offset={[-2, 2]}>
                   <Button size="small" type="text" icon={<FilterOutlined />}>
                     筛选
@@ -1698,7 +1892,7 @@ export default function TaskTable({
                 </Button>
               )}
               {config.toolbar.showFieldConfig && (
-                <Popover trigger="click" placement="bottomRight" open={fieldConfigOpen} onOpenChange={setFieldConfigOpen} content={fieldConfigPanel}>
+                <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
                   <Button size="small" type="text" icon={<SettingOutlined />}>
                     字段配置
                   </Button>
@@ -1799,7 +1993,7 @@ export default function TaskTable({
               <span>{field.name}</span>
             </div>
           ))}
-          <Popover trigger="click" placement="bottomRight" open={headerAddOpen} onOpenChange={setHeaderAddOpen} content={fieldConfigPanel}>
+          <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={headerAddOpen} onOpenChange={setHeaderAddOpen} content={fieldConfigPanel}>
             <div className="col col-add">
               <PlusOutlined />
             </div>
@@ -1979,10 +2173,10 @@ export default function TaskTable({
                     return sectionTasks.map((task) => renderTask(task, 0))
                   })()}
 
-                  {config.toolbar.showCreate && shouldGroupBySection && (
-                    creatingInSection === section.guid ? (
-                      createTaskInlineRow(section.guid)
-                    ) : (
+                  {shouldGroupBySection && creatingInSection === section.guid ? (
+                    createTaskInlineRow(section.guid)
+                  ) : (
+                    config.toolbar.showCreate && shouldGroupBySection && (
                       <Button
                         type="text"
                         className="new-task-btn"
@@ -2028,7 +2222,7 @@ export default function TaskTable({
           field={editorField}
           existingFields={rawCustomFields}
           onClose={() => setEditorOpen(false)}
-          onSaved={() => void reloadCustomFields()}
+          onSaved={(field) => void handleCustomFieldSaved(field)}
           onDeleted={() => void reloadCustomFields()}
           onPickExisting={(f) => {
             // 直接把字段列设为可见
@@ -2057,6 +2251,129 @@ interface TaskRowProps {
   onClick: () => void
   onUpdate: (task: Task) => void
   onAssigneePickerOpenChange: (key: string | null) => void
+}
+
+interface CustomFieldCellProps {
+  field: CustomFieldDef
+  task: Task
+  users: User[]
+  onChange: (value: CustomFieldValue) => void
+}
+
+function CustomFieldCell({
+  field,
+  task,
+  users,
+  onChange,
+}: CustomFieldCellProps) {
+  const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
+  const textValue = fieldValue?.text_value ?? ''
+  const numberValue = fieldValue?.number_value ?? ''
+  const dateValue = fieldValue?.datetime_value
+    ? dayjs(Number(fieldValue.datetime_value))
+    : null
+  const singleValue = fieldValue?.single_select_value
+  const multiValue = fieldValue?.multi_select_value ?? []
+  const memberValue = fieldValue?.member_value?.map((member) => member.id) ?? []
+
+  if (field.type === 'text') {
+    return (
+      <Input
+        size="small"
+        value={textValue}
+        placeholder="输入文本"
+        onChange={(e) => onChange({ guid: field.guid, text_value: e.target.value })}
+      />
+    )
+  }
+
+  if (field.type === 'number') {
+    return (
+      <Input
+        size="small"
+        value={numberValue}
+        placeholder="输入数字"
+        onChange={(e) => onChange({ guid: field.guid, number_value: e.target.value })}
+      />
+    )
+  }
+
+  if (field.type === 'datetime') {
+    return (
+      <DatePicker
+        size="small"
+        value={dateValue}
+        placeholder="选择日期"
+        style={{ width: '100%' }}
+        onChange={(value) =>
+          onChange({
+            guid: field.guid,
+            datetime_value: value ? value.valueOf().toString() : undefined,
+          })}
+      />
+    )
+  }
+
+  if (field.type === 'single_select') {
+    return (
+      <Select
+        size="small"
+        value={singleValue}
+        placeholder="选择选项"
+        allowClear
+        options={(field.options ?? []).map((option) => ({
+          label: option.name,
+          value: option.guid,
+        }))}
+        onChange={(value) =>
+          onChange({ guid: field.guid, single_select_value: value || undefined })}
+      />
+    )
+  }
+
+  if (field.type === 'multi_select') {
+    return (
+      <Select
+        mode="multiple"
+        size="small"
+        value={multiValue}
+        placeholder="选择选项"
+        options={(field.options ?? []).map((option) => ({
+          label: option.name,
+          value: option.guid,
+        }))}
+        onChange={(value) =>
+          onChange({ guid: field.guid, multi_select_value: value })}
+      />
+    )
+  }
+
+  if (field.type === 'member') {
+    return (
+      <Select
+        mode="multiple"
+        size="small"
+        value={memberValue}
+        placeholder="选择成员"
+        options={users.map((user) => ({ label: user.name, value: user.id }))}
+        onChange={(value) =>
+          onChange({
+            guid: field.guid,
+            member_value: value.map((id) => ({
+              id,
+              type: 'user' as const,
+              name: users.find((user) => user.id === id)?.name,
+            })),
+          })}
+      />
+    )
+  }
+
+  return (
+    <span className="custom-field-text">
+      {formatCustomFieldValue(task, field, users)}
+    </span>
+  )
 }
 
 function TaskRow({
@@ -2182,6 +2499,33 @@ function TaskRow({
     } catch {
       onUpdate(task)
       message.error('更新时间失败')
+    }
+  }
+
+  const handleCustomFieldValueChange = async (
+    field: CustomFieldDef,
+    value: CustomFieldValue,
+  ) => {
+    const nextCustomFields = [
+      ...task.custom_fields.filter((item) => item.guid !== field.guid),
+      value,
+    ]
+    const nextTask = {
+      ...task,
+      custom_fields: nextCustomFields,
+    }
+    onUpdate(nextTask)
+
+    const payload: Record<string, unknown> = {
+      [field.guid]: value,
+    }
+
+    try {
+      // 这里统一走字段值补丁接口，避免新建字段后还要跳到别处才能录入值。
+      await patchTaskCustomFields(task.guid, payload)
+    } catch {
+      onUpdate(task)
+      message.error('更新自定义字段失败')
     }
   }
 
@@ -2480,9 +2824,12 @@ function TaskRow({
       )}
       {customFields.map((field) => (
         <div key={field.guid} className="cell cell-custom">
-          <span className="custom-field-text">
-            {formatCustomFieldValue(task, field, users)}
-          </span>
+          <CustomFieldCell
+            field={field}
+            task={task}
+            users={users}
+            onChange={(value) => void handleCustomFieldValueChange(field, value)}
+          />
         </div>
       ))}
       {isTasklistView && (

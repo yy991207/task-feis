@@ -121,7 +121,7 @@ export default function UserSwitcher() {
         trigger={['click']}
         open={open}
         onOpenChange={setOpen}
-        placement="bottomRight"
+        placement="bottomLeft"
       >
         <Button type="text" size="small" icon={<UserSwitchOutlined />} />
       </Dropdown>
