@@ -22,23 +22,13 @@ async function testCommentInputSupportsPasteImageUpload() {
 
   assert.match(
     source,
-    /const handleCommentPaste = \(/,
-    '评论输入区应该有独立的粘贴处理函数，专门接住图片粘贴',
+    /import TaskRichInput, \{ TaskRichText \} from '@\/components\/TaskRichInput'/,
+    '任务详情应该复用统一的 TaskRichInput 输入框，而不是继续保留单独的评论 TextArea',
   )
   assert.match(
     source,
-    /event\.clipboardData\.items/,
-    '评论输入区粘贴图片时应该读取 clipboardData.items',
-  )
-  assert.match(
-    source,
-    /void handleCommentAttachmentUpload\(file\)/,
-    '粘贴出来的图片文件应该直接复用评论附件上传逻辑',
-  )
-  assert.match(
-    source,
-    /<Input\.TextArea[\s\S]*onPaste=\{handleCommentPaste\}/,
-    '评论输入区应该换成支持粘贴事件的 TextArea 输入组件',
+    /<TaskRichInput[\s\S]*mode="comment"/,
+    '评论输入区应该换成统一的 TaskRichInput 组件',
   )
 }
 

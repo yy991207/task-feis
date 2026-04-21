@@ -24,7 +24,7 @@ async function testCustomFieldCellUsesReadModeTrigger() {
   )
   assert.match(
     source,
-    /<Tag[\s\S]*className="custom-field-value-tag"/,
+    /function renderSelectFieldTags\([\s\S]*<Tag[\s\S]*custom-field-value-tag/,
     '单选类自定义字段在已填写时应该用 antd Tag 展示已保存值',
   )
   assert.match(

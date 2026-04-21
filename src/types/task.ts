@@ -65,6 +65,9 @@ export type CustomFieldType =
 export interface SelectOption {
   guid: string
   name: string
+  color?: string | null
+  is_disabled?: boolean
+  disabled_at?: string | null
 }
 
 export interface CustomFieldDef {

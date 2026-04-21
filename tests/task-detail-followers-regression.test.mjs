@@ -62,13 +62,13 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /placement="top(?:Left)?"/,
-    '关注人弹层应该从底部摘要条上方展开，方向要和参考图一致',
+    /className="[^"]*detail-followers-row[^"]*"[\s\S]*<Popover[\s\S]*placement="bottomLeft"/,
+    '关注人入口移到负责人下面后，弹层应该从该行下方展开',
   )
   assert.match(
     detailSource,
     /const visibleFollowedUsers = followedUsers\.slice\(0, 3\)/,
-    '底部摘要区应该只展示少量关注人头像，完整列表放到上拉层里看',
+    '关注人入口应该只展示少量关注人头像，完整列表放到弹层里看',
   )
   assert.match(
     detailSource,
@@ -128,7 +128,7 @@ async function testDetailFollowersSupportAddAndRemove() {
   assert.match(
     detailSource,
     /className="followers-summary"/,
-    '详情页底部应该有独立的关注人摘要条，样式上对齐参考图',
+    '详情页应该有独立的关注人摘要条，样式上对齐参考图',
   )
   assert.match(
     detailSource,
@@ -140,6 +140,60 @@ async function testDetailFollowersSupportAddAndRemove() {
     /backgroundColor: '#7b67ee'/,
     '关注人头像颜色应该和主页面当前紫色头像保持一致',
   )
+}
+
+async function testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips() {
+  const detailSource = await readSource('../src/components/TaskDetailPanel/index.tsx')
+  const assigneeIndex = detailSource.indexOf('{/* Assignee row */}')
+  const followersIndex = detailSource.indexOf('detail-followers-row')
+  const dateIndex = detailSource.indexOf('{/* Date row */}')
+  const footerIndex = detailSource.indexOf('{/* Footer */}')
+
+  assert.ok(
+    assigneeIndex !== -1 && followersIndex !== -1 && dateIndex !== -1,
+    '详情页应该保留负责人、关注人和日期区域的清晰结构标记',
+  )
+  assert.ok(
+    assigneeIndex < followersIndex && followersIndex < dateIndex,
+    '关注人入口应该放在负责人 UI 下面，并且在日期 UI 上面',
+  )
+  assert.ok(
+    followersIndex < footerIndex,
+    '关注人入口不应该继续放在详情页底部评论区下面',
+  )
+  assert.match(
+    detailSource,
+    /import Tooltip from 'antd\/es\/tooltip'/,
+    '详情页图标浮窗应该统一使用 antd Tooltip',
+  )
+  ;[
+    '更多操作',
+    '关闭详情',
+    '负责人',
+    '关注人',
+    '开始和截止时间',
+    '任务清单和分组',
+    '任务描述',
+    '子任务',
+    '附件',
+    '预览附件',
+    '下载附件',
+    '删除附件',
+    '更多评论操作',
+    '移除评论图片',
+    '正文样式',
+    '表情',
+    '@ 提及',
+    '添加图片',
+    '添加评论附件',
+    '发送评论',
+  ].forEach((title) => {
+    assert.match(
+      detailSource,
+      new RegExp(`<Tooltip title="${title}"`),
+      `详情页图标应该有“${title}”浮窗提示`,
+    )
+  })
 }
 
 async function testTaskTableFollowerCountUsesParticipantIds() {
@@ -160,6 +214,7 @@ async function testTaskTableFollowerCountUsesParticipantIds() {
 async function main() {
   await testTaskKeepsParticipantIds()
   await testDetailFollowersSupportAddAndRemove()
+  await testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips()
   await testTaskTableFollowerCountUsesParticipantIds()
   console.log('task detail followers regressions ok')
 }

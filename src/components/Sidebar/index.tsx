@@ -85,7 +85,7 @@ type CreatingTarget = 'root' | string
 const encodeTasklistKey = (guid: string) => `tl:${guid}`
 const encodeGroupKey = (id: string) => `grp:${id}`
 
-// 刷新后默认展示完整清单树：根清单区和所有自定义分组都展开。
+// 刷新后默认展示完整清单树：根清单区和所有清单分组都展开。
 const buildDefaultExpandedKeys = (groups: ProjectGroup[]): React.Key[] => [
   'root',
   ...groups
@@ -232,9 +232,9 @@ export default function Sidebar({
       setExpandedKeys((prev) => [...prev, encodeGroupKey(created.group_id)])
       // 立即进入重命名模式，便于修改名称
       setEditingGroupId(created.group_id)
-      message.success('已创建分组')
+      message.success('已创建清单分组')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '创建分组失败'
+      const msg = err instanceof Error ? err.message : '创建清单分组失败'
       message.error(msg)
     }
   }
@@ -288,7 +288,7 @@ export default function Sidebar({
     try {
       await apiDeleteProjectGroup(groupId)
       setGroups((prev) => prev.filter((group) => group.group_id !== groupId))
-      message.success('已删除分组')
+      message.success('已删除清单分组')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '操作失败'
       message.error(msg)
@@ -421,14 +421,14 @@ export default function Sidebar({
       {
         key: 'rename',
         icon: <EditOutlined />,
-        label: '重命名分组',
+        label: '重命名清单分组',
         disabled: group.is_default,
         onClick: () => handleStartRenameGroup(group.group_id),
       },
       {
         key: 'delete',
         icon: <DeleteOutlined />,
-        label: '删除分组',
+        label: '删除清单分组',
         danger: true,
         disabled: group.is_default,
         onClick: () => {
@@ -479,7 +479,7 @@ export default function Sidebar({
     if (editingGroupId === group.group_id) {
       return (
         <EditableInput
-          placeholder="输入分组名称"
+          placeholder="输入清单分组名称"
           defaultValue={group.name}
           onSubmit={(v) => {
             void handleSaveGroupName(group.group_id, v)
@@ -644,7 +644,7 @@ export default function Sidebar({
             key: encodeGroupKey(draftGroupUid),
             title: (
               <EditableInput
-                placeholder="输入分组名称"
+                placeholder="输入清单分组名称"
                 defaultValue=""
                 onSubmit={(v) => {
                   void handleSaveGroupName(draftGroupUid, v)
@@ -906,7 +906,7 @@ export default function Sidebar({
           block
           className="create-group-btn"
         >
-          新建分组
+          新建清单分组
         </Button>
       </div>
 

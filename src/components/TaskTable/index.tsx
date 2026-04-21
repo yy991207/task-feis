@@ -238,7 +238,7 @@ const sortLabelMap: Record<SortModeKey, string> = {
 }
 
 const groupLabelMap: Record<GroupModeKey, string> = {
-  section: '自定义分组',
+  section: '任务分组',
   none: '无分组',
 }
 
@@ -705,9 +705,15 @@ export default function TaskTable({
       f.field_type === 'select'
         ? 'single_select'
         : f.field_type === 'date'
-          ? 'datetime'
-          : (f.field_type as CustomFieldDef['type']),
-    options: (f.options ?? []).map((o) => ({ guid: o.value, name: o.label })),
+        ? 'datetime'
+        : (f.field_type as CustomFieldDef['type']),
+    options: (f.options ?? []).map((o) => ({
+      guid: o.value,
+      name: o.label,
+      color: o.color,
+      is_disabled: o.is_disabled,
+      disabled_at: o.disabled_at,
+    })),
   })
 
   const buildVisibleColumnKeys = useCallback(
@@ -1116,7 +1122,7 @@ export default function TaskTable({
       setEditingSectionGuid(nextSection.guid)
       setEditingSectionName(nextSection.name)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '创建分组失败'
+      const msg = err instanceof Error ? err.message : '创建任务分组失败'
       message.error(msg)
     } finally {
       setCreatingSection(false)
@@ -1157,14 +1163,14 @@ export default function TaskTable({
     const target = sectionSource.find((s) => s.guid === sectionGuid)
     if (!target) return
     if (target.is_default) {
-      message.warning('默认分组不可删除')
+      message.warning('默认任务分组不可删除')
       return
     }
     const defaultSection =
       sectionSource.find((s) => s.is_default) ??
       sectionSource.find((s) => s.guid !== sectionGuid)
     if (!defaultSection) {
-      message.warning('没有可迁移到的默认分组')
+      message.warning('没有可迁移到的默认任务分组')
       return
     }
     // 找到该分组下当前清单中的所有任务
@@ -1201,15 +1207,15 @@ export default function TaskTable({
       await apiDeleteSection(sectionGuid)
       message.success(
         affectedTasks.length > 0
-          ? `已删除分组，${affectedTasks.length} 个任务已移至「${defaultSection.name}」`
-          : '已删除分组',
+          ? `已删除任务分组，${affectedTasks.length} 个任务已移至「${defaultSection.name}」`
+          : '已删除任务分组',
       )
     } catch (err: unknown) {
       setLocalSections(prevLocal)
       setHasLocalSectionEdits(prevHasEdits)
       onTasklistUpdated?.({ ...tasklist, sections: sectionSource })
       for (const t of affectedTasks) onTaskUpdated?.(t)
-      const msg = err instanceof Error ? err.message : '删除分组失败'
+      const msg = err instanceof Error ? err.message : '删除任务分组失败'
       message.error(msg)
     }
   }
@@ -1733,7 +1739,7 @@ export default function TaskTable({
       </div>
       {showColumn('title') && (
         <div className="cell cell-title" style={{ overflow: 'visible' }}>
-          <Tooltip title="新建任务到此分组" placement="top" defaultOpen>
+          <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
             <Input
               size="small"
               className="inline-title-input"
@@ -2040,7 +2046,7 @@ export default function TaskTable({
                 {
                   key: 'delete',
                   danger: true,
-                  label: '删除分组',
+                  label: '删除任务分组',
                   onClick: () => void handleDeleteSection(section.guid),
                 },
               ],
@@ -2616,7 +2622,7 @@ export default function TaskTable({
               loading={creatingSection}
               block
             >
-              新建分组
+              新建任务分组
             </Button>
           )}
         </>
@@ -2715,6 +2721,10 @@ function CustomFieldCell({
   const memberValue = fieldValue?.member_value?.map((member) => member.id) ?? []
   const displayValue = formatCustomFieldValue(task, field, users)
   const hasValue = displayValue !== '-'
+  const selectedSingleValues =
+    field.guid === 'status'
+      ? [task.status]
+      : singleValue ? [singleValue] : []
 
   const exitEditing = () => {
     setEditing(false)
@@ -2741,11 +2751,11 @@ function CustomFieldCell({
 
   if (!editing) {
     if (field.type === 'single_select' && hasValue) {
-      return renderReadTrigger(<Tag className="custom-field-value-tag">{displayValue}</Tag>)
+      return renderReadTrigger(renderSelectFieldTags(field, selectedSingleValues))
     }
 
     if (field.type === 'multi_select' && multiValue.length > 0) {
-      return renderReadTrigger(<Tag className="custom-field-value-tag">{displayValue}</Tag>)
+      return renderReadTrigger(renderSelectFieldTags(field, multiValue))
     }
 
     return renderReadTrigger(
@@ -2824,10 +2834,7 @@ function CustomFieldCell({
           value={field.guid === 'status' ? task.status : singleValue}
           placeholder="选择选项"
           allowClear
-          options={(field.options ?? []).map((option) => ({
-            label: option.name,
-            value: option.guid,
-          }))}
+          options={buildSelectableCustomFieldOptions(field, selectedSingleValues)}
           onChange={(value) => {
             if (field.guid === 'status') {
               onStatusChange(task, (value || 'todo') as Task['status'])
@@ -2855,10 +2862,7 @@ function CustomFieldCell({
           autoFocus
           value={multiValue}
           placeholder="选择选项"
-          options={(field.options ?? []).map((option) => ({
-            label: option.name,
-            value: option.guid,
-          }))}
+          options={buildSelectableCustomFieldOptions(field, multiValue)}
           onChange={(value) => onChange({ guid: field.guid, multi_select_value: value })}
           onBlur={exitEditing}
           onOpenChange={(open) => {
@@ -3216,6 +3220,61 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
       )}
     </div>
   )
+}
+
+function renderSelectFieldTags(field: CustomFieldDef, values: string[]) {
+  const visibleValues = values.filter(Boolean)
+  if (visibleValues.length === 0) {
+    return <span className="custom-field-placeholder">点击填写</span>
+  }
+
+  return (
+    <span className="custom-field-tag-list">
+      {visibleValues.map((value) => {
+        const option = field.options?.find((item) => item.guid === value)
+        const label = option?.name ?? value
+        const isDisabled = option?.is_disabled === true
+        return (
+          <Tag
+            key={value}
+            className={`custom-field-value-tag ${
+              isDisabled ? 'custom-field-value-tag-disabled' : ''
+            }`}
+            style={
+              !isDisabled && option?.color
+                ? {
+                  color: option.color,
+                  backgroundColor: `${option.color}24`,
+                }
+                : undefined
+            }
+          >
+            {label}
+          </Tag>
+        )
+      })}
+    </span>
+  )
+}
+
+function renderSelectOptionLabel(name: string, isDisabled: boolean) {
+  if (!isDisabled) {
+    return name
+  }
+
+  return <span className="custom-field-disabled-option-label">{name}</span>
+}
+
+function buildSelectableCustomFieldOptions(field: CustomFieldDef, selectedValues: string[]) {
+  const selectedValueSet = new Set(selectedValues.filter(Boolean))
+
+  return (field.options ?? [])
+    .filter((option) => !option.is_disabled || selectedValueSet.has(option.guid))
+    .map((option) => ({
+      label: renderSelectOptionLabel(option.name, option.is_disabled === true),
+      value: option.guid,
+      disabled: option.is_disabled === true,
+    }))
 }
 
 function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string {

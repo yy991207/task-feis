@@ -12,6 +12,7 @@ import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
 import List from 'antd/es/list'
+import Tooltip from 'antd/es/tooltip'
 import {
   CloseOutlined,
   MoreOutlined,
@@ -27,15 +28,11 @@ import {
   NodeIndexOutlined,
   ForkOutlined,
   AlignLeftOutlined,
-  SmileOutlined,
   UsergroupAddOutlined,
-  PictureOutlined,
-  SendOutlined,
   EyeOutlined,
   DownloadOutlined,
   DownOutlined,
   UnorderedListOutlined,
-  FontSizeOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import Calendar from 'antd/es/calendar'
@@ -77,6 +74,7 @@ import {
   updateProject as apiUpdateProject,
 } from '@/services/projectService'
 import { FilePreviewRenderer } from '@/components/file-preview'
+import TaskRichInput, { TaskRichText } from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import './index.less'
@@ -120,16 +118,19 @@ export default function TaskDetailPanel({
     task.tasklists[0]?.section_guid ?? '',
   )
   const [commentValue, setCommentValue] = useState('')
+  const [commentMentions, setCommentMentions] = useState<string[]>([])
   const [comments, setComments] = useState<ApiComment[]>([])
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentValue, setEditingCommentValue] = useState('')
+  const [editingCommentMentions, setEditingCommentMentions] = useState<string[]>([])
   const [descriptionDraft, setDescriptionDraft] = useState(task.description)
-  const [descriptionEditing, setDescriptionEditing] = useState(false)
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeId, setSubtaskAssigneeId] = useState<string | undefined>(undefined)
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
+  const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
+  const [activeSubtaskAssigneeGuid, setActiveSubtaskAssigneeGuid] = useState<string | null>(null)
   const [selectedFollowerId, setSelectedFollowerId] = useState<string>()
   const [followersPopoverOpen, setFollowersPopoverOpen] = useState(false)
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
@@ -174,6 +175,11 @@ export default function TaskDetailPanel({
       setSubtaskDrafts(inheritParentStartForTasks(items.map((t) => apiTaskToTask(t)), task)),
     )
   }, [task.guid, task.start?.timestamp])
+
+  useEffect(() => {
+    setActiveSubtaskDueGuid(null)
+    setActiveSubtaskAssigneeGuid(null)
+  }, [task.guid])
 
   useEffect(() => {
     let cancelled = false
@@ -245,6 +251,7 @@ export default function TaskDetailPanel({
   }, [])
 
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
+  const commentInputUsers = availableUsers
 
   useEffect(() => {
     listMembers()
@@ -411,6 +418,31 @@ export default function TaskDetailPanel({
     </div>
   )
 
+  // 关注人入口固定在负责人下面，避免 footer 再渲染一份导致详情页底部重复占位。
+  const followersEntry = (
+    <div className="detail-followers">
+      <Button
+        type="text"
+        htmlType="button"
+        className="followers-summary"
+      >
+        {visibleFollowedUsers.length > 0 ? (
+          <Avatar.Group max={{ count: 3 }} size={24}>
+            {visibleFollowedUsers.map((user) => (
+              <Avatar key={user.id} size={20} style={{ backgroundColor: '#7b67ee' }}>
+                {(user.name ?? user.id).slice(0, 1)}
+              </Avatar>
+            ))}
+          </Avatar.Group>
+        ) : (
+          <Avatar size={20} style={{ backgroundColor: '#7b67ee' }} icon={<UserOutlined />} />
+        )}
+        <span className="followers-text">{followedUsers.length} 人关注</span>
+        <span className="followers-summary-action">管理</span>
+      </Button>
+    </div>
+  )
+
   const handleDateQuickSet = async (
     field: 'start' | 'due',
     value: dayjs.Dayjs | null,
@@ -546,11 +578,43 @@ export default function TaskDetailPanel({
     const nextDone = subtask.status !== 'done'
     try {
       const apiTask = await patchTaskStatus(subtask.guid, nextDone ? 'done' : 'todo')
-      const next = apiTaskToTask(apiTask)
+      const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
       onTaskUpdated?.(next)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '状态更新失败')
+    }
+  }
+
+  const handleOpenSubtaskDetail = (subtask: Task) => {
+    onOpenTask?.(subtask)
+  }
+
+  const handleSubtaskDueChange = async (subtask: Task, value: dayjs.Dayjs | null) => {
+    try {
+      const apiTask = await updateTaskApi(subtask.guid, {
+        due_date: value ? value.toISOString() : null,
+      })
+      const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+      setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
+      onTaskUpdated?.(next)
+      setActiveSubtaskDueGuid(null)
+      message.success(value ? '已更新子任务截止时间' : '已清空子任务截止时间')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '更新子任务截止时间失败')
+    }
+  }
+
+  const handleSubtaskAssigneeChange = async (subtask: Task, value?: string) => {
+    try {
+      const apiTask = await patchTaskAssignee(subtask.guid, value ?? null)
+      const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+      setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
+      onTaskUpdated?.(next)
+      setActiveSubtaskAssigneeGuid(null)
+      message.success(value ? '已更新子任务负责人' : '已清空子任务负责人')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '更新子任务负责人失败')
     }
   }
 
@@ -561,56 +625,31 @@ export default function TaskDetailPanel({
       setAttachments((prev) => [...prev, created])
       setAttachmentCount((prev) => prev + 1)
       message.success('附件已上传')
+      return created
     } catch (err) {
       message.error(err instanceof Error ? err.message : '上传失败')
+      return null
     } finally {
       setAttachmentUploading(false)
     }
-    return false
   }
 
   const handleCommentAttachmentUpload = async (file: File) => {
     setCommentAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file, { ownerType: 'comment' })
-      setCommentAttachments((prev) => [...prev, created])
       setCommentAttachmentMap((prev) => ({ ...prev, [created.attachment_id]: created }))
-      setAttachments((prev) =>
-        prev.some((a) => a.attachment_id === created.attachment_id)
-          ? prev
-          : [...prev, created],
-      )
-      setAttachmentCount((prev) => prev + 1)
+      return created
     } catch (err) {
       message.error(err instanceof Error ? err.message : '上传失败')
+      return null
     } finally {
       setCommentAttachmentUploading(false)
     }
-    return false
   }
 
   const handleRemoveCommentAttachment = (attachmentId: string) => {
     setCommentAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
-  }
-
-  const handleCommentPaste = (
-    event: React.ClipboardEvent<HTMLTextAreaElement>,
-  ) => {
-    const items = Array.from(event.clipboardData.items)
-    const imageItems = items.filter((item) => item.type.startsWith('image/'))
-    if (imageItems.length === 0) {
-      return
-    }
-
-    event.preventDefault()
-    imageItems.forEach((item) => {
-      const file = item.getAsFile()
-      if (!file) {
-        return
-      }
-      // 这里直接复用评论附件上传链路，避免粘贴图片再维护第二套上传逻辑。
-      void handleCommentAttachmentUpload(file)
-    })
   }
 
   const handleAttachmentDelete = async (attachmentId: string) => {
@@ -777,8 +816,9 @@ export default function TaskDetailPanel({
     }
   }, [previewAttachment])
 
-  const handleSendComment = async () => {
-    const content = commentValue.trim()
+  const handleSendComment = async (contentOverride?: string, mentionIds?: string[]) => {
+    const content = (contentOverride ?? commentValue).trim()
+    const nextMentions = mentionIds ?? commentMentions
     if (!content && commentAttachments.length === 0) {
       return
     }
@@ -787,11 +827,12 @@ export default function TaskDetailPanel({
       const created = await createComment(
         task.guid,
         content,
-        undefined,
+        nextMentions.length > 0 ? nextMentions : undefined,
         attachmentIds.length > 0 ? attachmentIds : undefined,
       )
       setComments((prev) => [...prev, created])
       setCommentValue('')
+      setCommentMentions([])
       setCommentAttachments([])
     } catch (err) {
       message.error(err instanceof Error ? err.message : '发送失败')
@@ -801,22 +842,7 @@ export default function TaskDetailPanel({
   const handleStartEditComment = (c: ApiComment) => {
     setEditingCommentId(c.comment_id)
     setEditingCommentValue(c.content)
-  }
-
-  const handleSaveEditComment = async () => {
-    if (!editingCommentId) return
-    const content = editingCommentValue.trim()
-    if (!content) return
-    try {
-      const updated = await updateComment(task.guid, editingCommentId, content)
-      setComments((prev) =>
-        prev.map((c) => (c.comment_id === editingCommentId ? updated : c)),
-      )
-      setEditingCommentId(null)
-      setEditingCommentValue('')
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '保存失败')
-    }
+    setEditingCommentMentions(c.mentions ?? [])
   }
 
   const handleDeleteComment = async (commentId: string) => {
@@ -940,14 +966,18 @@ export default function TaskDetailPanel({
           </Button>
         )}
         <div className="detail-actions">
-          <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
-            <span className="detail-action-icon">
-              <MoreOutlined />
+          <Tooltip title="更多操作" placement="bottom">
+            <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
+              <span className="detail-action-icon">
+                <MoreOutlined />
+              </span>
+            </Dropdown>
+          </Tooltip>
+          <Tooltip title="关闭详情" placement="bottom">
+            <span className="detail-action-icon" onClick={onClose}>
+              <CloseOutlined />
             </span>
-          </Dropdown>
-          <span className="detail-action-icon" onClick={onClose}>
-            <CloseOutlined />
-          </span>
+          </Tooltip>
         </div>
       </div>
 
@@ -959,7 +989,9 @@ export default function TaskDetailPanel({
 
           {/* Assignee row */}
           <div className="detail-field-row">
-            <UserOutlined className="field-icon" />
+            <Tooltip title="负责人" placement="top">
+              <UserOutlined className="field-icon" />
+            </Tooltip>
             <Popover
               trigger="click"
               placement="bottomLeft"
@@ -1001,9 +1033,30 @@ export default function TaskDetailPanel({
             </Popover>
           </div>
 
+          {/* Followers row */}
+          <div className="detail-field-row detail-followers-row">
+            <Tooltip title="关注人" placement="top">
+              <UsergroupAddOutlined className="field-icon" />
+            </Tooltip>
+            <div className="field-content">
+              <Popover
+                open={followersPopoverOpen}
+                onOpenChange={setFollowersPopoverOpen}
+                placement="bottomLeft"
+                trigger="click"
+                content={followerPopoverContent}
+                overlayClassName="followers-popover-overlay"
+              >
+                {followersEntry}
+              </Popover>
+            </div>
+          </div>
+
           {/* Date row */}
           <div className="detail-field-row">
-            <CalendarOutlined className="field-icon" />
+            <Tooltip title="开始和截止时间" placement="top">
+              <CalendarOutlined className="field-icon" />
+            </Tooltip>
             <div className="field-content">
               <Space size={8}>
                 {isSubtask ? (
@@ -1099,7 +1152,9 @@ export default function TaskDetailPanel({
           {currentTasklist && (
             <>
               <div className="detail-field-row">
-                <UnorderedListOutlined className="field-icon" />
+                <Tooltip title="任务清单和分组" placement="top">
+                  <UnorderedListOutlined className="field-icon" />
+                </Tooltip>
                 <div className="field-content">
                   <span className="tasklist-info">
                     {tasklistRenaming ? (
@@ -1138,7 +1193,9 @@ export default function TaskDetailPanel({
                     >
                       <span className="tasklist-section-trigger">
                         {(selectedSection ?? currentSection)?.name ?? '选择分组'}
-                        <DownOutlined className="tasklist-arrow" />
+                        <Tooltip title="选择任务分组">
+                          <DownOutlined className="tasklist-arrow" />
+                        </Tooltip>
                       </span>
                     </Popover>
                   </span>
@@ -1157,46 +1214,36 @@ export default function TaskDetailPanel({
 
           {/* Description row */}
           <div className="detail-field-row">
-            <AlignLeftOutlined className="field-icon" />
-            <div
-              className="field-content field-clickable"
-              onClick={() => {
-                setDescriptionDraft(task.description ?? '')
-                setDescriptionEditing(true)
-              }}
-            >
-              {descriptionEditing ? (
-                <span className="field-placeholder">编辑描述</span>
-              ) : task.description ? (
-                <span className="detail-description-text">{task.description}</span>
-              ) : (
-                <span className="field-placeholder">添加描述</span>
-              )}
-            </div>
-          </div>
-          {descriptionEditing && (
-            <div className="detail-field-indent">
-              <Input.TextArea
+            <Tooltip title="任务描述" placement="top">
+              <AlignLeftOutlined className="field-icon" />
+            </Tooltip>
+            <div className="field-content">
+              <TaskRichInput
+                mode="description"
                 value={descriptionDraft}
-                autoFocus
-                onChange={(e) => setDescriptionDraft(e.target.value)}
-                onBlur={async () => {
-                  const next = descriptionDraft ?? ''
+                users={commentInputUsers}
+                placeholder="输入任务描述"
+                className="detail-description-editor"
+                onChange={setDescriptionDraft}
+                onBlurCommit={async (nextValue) => {
+                  const next = nextValue.trim()
                   if (next !== (task.description ?? '')) {
                     await handleTaskPatch({ description: next })
                   }
-                  setDescriptionEditing(false)
                 }}
-                placeholder="输入任务描述"
-                autoSize={{ minRows: 3, maxRows: 6 }}
-                className="detail-description-input"
+                onRequestAttachmentUpload={(file) => handleAttachmentUpload(file)}
+                onPreviewAttachment={handleOpenAttachmentPreview}
+                onDownloadAttachment={(attachment) => void handleAttachmentDownload(attachment)}
+                onRemoveAttachment={handleAttachmentDelete}
               />
             </div>
-          )}
+          </div>
 
           {/* Subtask row */}
           <div className="detail-field-row">
-            <BranchesOutlined className="field-icon" />
+            <Tooltip title="子任务" placement="top">
+              <BranchesOutlined className="field-icon" />
+            </Tooltip>
             <div className="field-content">
               <span className="field-placeholder">子任务</span>
             </div>
@@ -1206,36 +1253,135 @@ export default function TaskDetailPanel({
               {subtaskDrafts.map((subtask) => {
                 const isDone = subtask.status === 'done'
                 const assignee = subtask.members.find((m) => m.role === 'assignee')
+                const assigneeUser = assignee
+                  ? availableUsers.find((user) => user.id === assignee.id) ?? {
+                    id: assignee.id,
+                    name: assignee.name ?? assignee.id,
+                  }
+                  : undefined
+                const dueDate = subtask.due ? dayjs(Number(subtask.due.timestamp)) : null
                 return (
                   <div
                     key={subtask.guid}
                     className={`detail-subtask-row ${isDone ? 'is-done' : ''}`}
-                    onClick={() => onOpenTask?.(subtask)}
                   >
-                    <span
-                      className={`subtask-check ${isDone ? 'checked' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void handleToggleSubtaskStatus(subtask)
-                      }}
+                    <Tooltip title="切换子任务状态">
+                      <span
+                        className={`subtask-check ${isDone ? 'checked' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleToggleSubtaskStatus(subtask)
+                        }}
+                      >
+                        {isDone && <CheckOutlined />}
+                      </span>
+                    </Tooltip>
+                    <button
+                      type="button"
+                      className="subtask-title-btn"
+                      onClick={() => handleOpenSubtaskDetail(subtask)}
                     >
-                      {isDone && <CheckOutlined />}
-                    </span>
-                    <span className="subtask-title">{subtask.summary}</span>
+                      <span className="subtask-title">{subtask.summary}</span>
+                    </button>
                     <div
                       className="subtask-meta"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {subtask.due && (
-                        <span className="subtask-date">
-                          {dayjs(Number(subtask.due.timestamp)).format('M月D日')}
-                        </span>
-                      )}
-                      {assignee && (
-                        <Avatar size={20} style={{ backgroundColor: '#7b67ee' }}>
-                          {(assignee.name ?? assignee.id).slice(0, 1)}
-                        </Avatar>
-                      )}
+                      <Popover
+                        trigger="click"
+                        placement="bottomLeft"
+                        open={activeSubtaskDueGuid === subtask.guid}
+                        onOpenChange={(open) =>
+                          setActiveSubtaskDueGuid(open ? subtask.guid : null)
+                        }
+                        content={
+                          <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                            <Calendar
+                              fullscreen={false}
+                              value={dueDate ?? undefined}
+                              onSelect={(value) => void handleSubtaskDueChange(subtask, value)}
+                              disabledDate={(current) =>
+                                current && current < dayjs().startOf('day')
+                              }
+                            />
+                            {dueDate && (
+                              <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  onClick={() => void handleSubtaskDueChange(subtask, null)}
+                                >
+                                  清除
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        }
+                      >
+                        <Tooltip title="设置子任务截止时间">
+                          <Button
+                            type="text"
+                            size="small"
+                            className="subtask-meta-trigger subtask-date-trigger"
+                            icon={<CalendarOutlined />}
+                          >
+                            {dueDate ? dueDate.format('M月D日') : '截止时间'}
+                          </Button>
+                        </Tooltip>
+                      </Popover>
+                      <Popover
+                        trigger="click"
+                        placement="bottomLeft"
+                        open={activeSubtaskAssigneeGuid === subtask.guid}
+                        onOpenChange={(open) =>
+                          setActiveSubtaskAssigneeGuid(open ? subtask.guid : null)
+                        }
+                        content={
+                          <div style={{ width: 220 }}>
+                            <UserSearchSelect
+                              autoFocus
+                              label="设置子任务负责人"
+                              placeholder="搜索并选择负责人"
+                              value={assigneeUser?.id}
+                              onChange={(value) => void handleSubtaskAssigneeChange(subtask, value)}
+                              users={availableUsers}
+                            />
+                          </div>
+                        }
+                      >
+                        <Tooltip title="设置子任务负责人">
+                          <Button
+                            type="text"
+                            size="small"
+                            className="subtask-meta-trigger subtask-assignee-trigger"
+                          >
+                            {assigneeUser ? (
+                              <>
+                                <Avatar size={20} style={{ backgroundColor: '#7b67ee' }}>
+                                  {(assigneeUser.name ?? assigneeUser.id).slice(0, 1)}
+                                </Avatar>
+                                <span className="subtask-assignee-name">
+                                  {assigneeUser.name ?? assigneeUser.id}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <UserOutlined />
+                                <span className="subtask-assignee-name">负责人</span>
+                              </>
+                            )}
+                          </Button>
+                        </Tooltip>
+                      </Popover>
+                      <Button
+                        type="text"
+                        size="small"
+                        className="subtask-detail-btn"
+                        icon={<EyeOutlined />}
+                        onClick={() => handleOpenSubtaskDetail(subtask)}
+                      >
+                        详情
+                      </Button>
                     </div>
                   </div>
                 )
@@ -1288,9 +1434,11 @@ export default function TaskDetailPanel({
                             </div>
                           }
                         >
-                          <CalendarOutlined
-                            className={`subtask-icon-btn ${subtaskDue ? 'active' : ''}`}
-                          />
+                          <Tooltip title="设置子任务截止时间">
+                            <CalendarOutlined
+                              className={`subtask-icon-btn ${subtaskDue ? 'active' : ''}`}
+                            />
+                          </Tooltip>
                         </Popover>
                         <Popover
                           trigger="click"
@@ -1320,9 +1468,11 @@ export default function TaskDetailPanel({
                             </div>
                           }
                         >
-                          <UsergroupAddOutlined
-                            className={`subtask-icon-btn ${subtaskAssigneeId ? 'active' : ''}`}
-                          />
+                          <Tooltip title="设置子任务负责人">
+                            <UsergroupAddOutlined
+                              className={`subtask-icon-btn ${subtaskAssigneeId ? 'active' : ''}`}
+                            />
+                          </Tooltip>
                         </Popover>
                       </span>
                     }
@@ -1335,7 +1485,9 @@ export default function TaskDetailPanel({
                   className="detail-subtask-row detail-subtask-add"
                   onClick={() => setSubtaskCreating(true)}
                 >
-                  <PlusOutlined className="subtask-add-icon" />
+                  <Tooltip title="添加子任务">
+                    <PlusOutlined className="subtask-add-icon" />
+                  </Tooltip>
                   <span className="subtask-add-text">添加子任务</span>
                 </div>
               )}
@@ -1352,7 +1504,9 @@ export default function TaskDetailPanel({
 
           {/* Attachment row */}
           <div className="detail-field-row">
-            <PaperClipOutlined className="field-icon" />
+            <Tooltip title="附件" placement="top">
+              <PaperClipOutlined className="field-icon" />
+            </Tooltip>
             <div className="field-content">
               <Upload
                 multiple
@@ -1390,14 +1544,18 @@ export default function TaskDetailPanel({
                         <div className="attachment-meta">{sizeLabel}</div>
                       </div>
                       <div className="attachment-actions">
-                        <EyeOutlined
-                          className="attachment-action"
-                          onClick={() => handleOpenAttachmentPreview(att)}
-                        />
-                        <DownloadOutlined
-                          className="attachment-action"
-                          onClick={() => void handleAttachmentDownload(att)}
-                        />
+                        <Tooltip title="预览附件">
+                          <EyeOutlined
+                            className="attachment-action"
+                            onClick={() => handleOpenAttachmentPreview(att)}
+                          />
+                        </Tooltip>
+                        <Tooltip title="下载附件">
+                          <DownloadOutlined
+                            className="attachment-action"
+                            onClick={() => void handleAttachmentDownload(att)}
+                          />
+                        </Tooltip>
                       </div>
                       <Popconfirm
                         title="确定删除该附件？"
@@ -1405,7 +1563,9 @@ export default function TaskDetailPanel({
                         cancelText="取消"
                         onConfirm={() => handleAttachmentDelete(att.attachment_id)}
                       >
-                        <DeleteOutlined className="attachment-delete" />
+                        <Tooltip title="删除附件">
+                          <DeleteOutlined className="attachment-delete" />
+                        </Tooltip>
                       </Popconfirm>
                     </div>
                   )
@@ -1476,7 +1636,11 @@ export default function TaskDetailPanel({
                           <Button
                             type="text"
                             size="small"
-                            icon={<MoreOutlined />}
+                            icon={
+                              <Tooltip title="更多评论操作">
+                                <MoreOutlined />
+                              </Tooltip>
+                            }
                             className="comment-more-btn"
                           />
                         </Dropdown>
@@ -1484,24 +1648,40 @@ export default function TaskDetailPanel({
                     </div>
                     {isEditing ? (
                       <div className="comment-edit-wrap">
-                        <Input.TextArea
-                          autoSize={{ minRows: 2, maxRows: 6 }}
+                        <TaskRichInput
+                          mode="comment-edit"
                           value={editingCommentValue}
-                          onChange={(e) => setEditingCommentValue(e.target.value)}
+                          users={commentInputUsers}
+                          placeholder="编辑评论"
+                          className="comment-edit-input"
+                          mentionIds={editingCommentMentions}
+                          submitLabel="保存"
+                          onChange={setEditingCommentValue}
+                          onMentionIdsChange={setEditingCommentMentions}
+                          onSubmit={async (content, mentions) => {
+                            const nextContent = content.trim()
+                            if (!nextContent) return
+                            const updated = await updateComment(
+                              task.guid,
+                              comment.comment_id,
+                              nextContent,
+                              mentions.length > 0 ? mentions : undefined,
+                            )
+                            setComments((prev) =>
+                              prev.map((c) => (c.comment_id === comment.comment_id ? updated : c)),
+                            )
+                            setEditingCommentId(null)
+                            setEditingCommentValue('')
+                            setEditingCommentMentions([])
+                          }}
                         />
                         <Space size={8} style={{ marginTop: 6 }}>
-                          <Button
-                            size="small"
-                            type="primary"
-                            onClick={handleSaveEditComment}
-                          >
-                            保存
-                          </Button>
                           <Button
                             size="small"
                             onClick={() => {
                               setEditingCommentId(null)
                               setEditingCommentValue('')
+                              setEditingCommentMentions([])
                             }}
                           >
                             取消
@@ -1511,7 +1691,7 @@ export default function TaskDetailPanel({
                     ) : (
                       <>
                         {comment.content && (
-                          <div className="comment-text">{comment.content}</div>
+                          <TaskRichText html={comment.content} className="comment-text" />
                         )}
                         {(comment.attachment_ids ?? []).length > 0 && (
                           <div className="detail-attachment-list comment-attachment-list--posted">
@@ -1519,18 +1699,19 @@ export default function TaskDetailPanel({
                               const att = commentAttachmentMap[id]
                               if (isImageAttachment(att)) {
                                 return (
-                                  <button
-                                    key={id}
-                                    type="button"
-                                    className="comment-image-card"
-                                    onClick={() => att && handleOpenAttachmentPreview(att)}
-                                  >
-                                    <img
-                                      className="comment-image-thumb"
-                                      src={att ? buildAttachmentPreviewUrl(att) : ''}
-                                      alt={att?.file_name ?? '评论图片'}
-                                    />
-                                  </button>
+                                  <Tooltip key={id} title="预览评论图片">
+                                    <button
+                                      type="button"
+                                      className="comment-image-card"
+                                      onClick={() => att && handleOpenAttachmentPreview(att)}
+                                    >
+                                      <img
+                                        className="comment-image-thumb"
+                                        src={att ? buildAttachmentPreviewUrl(att) : ''}
+                                        alt={att?.file_name ?? '评论图片'}
+                                      />
+                                    </button>
+                                  </Tooltip>
                                 )
                               }
                               const ext = (att?.file_name.split('.').pop() ?? '').toLowerCase()
@@ -1575,101 +1756,39 @@ export default function TaskDetailPanel({
 
       {/* Footer */}
       <div className="detail-footer">
-        <div className="comment-input-wrapper">
-          <Input.TextArea
-            placeholder="输入评论"
-            className="comment-input"
-            value={commentValue}
-            onChange={(e) => setCommentValue(e.target.value)}
-            onPaste={handleCommentPaste}
-            autoSize={{ minRows: 1, maxRows: 6 }}
-            onPressEnter={(e) => {
-              if (e.shiftKey) {
-                return
-              }
-              e.preventDefault()
-              void handleSendComment()
-            }}
-            variant="borderless"
-          />
-          {commentAttachments.length > 0 && (
-            <div className="detail-attachment-list detail-comment-preview-list">
-              {commentAttachments.map((att) => {
-                if (isImageAttachment(att)) {
-                  return (
-                    <div key={att.attachment_id} className="comment-image-preview-item">
-                      <button
-                        type="button"
-                        className="comment-image-card"
-                        onClick={() => handleOpenAttachmentPreview(att)}
-                      >
-                        <img
-                          className="comment-image-thumb"
-                          src={buildAttachmentPreviewUrl(att)}
-                          alt={att.file_name}
-                        />
-                      </button>
-                      <DeleteOutlined
-                        className="attachment-delete comment-image-delete"
-                        onClick={() => handleRemoveCommentAttachment(att.attachment_id)}
-                      />
-                    </div>
-                  )
-                }
-                const ext = (att.file_name.split('.').pop() ?? '').toLowerCase()
-                const sizeKB = att.file_size / 1024
-                const sizeLabel =
-                  sizeKB >= 1024
-                    ? `${(sizeKB / 1024).toFixed(1)} MB`
-                    : `${Math.max(1, Math.round(sizeKB))} KB`
-                return (
-                  <div key={att.attachment_id} className="detail-attachment-card">
-                    <div className="attachment-thumb">
-                      <span className="attachment-ext">{ext || 'FILE'}</span>
-                    </div>
-                    <div className="attachment-main">
-                      <div className="attachment-name" title={att.file_name}>
-                        {att.file_name}
-                      </div>
-                      <div className="attachment-meta">{sizeLabel}</div>
-                    </div>
-                    <DeleteOutlined
-                      className="attachment-delete"
-                      onClick={() => handleRemoveCommentAttachment(att.attachment_id)}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          )}
-          <div className="comment-toolbar">
-            <FontSizeOutlined className="toolbar-icon" />
-            <SmileOutlined className="toolbar-icon" />
-            <UsergroupAddOutlined className="toolbar-icon" />
-            <SmileOutlined className="toolbar-icon" />
-            <PictureOutlined className="toolbar-icon" />
-            <Upload
-              multiple
-              showUploadList={false}
-              beforeUpload={(file) => {
-                void handleCommentAttachmentUpload(file as File)
-                return false
-              }}
-            >
-              <PaperClipOutlined
-                className="toolbar-icon"
-                style={commentAttachmentUploading ? { opacity: 0.5 } : undefined}
-              />
-            </Upload>
-            <span className="toolbar-divider" />
-            <SendOutlined
-              className={`toolbar-send ${
-                commentValue.trim() || commentAttachments.length > 0 ? 'toolbar-send-active' : ''
-              }`}
-              onClick={handleSendComment}
-            />
-          </div>
-        </div>
+        <TaskRichInput
+          mode="comment"
+          value={commentValue}
+          users={commentInputUsers}
+          placeholder="输入评论"
+          className="comment-input-wrapper"
+          attachments={commentAttachments}
+          attachmentUploading={commentAttachmentUploading}
+          mentionIds={commentMentions}
+          submitLabel="发送"
+          onChange={setCommentValue}
+          onMentionIdsChange={setCommentMentions}
+          onSubmit={(content, mentions) => handleSendComment(content, mentions)}
+          onRequestMentionSearch={(keyword) =>
+            commentInputUsers.filter((user) => {
+              const lower = keyword.trim().toLowerCase()
+              if (!lower) return true
+              return user.id.toLowerCase().includes(lower) || user.name.toLowerCase().includes(lower)
+            })
+          }
+          onRequestAttachmentUpload={(file) => handleCommentAttachmentUpload(file)}
+          onAttachmentUploaded={(attachment) => {
+            setCommentAttachments((prev) =>
+              prev.some((item) => item.attachment_id === attachment.attachment_id)
+                ? prev
+                : [...prev, attachment],
+            )
+            setCommentAttachmentMap((prev) => ({ ...prev, [attachment.attachment_id]: attachment }))
+          }}
+          onPreviewAttachment={handleOpenAttachmentPreview}
+          onDownloadAttachment={(attachment) => void handleAttachmentDownload(attachment)}
+          onRemoveAttachment={handleRemoveCommentAttachment}
+        />
         <Modal
           open={Boolean(previewAttachment)}
           footer={null}
@@ -1701,36 +1820,6 @@ export default function TaskDetailPanel({
             </div>
           )}
         </Modal>
-        <Popover
-          open={followersPopoverOpen}
-          onOpenChange={setFollowersPopoverOpen}
-          placement="topLeft"
-          trigger="click"
-          content={followerPopoverContent}
-          overlayClassName="followers-popover-overlay"
-        >
-          <div className="detail-followers">
-            <Button
-              type="text"
-              htmlType="button"
-              className="followers-summary"
-            >
-              {visibleFollowedUsers.length > 0 ? (
-                <Avatar.Group max={{ count: 3 }} size={24}>
-                  {visibleFollowedUsers.map((user) => (
-                    <Avatar key={user.id} size={20} style={{ backgroundColor: '#7b67ee' }}>
-                      {(user.name ?? user.id).slice(0, 1)}
-                    </Avatar>
-                  ))}
-                </Avatar.Group>
-              ) : (
-                <Avatar size={20} style={{ backgroundColor: '#7b67ee' }} icon={<UserOutlined />} />
-              )}
-              <span className="followers-text">{followedUsers.length} 人关注</span>
-              <span className="followers-summary-action">管理</span>
-            </Button>
-          </div>
-        </Popover>
       </div>
     </div>
   )

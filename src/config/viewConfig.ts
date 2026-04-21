@@ -83,7 +83,7 @@ const configs: Record<string, ViewConfig> = {
       showSort: true,
       sortLabel: '拖拽自定义',
       showGroup: true,
-      groupLabel: '自定义分组',
+      groupLabel: '任务分组',
       showSubtask: false,
       showFieldConfig: true,
     },

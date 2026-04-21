@@ -283,11 +283,6 @@ body.detail-panel-resizing {
   }
 }
 
-/* ── Description ── */
-.detail-description-input {
-  margin: 4px 0 8px;
-}
-
 /* ── Subtasks ── */
 .detail-subtask-creator {
   display: flex;
@@ -430,111 +425,6 @@ body.detail-panel-resizing {
   }
 }
 
-/* ── Footer ── */
-.detail-footer {
-  flex-shrink: 0;
-  padding: 12px 20px;
-  border-top: 1px solid #f0f1f5;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.comment-input-wrapper {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #e5e6eb;
-  border-radius: 8px;
-  padding: 6px 8px;
-  background: #fff;
-  transition: border-color 0.2s;
-  gap: 6px;
-
-  &:focus-within {
-    border-color: #3370ff;
-  }
-
-  .comment-input {
-    flex: 1;
-    font-size: 14px;
-    min-width: 0;
-    width: 100%;
-    padding: 4px 0;
-  }
-}
-
-.comment-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  width: 100%;
-
-  .toolbar-icon {
-    font-size: 16px;
-    color: #8f959e;
-    cursor: pointer;
-    padding: 2px;
-    transition: color 0.2s;
-
-    &:hover {
-      color: #3370ff;
-    }
-  }
-
-  .toolbar-divider {
-    width: 1px;
-    height: 16px;
-    background: #e5e6eb;
-    margin: 0 2px;
-    margin-left: auto;
-  }
-
-  .toolbar-send {
-    font-size: 16px;
-    color: #c9cdd4;
-    cursor: pointer;
-    padding: 2px;
-    transition: color 0.2s;
-
-    &.toolbar-send-active {
-      color: #3370ff;
-
-      &:hover {
-        color: #245bdb;
-      }
-    }
-  }
-}
-
-.comment-attachment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 0;
-
-  .comment-attachment-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    width: 280px;
-    max-width: 100%;
-    background: #f5f6f7;
-    border: 1px solid #e5e6eb;
-    border-radius: 6px;
-    font-size: 12px;
-
-    .comment-attachment-name {
-      flex: 1;
-      color: #1f2329;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-}
-
 .detail-followers {
   display: inline-flex;
   align-items: center;
@@ -572,6 +462,14 @@ body.detail-panel-resizing {
   .followers-summary-action {
     color: #7b67ee;
     font-size: 12px;
+  }
+}
+
+.detail-followers-row {
+  align-items: center;
+
+  .field-icon {
+    margin-top: 0;
   }
 }
 
@@ -909,13 +807,17 @@ body.detail-panel-resizing {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: 10px;
   font-size: 13px;
   color: #1d2129;
-  min-height: 30px;
+  min-height: 38px;
+  border: 1px solid transparent;
+  background: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
     background: #f7f8fa;
+    border-color: #e5e6eb;
   }
 
   &.is-done .subtask-title {
@@ -955,16 +857,75 @@ body.detail-panel-resizing {
     white-space: nowrap;
   }
 
+  .subtask-title-btn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+  }
+
   .subtask-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
   }
 
-  .subtask-date {
-    font-size: 12px;
-    color: #86909c;
+  .subtask-meta-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid #e5e6eb;
+    background: #fff;
+    color: #4e5969;
+
+    &:hover,
+    &:focus {
+      color: #1d2129;
+      border-color: #91caff;
+      background: #f0f7ff;
+    }
+
+    .ant-avatar {
+      flex-shrink: 0;
+    }
+  }
+
+  .subtask-date-trigger {
+    min-width: 90px;
+    justify-content: center;
+  }
+
+  .subtask-assignee-trigger {
+    max-width: 160px;
+  }
+
+  .subtask-assignee-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .subtask-detail-btn {
+    height: 28px;
+    padding-inline: 10px;
+    border-radius: 999px;
+    color: #3370ff;
+
+    &:hover,
+    &:focus {
+      background: #edf3ff;
+      color: #1456d9;
+    }
   }
 }
 

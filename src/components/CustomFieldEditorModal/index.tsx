@@ -51,6 +51,10 @@ const PRESET_COLORS = [
   '#5ac8fa', '#ffcc00', '#ff2d55', '#5856d6', '#a2845e',
 ]
 
+function getEnabledFieldOptions(field?: ApiCustomField | null): FieldOption[] {
+  return (field?.options ?? []).filter((option) => !(option.is_disabled === true))
+}
+
 export default function CustomFieldEditorModal({
   open,
   projectId,
@@ -67,7 +71,7 @@ export default function CustomFieldEditorModal({
   const [type, setType] = useState<CustomFieldType>(field?.field_type ?? initialType ?? 'text')
   const [name, setName] = useState(field?.name ?? '')
   const [required, setRequired] = useState(field?.required ?? false)
-  const [options, setOptions] = useState<FieldOption[]>(field?.options ?? [])
+  const [options, setOptions] = useState<FieldOption[]>(() => getEnabledFieldOptions(field))
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -76,7 +80,7 @@ export default function CustomFieldEditorModal({
       setType(field?.field_type ?? initialType ?? 'text')
       setName(field?.name ?? '')
       setRequired(field?.required ?? false)
-      setOptions(field?.options ?? [])
+      setOptions(getEnabledFieldOptions(field))
     }
   }, [open, field, initialType])
 
