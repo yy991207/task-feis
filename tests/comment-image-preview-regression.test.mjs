@@ -13,6 +13,10 @@ async function readFilePreviewRendererSource() {
   return readFile(new URL('../src/components/file-preview/file-preview-renderer.tsx', import.meta.url), 'utf8')
 }
 
+async function readTaskDetailStyleSource() {
+  return readFile(new URL('../src/components/TaskDetailPanel/index.less', import.meta.url), 'utf8')
+}
+
 async function testCommentInputSupportsPasteImageUpload() {
   const source = await readTaskDetailSource()
 
@@ -40,6 +44,7 @@ async function testCommentInputSupportsPasteImageUpload() {
 
 async function testCommentAttachmentsRenderInlineImagePreview() {
   const source = await readTaskDetailSource()
+  const styleSource = await readTaskDetailStyleSource()
 
   assert.match(
     source,
@@ -55,6 +60,77 @@ async function testCommentAttachmentsRenderInlineImagePreview() {
     source,
     /setPreviewAttachment\(att\)/,
     '点击评论区图片附件时应该打开预览态',
+  )
+  assert.match(
+    styleSource,
+    /\.comment-image-card \{[\s\S]*width: 160px;[\s\S]*height: 108px;/,
+    '评论区图片附件应该用固定缩略图尺寸展示，不能按原图尺寸撑开评论区',
+  )
+  assert.match(
+    styleSource,
+    /\.comment-image-thumb \{[\s\S]*object-fit: cover;/,
+    '评论区图片缩略图应该裁切填充卡片，避免大图溢出',
+  )
+}
+
+async function testTaskAttachmentsExposePreviewAndDownloadActions() {
+  const source = await readTaskDetailSource()
+  const styleSource = await readTaskDetailStyleSource()
+
+  assert.match(
+    source,
+    /EyeOutlined/,
+    '任务附件卡片应该提供预览动作图标',
+  )
+  assert.match(
+    source,
+    /DownloadOutlined/,
+    '任务附件卡片应该提供下载动作图标',
+  )
+  assert.match(
+    source,
+    /onClick=\{\(\) => setPreviewAttachment\(att\)\}/,
+    '点击任务附件的预览图标应该打开预览态',
+  )
+  assert.match(
+    source,
+    /onClick=\{\(\) => void handleAttachmentDownload\(att\)\}/,
+    '点击任务附件的下载图标应该走下载接口',
+  )
+  assert.match(
+    styleSource,
+    /\.attachment-actions \{/,
+    '任务附件卡片应该有独立的动作区样式',
+  )
+  assert.match(
+    source,
+    /const \[previewContent, setPreviewContent\] = useState\(''\)/,
+    '任务附件预览弹层应该维护独立的 preview 内容状态',
+  )
+  assert.match(
+    source,
+    /const \[previewLoading, setPreviewLoading\] = useState\(false\)/,
+    '任务附件预览弹层应该维护独立的 preview loading 状态',
+  )
+  assert.match(
+    source,
+    /fetch\(buildAttachmentPreviewUrl\(previewAttachment\)/,
+    '打开任务附件预览时应该显式请求 preview 接口',
+  )
+  assert.match(
+    source,
+    /response\.blob\(\)/,
+    '图片附件预览应该通过 preview 接口取 blob，而不是只依赖 img src 隐式加载',
+  )
+  assert.match(
+    source,
+    /content=\{previewContent\}/,
+    '文件预览组件应该接收真实的 preview 内容',
+  )
+  assert.match(
+    source,
+    /loading=\{previewLoading\}/,
+    '文件预览组件应该接收真实的 preview loading 状态',
   )
 }
 
@@ -142,6 +218,7 @@ async function testTaskDetailUsesSharedFilePreviewRenderer() {
 async function main() {
   await testCommentInputSupportsPasteImageUpload()
   await testCommentAttachmentsRenderInlineImagePreview()
+  await testTaskAttachmentsExposePreviewAndDownloadActions()
   await testAttachmentPreviewUsesServiceHelpers()
   await testTaskDetailUsesSharedFilePreviewRenderer()
   console.log('comment image preview regressions ok')

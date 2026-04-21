@@ -612,6 +612,88 @@ body.detail-panel-resizing {
   margin-top: 4px;
 }
 
+.detail-comment-preview-list,
+.comment-attachment-list--posted {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.comment-image-preview-item {
+  position: relative;
+  width: 160px;
+  height: 108px;
+
+  &:hover {
+    .comment-image-delete {
+      opacity: 1;
+    }
+  }
+}
+
+.comment-image-card {
+  display: block;
+  width: 160px;
+  height: 108px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  background: #f7f8fa;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    border-color: #3370ff;
+    box-shadow: 0 4px 12px rgba(51, 112, 255, 0.14);
+  }
+}
+
+.comment-image-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-image-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff !important;
+  background: rgba(31, 35, 41, 0.72);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s;
+
+  &:hover {
+    background: #f53f3f;
+  }
+}
+
+.comment-preview-modal {
+  .ant-modal-content {
+    padding: 0;
+    overflow: hidden;
+    border-radius: 12px;
+  }
+
+  .ant-modal-close {
+    display: none;
+  }
+}
+
+.comment-preview-shell {
+  height: 70vh;
+  min-height: 420px;
+}
+
 .detail-attachment-card {
   display: flex;
   align-items: center;
@@ -651,7 +733,6 @@ body.detail-panel-resizing {
   .attachment-main {
     flex: 1;
     min-width: 0;
-    cursor: pointer;
 
     .attachment-name {
       font-size: 13px;
@@ -666,8 +747,28 @@ body.detail-panel-resizing {
       font-size: 12px;
       color: #86909c;
     }
+  }
 
-    &:hover .attachment-name {
+  .attachment-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .attachment-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: #86909c;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+
+    &:hover {
+      background: #f2f3f5;
       color: #3370ff;
     }
   }

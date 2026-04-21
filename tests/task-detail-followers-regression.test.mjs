@@ -51,8 +51,28 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /placeholder="选择要关注的人"/,
-    '详情页应该给关注人提供明确的选人入口',
+    /<Drawer/,
+    '详情页关注人列表应该改成 antd Drawer 上拉层，方便查看全部关注人',
+  )
+  assert.match(
+    detailSource,
+    /placement="bottom"/,
+    '关注人列表 Drawer 应该从底部拉起，贴近参考图交互',
+  )
+  assert.match(
+    detailSource,
+    /const visibleFollowedUsers = followedUsers\.slice\(0, 3\)/,
+    '底部摘要区应该只展示少量关注人头像，完整列表放到上拉层里看',
+  )
+  assert.match(
+    detailSource,
+    /<List/,
+    '上拉层里应该用 antd List 展示全部关注人',
+  )
+  assert.match(
+    detailSource,
+    /className="followers-summary"/,
+    '详情页底部应该有独立的关注人摘要条，样式上对齐参考图',
   )
 }
 

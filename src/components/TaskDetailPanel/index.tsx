@@ -30,6 +30,8 @@ import {
   UsergroupAddOutlined,
   PictureOutlined,
   SendOutlined,
+  EyeOutlined,
+  DownloadOutlined,
   DownOutlined,
   UnorderedListOutlined,
   FontSizeOutlined,
@@ -138,6 +140,9 @@ export default function TaskDetailPanel({
     Record<string, ApiAttachment>
   >({})
   const [previewAttachment, setPreviewAttachment] = useState<ApiAttachment | null>(null)
+  const [previewContent, setPreviewContent] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string>()
   const [tasklistRenaming, setTasklistRenaming] = useState(false)
   const [tasklistRenameValue, setTasklistRenameValue] = useState('')
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
@@ -641,6 +646,56 @@ export default function TaskDetailPanel({
       cancelled = true
     }
   }, [comments, commentAttachmentMap])
+
+  useEffect(() => {
+    if (!previewAttachment) {
+      setPreviewContent('')
+      setPreviewLoading(false)
+      setPreviewImageUrl(undefined)
+      return
+    }
+
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    setPreviewLoading(true)
+    setPreviewContent('')
+    setPreviewImageUrl(undefined)
+
+    fetch(buildAttachmentPreviewUrl(previewAttachment), { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`预览失败 (${response.status})`)
+        }
+
+        if (isImageAttachment(previewAttachment)) {
+          const blob = await response.blob()
+          objectUrl = URL.createObjectURL(blob)
+          setPreviewImageUrl(objectUrl)
+          return
+        }
+
+        const text = await response.text()
+        setPreviewContent(text)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return
+        }
+        message.error(error instanceof Error ? error.message : '预览失败')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setPreviewLoading(false)
+        }
+      })
+
+    return () => {
+      controller.abort()
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [previewAttachment])
 
   const handleSendComment = async () => {
     const content = commentValue.trim()
@@ -1248,14 +1303,21 @@ export default function TaskDetailPanel({
                       <div className="attachment-thumb">
                         <span className="attachment-ext">{ext || 'FILE'}</span>
                       </div>
-                      <div
-                        className="attachment-main"
-                        onClick={() => handleAttachmentDownload(att)}
-                      >
+                      <div className="attachment-main">
                         <div className="attachment-name" title={att.file_name}>
                           {att.file_name}
                         </div>
                         <div className="attachment-meta">{sizeLabel}</div>
+                      </div>
+                      <div className="attachment-actions">
+                        <EyeOutlined
+                          className="attachment-action"
+                          onClick={() => setPreviewAttachment(att)}
+                        />
+                        <DownloadOutlined
+                          className="attachment-action"
+                          onClick={() => void handleAttachmentDownload(att)}
+                        />
                       </div>
                       <Popconfirm
                         title="确定删除该附件？"
@@ -1539,14 +1601,14 @@ export default function TaskDetailPanel({
           {previewAttachment && (
             <div className="comment-preview-shell">
               <FilePreviewRenderer
-                content=""
+                content={previewContent}
                 language={null}
                 fileName={previewAttachment.file_name}
                 isImage={isImageAttachment(previewAttachment)}
                 isCodeFile={false}
                 previewable={false}
-                loading={false}
-                imageUrl={buildAttachmentPreviewUrl(previewAttachment)}
+                loading={previewLoading}
+                imageUrl={previewImageUrl}
                 onOpenInNewTab={() => {
                   window.open(
                     buildAttachmentPreviewUrl(previewAttachment),
