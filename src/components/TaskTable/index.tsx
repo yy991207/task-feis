@@ -7,7 +7,6 @@ import Select from 'antd/es/select'
 import DatePicker from 'antd/es/date-picker'
 import Button from 'antd/es/button'
 import Dropdown from 'antd/es/dropdown'
-import type { MenuProps } from 'antd/es/menu'
 import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
 import Avatar from 'antd/es/avatar'
@@ -30,7 +29,6 @@ import {
   FileAddOutlined,
   FileTextFilled,
   SubnodeOutlined,
-  MoreOutlined,
   EllipsisOutlined,
   FlagFilled,
   CheckSquareFilled,
@@ -82,7 +80,7 @@ import {
   toPriorityString,
   listSubtasks,
 } from '@/services/taskService'
-import { updateProject, deleteProject, archiveProject } from '@/services/projectService'
+import { updateProject } from '@/services/projectService'
 import { listMembers } from '@/services/teamService'
 import { appConfig } from '@/config/appConfig'
 import {
@@ -221,6 +219,7 @@ interface TaskTableProps {
   onTaskUpdated?: (task: Task) => void
   onTasklistUpdated?: (tasklist: Tasklist) => void
   onTaskCreatedDetailOpen?: (task: Task) => void
+  onTaskDeleted?: (taskGuid: string) => void
 }
 
 interface DateConfigPanelProps {
@@ -317,7 +316,7 @@ function AssigneePicker({
                   <Avatar
                     size={20}
                     className="tasklist-assignee-avatar"
-                    style={{ backgroundColor: '#f5d7b5', color: '#7a4d15', fontSize: 11 }}
+                    style={{ backgroundColor: '#7b67ee', color: '#fff', fontSize: 11 }}
                   >
                     {(user.name ?? user.id).slice(0, 1)}
                   </Avatar>
@@ -499,6 +498,7 @@ export default function TaskTable({
   onTaskUpdated,
   onTasklistUpdated,
   onTaskCreatedDetailOpen,
+  onTaskDeleted,
 }: TaskTableProps) {
   const { token } = theme.useToken()
   const currentUser: User = { id: appConfig.user_id, name: appConfig.user_id }
@@ -521,7 +521,6 @@ export default function TaskTable({
   const [animatedSectionGuid, setAnimatedSectionGuid] = useState<string | null>(null)
   const inlineCreateRowRef = useRef<HTMLDivElement | null>(null)
   const inlineCreateSubmittingRef = useRef<string | null>(null)
-  const inlineCreateSubmitRef = useRef<(sectionGuid?: string) => void>(() => undefined)
   const [inlineCreateFocusedField, setInlineCreateFocusedField] = useState<
     'title' | 'assignee' | 'priority' | 'start' | 'due' | null
   >(null)
@@ -623,6 +622,27 @@ export default function TaskTable({
       }
     }
   }, [subtasksByGuid])
+
+  const handleStartCreateSubtask = useCallback((parentTask: Task) => {
+    setExpandedTaskGuids((prev) => {
+      if (prev.has(parentTask.guid)) {
+        return prev
+      }
+      const next = new Set(prev)
+      next.add(parentTask.guid)
+      return next
+    })
+    setSubtasksByGuid((prev) => {
+      if (prev[parentTask.guid]) {
+        return prev
+      }
+      return {
+        ...prev,
+        [parentTask.guid]: [],
+      }
+    })
+    onTaskClick(parentTask)
+  }, [onTaskClick])
 
   useEffect(() => {
     if (!pendingExpandTaskGuid) {
@@ -760,6 +780,17 @@ export default function TaskTable({
     })
   }, [])
 
+  const resetInlineCreate = () => {
+    setCreatingInSection(null)
+    setNewTaskTitle('')
+    setNewTaskAssigneeIds([])
+    setNewTaskPriority(Priority.None)
+    setNewTaskStart(null)
+    setNewTaskDue(null)
+    setInlineCreateFocusedField(null)
+    setActiveAssigneePickerKey(null)
+  }
+
   const handleInlineCreate = async (sectionGuid?: string) => {
     const submittingKey = sectionGuid ?? '__default__'
     if (inlineCreateSubmittingRef.current === submittingKey || submittingSectionGuid === sectionGuid) {
@@ -831,7 +862,7 @@ export default function TaskTable({
     }
   }
 
-  inlineCreateSubmitRef.current = (sectionGuid?: string) => {
+  const handleInlineCreateSubmit = (sectionGuid?: string) => {
     void handleInlineCreate(sectionGuid)
   }
 
@@ -851,23 +882,12 @@ export default function TaskTable({
       }
 
       // 行内新建任务要支持“点空白保存”，但点负责人、日期等浮层不能误提交。
-      inlineCreateSubmitRef.current(creatingInSection)
+      handleInlineCreateSubmit(creatingInSection)
     }
 
     document.addEventListener('pointerdown', handleDocumentPointerDown)
     return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
-  }, [creatingInSection])
-
-  const resetInlineCreate = () => {
-    setCreatingInSection(null)
-    setNewTaskTitle('')
-    setNewTaskAssigneeIds([])
-    setNewTaskPriority(Priority.None)
-    setNewTaskStart(null)
-    setNewTaskDue(null)
-    setInlineCreateFocusedField(null)
-    setActiveAssigneePickerKey(null)
-  }
+  }, [creatingInSection, handleInlineCreateSubmit])
 
   const markInlineCreateInteracting = () => {
     inlineCreateInteractingRef.current = true
@@ -1329,71 +1349,6 @@ export default function TaskTable({
     }
   }
 
-  const handleCopyTasklistLink = async () => {
-    if (!tasklist) return
-    const url = `${window.location.origin}/?tasklist=${tasklist.guid}`
-    try {
-      await navigator.clipboard.writeText(url)
-      message.success('已复制链接')
-    } catch {
-      message.error('复制失败')
-    }
-  }
-
-  const handleArchiveTasklist = async () => {
-    if (!tasklist) return
-    try {
-      await archiveProject(tasklist.guid)
-      message.success('已归档清单')
-      onRefresh()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '归档清单失败')
-    }
-  }
-
-  const handleDeleteTasklist = async () => {
-    if (!tasklist) return
-    try {
-      await deleteProject(tasklist.guid)
-      message.success('已删除清单')
-      onRefresh()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除清单失败')
-    }
-  }
-
-  const tasklistActionMenu: MenuProps = {
-    items: [
-      {
-        key: 'rename',
-        label: '重命名清单',
-        onClick: () => setEditingTitle(true),
-      },
-      {
-        key: 'copy-link',
-        label: '复制链接',
-        onClick: () => {
-          void handleCopyTasklistLink()
-        },
-      },
-      { type: 'divider' as const },
-      {
-        key: 'archive',
-        label: '归档清单',
-        onClick: () => {
-          void handleArchiveTasklist()
-        },
-      },
-      {
-        key: 'delete',
-        label: '移除清单',
-        danger: true,
-        onClick: () => {
-          void handleDeleteTasklist()
-        },
-      },
-    ],
-  }
   const visibleColumns = visibleColumnKeys.length
   const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
   const taskCreateMotionStyle = {
@@ -1786,7 +1741,6 @@ export default function TaskTable({
         <div className="table-header-bar">
           <div className="table-title-row">
             <div className="table-title-meta">
-              {isTasklistView && <CheckSquareFilled style={{ color: '#3370ff', fontSize: 18, marginTop: 2 }} />}
               {isTasklistView && editingTitle ? (
                 <div className="table-title-editor">
                   <EditableInput
@@ -1805,11 +1759,6 @@ export default function TaskTable({
                 >
                   {config.title}
                 </Title>
-              )}
-              {isTasklistView && !editingTitle && (
-                <Dropdown menu={tasklistActionMenu} trigger={['click']} placement="bottomLeft">
-                  <Button type="text" size="small" icon={<EllipsisOutlined />} style={{ color: '#646a73' }} />
-                </Dropdown>
               )}
             </div>
           </div>
@@ -2163,6 +2112,8 @@ export default function TaskTable({
                               onClick={() => onTaskClick(task)}
                               onUpdate={handleTaskUpdate}
                               onAssigneePickerOpenChange={setActiveAssigneePickerKey}
+                              onStartCreateSubtask={handleStartCreateSubtask}
+                              onTaskDeleted={onTaskDeleted}
                             />
                           </div>
                           {isExpanded &&
@@ -2251,6 +2202,8 @@ interface TaskRowProps {
   onClick: () => void
   onUpdate: (task: Task) => void
   onAssigneePickerOpenChange: (key: string | null) => void
+  onStartCreateSubtask?: (task: Task) => void
+  onTaskDeleted?: (taskGuid: string) => void
 }
 
 interface CustomFieldCellProps {
@@ -2534,67 +2487,69 @@ function TaskRow({
       className={`task-row ${task.status === 'done' ? 'done' : ''} ${isNew ? 'task-row-new' : ''} ${isSelected ? 'selected' : ''}`}
       onClick={onClick}
     >
-      <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
-        <Checkbox
-          checked={task.status === 'done'}
-          onClick={(e) => onToggleStatus(e, task)}
-        />
-      </div>
-      {has('title') && (
-        <div className="cell cell-title">
-          {depth > 0 && (
-            <span
-              className="task-tree-guide"
-              style={{ width: depth * 20 }}
-              aria-hidden
-            />
-          )}
-          {task.subtask_count > 0 ? (
-            <CaretRightOutlined
-              className="subtask-icon"
-              style={{
-                cursor: 'pointer',
-                transform: expanded ? 'rotate(90deg)' : 'rotate(0)',
-                transition: 'transform 0.15s',
-              }}
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleExpand?.(task)
-              }}
-            />
-          ) : depth > 0 ? (
-            <span className="subtask-icon" style={{ visibility: 'hidden' }}>
-              <CaretRightOutlined />
-            </span>
-          ) : null}
-          {editingName ? (
-            <div className="task-name-editor">
-              <EditableInput
-                placeholder="输入任务名称"
-                defaultValue={task.summary}
-                onSubmit={(value) => {
-                  void handleRenameSummary(value)
+      <div className="task-row-main">
+        {depth > 0 && (
+          <span
+            className="task-tree-guide"
+            style={{ width: depth * 20 }}
+            aria-hidden
+          />
+        )}
+        <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={task.status === 'done'}
+            onClick={(e) => onToggleStatus(e, task)}
+          />
+        </div>
+        {has('title') && (
+          <div className="cell cell-title">
+            {task.subtask_count > 0 ? (
+              <CaretRightOutlined
+                className="subtask-icon"
+                style={{
+                  cursor: 'pointer',
+                  transform: expanded ? 'rotate(90deg)' : 'rotate(0)',
+                  transition: 'transform 0.15s',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleExpand?.(task)
                 }}
               />
-            </div>
-          ) : (
-            <span
-              className={task.status === 'done' ? 'done-text' : 'title-text'}
-              onClick={(e) => {
-                e.stopPropagation()
-                setEditingName(true)
-              }}
-            >
-              {task.summary}
-            </span>
-          )}
-          {task.subtask_count > 0 && !editingName && (
-            <Tag className="subtask-tag">
-              {loadedSubtaskCount ?? 0} / {task.subtask_count}
-            </Tag>
-          )}
-        </div>
-      )}
+            ) : depth > 0 ? (
+              <span className="subtask-icon" style={{ visibility: 'hidden' }}>
+                <CaretRightOutlined />
+              </span>
+            ) : null}
+            {editingName ? (
+              <div className="task-name-editor">
+                <EditableInput
+                  placeholder="输入任务名称"
+                  defaultValue={task.summary}
+                  onSubmit={(value) => {
+                    void handleRenameSummary(value)
+                  }}
+                />
+              </div>
+            ) : (
+              <span
+                className={task.status === 'done' ? 'done-text' : 'title-text'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditingName(true)
+                }}
+              >
+                {task.summary}
+              </span>
+            )}
+            {task.subtask_count > 0 && !editingName && (
+              <Tag className="subtask-tag">
+                {loadedSubtaskCount ?? 0} / {task.subtask_count}
+              </Tag>
+            )}
+          </div>
+        )}
+      </div>
       {has('priority') && (
         <div className="cell cell-priority" onClick={(e) => e.stopPropagation()}>
           <Dropdown
@@ -2750,21 +2705,16 @@ function TaskRow({
       )}
       {has('creator') && (
         <div className="cell cell-creator">
-          {isTasklistView ? (
-            <span className="creator-name">{creatorUser?.name ?? ''}</span>
-          ) : (
-            <Space size={4}>
-              {creatorUser && (
-                <Avatar
-                  size={20}
-                  style={{ backgroundColor: '#7b67ee', fontSize: 11 }}
-                >
-                  {creatorUser.name.slice(0, 1)}
-                </Avatar>
-              )}
-              <span className="creator-name">{creatorUser?.name ?? ''}</span>
-            </Space>
-          )}
+          {creatorUser ? (
+            <Tooltip title={creatorUser.name}>
+              <Avatar
+                size={20}
+                style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
+              >
+                {creatorUser.name.slice(0, 1)}
+              </Avatar>
+            </Tooltip>
+          ) : null}
         </div>
       )}
       {has('created') && (
@@ -2832,11 +2782,7 @@ function TaskRow({
           />
         </div>
       ))}
-      {isTasklistView && (
-        <div className="cell cell-more">
-          <MoreOutlined />
-        </div>
-      )}
+      {isTasklistView && <div className="cell cell-more" />}
     </div>
   )
 }

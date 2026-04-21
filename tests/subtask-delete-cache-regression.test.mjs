@@ -69,6 +69,26 @@ async function testDeletingSubtaskUpdatesParentCount() {
   )
 }
 
+async function testDeletingParentTaskRemovesDescendantsFromOuterTasks() {
+  const source = await readTaskListSource()
+
+  assert.match(
+    source,
+    /const removedTaskGuidSet = new Set\(\[taskGuid\]\)/,
+    '删除任务时应该先把当前任务放进待清理集合，给级联清理子任务做准备',
+  )
+  assert.match(
+    source,
+    /while \(changed\) \{/,
+    '删除父任务时应该迭代收集所有后代任务，避免只删掉父任务本身',
+  )
+  assert.match(
+    source,
+    /if \(task\.parent_task_guid && removedTaskGuidSet\.has\(task\.parent_task_guid\)\) \{/,
+    '删除父任务时，父任务的所有子任务和更深层后代都应该一起从本地 tasks 移除',
+  )
+}
+
 async function testCreatingSubtaskUpdatesOuterTasks() {
   const source = await readTaskListSource()
 
@@ -129,6 +149,7 @@ async function main() {
   await testSubtaskCacheRemovesDeletedTasks()
   await testSubtaskCacheAddsCreatedTasks()
   await testDeletingSubtaskUpdatesParentCount()
+  await testDeletingParentTaskRemovesDescendantsFromOuterTasks()
   await testCreatingSubtaskUpdatesOuterTasks()
   await testCreatingSubtaskExpandsParentInMainTable()
   console.log('subtask delete cache regressions ok')

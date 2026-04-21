@@ -58,10 +58,26 @@ async function testSubtaskBlurSubmitsNonEmptyTitle() {
   )
 }
 
+async function testSubtaskSubmitDoesNotAssignRefDuringRender() {
+  const source = await readDetailPanelSource()
+
+  assert.doesNotMatch(
+    source,
+    /subtaskSubmitRef\.current =/,
+    '任务详情子任务提交逻辑不应该在 render 期间写 ref，避免 React 19 下 ref 状态错乱',
+  )
+  assert.match(
+    source,
+    /const handleSubtaskSubmit = \(\) => \{/,
+    '任务详情子任务创建应该用稳定函数封装提交逻辑，再给 blur 和点空白共用',
+  )
+}
+
 async function main() {
   await testSubtaskCreateListensForOutsidePointerDown()
   await testSubtaskCreateHasSyncSubmitGuard()
   await testSubtaskBlurSubmitsNonEmptyTitle()
+  await testSubtaskSubmitDoesNotAssignRefDuringRender()
   console.log('task detail subtask blur regressions ok')
 }
 

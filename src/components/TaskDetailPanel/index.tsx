@@ -68,8 +68,6 @@ import {
 } from '@/services/taskService'
 import {
   updateProject as apiUpdateProject,
-  deleteProject as apiDeleteProject,
-  archiveProject as apiArchiveProject,
 } from '@/services/projectService'
 import './index.less'
 
@@ -125,7 +123,6 @@ export default function TaskDetailPanel({
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
   const subtaskInteractingRef = useRef(false)
   const subtaskSubmittingRef = useRef(false)
-  const subtaskSubmitRef = useRef<() => void>(() => undefined)
   const [, setAttachmentCount] = useState(0)
   const [attachments, setAttachments] = useState<ApiAttachment[]>([])
   const [attachmentUploading, setAttachmentUploading] = useState(false)
@@ -371,7 +368,7 @@ export default function TaskDetailPanel({
     }
   }
 
-  subtaskSubmitRef.current = () => {
+  const handleSubtaskSubmit = () => {
     if (!subtaskTitle.trim()) {
       cancelEmptySubtaskCreate()
       return
@@ -395,12 +392,12 @@ export default function TaskDetailPanel({
       }
 
       // 子任务创建支持点空白保存，但点日期、负责人浮层时不能误提交。
-      subtaskSubmitRef.current()
+      handleSubtaskSubmit()
     }
 
     document.addEventListener('pointerdown', handleDocumentPointerDown)
     return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
-  }, [subtaskCreating])
+  }, [subtaskCreating, handleSubtaskSubmit])
 
   const markSubtaskCreateInteracting = () => {
     subtaskInteractingRef.current = true
@@ -542,75 +539,6 @@ export default function TaskDetailPanel({
     } catch (err) {
       message.error(err instanceof Error ? err.message : '重命名清单失败')
     }
-  }
-
-  const handleCopyTasklistLink = async () => {
-    if (!currentTasklist) return
-    const url = `${window.location.origin}/?tasklist=${currentTasklist.guid}`
-    try {
-      await navigator.clipboard.writeText(url)
-      message.success('已复制链接')
-    } catch {
-      message.error('复制失败')
-    }
-  }
-
-  const handleArchiveTasklist = async () => {
-    if (!currentTasklist) return
-    try {
-      await apiArchiveProject(currentTasklist.guid)
-      message.success('已归档清单')
-      onRefresh?.()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '归档清单失败')
-    }
-  }
-
-  const handleRemoveTasklist = async () => {
-    if (!currentTasklist) return
-    try {
-      await apiDeleteProject(currentTasklist.guid)
-      message.success('已删除清单')
-      onRefresh?.()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除清单失败')
-    }
-  }
-
-  const tasklistActionMenu = {
-    items: [
-      {
-        key: 'rename',
-        label: '重命名清单',
-        onClick: () => {
-          setTasklistRenameValue(currentTasklist?.name ?? '')
-          setTasklistRenaming(true)
-        },
-      },
-      {
-        key: 'copy-link',
-        label: '复制链接',
-        onClick: () => {
-          void handleCopyTasklistLink()
-        },
-      },
-      { type: 'divider' as const },
-      {
-        key: 'archive',
-        label: '归档清单',
-        onClick: () => {
-          void handleArchiveTasklist()
-        },
-      },
-      {
-        key: 'delete',
-        label: '移除清单',
-        danger: true,
-        onClick: () => {
-          void handleRemoveTasklist()
-        },
-      },
-    ],
   }
 
   useEffect(() => {
@@ -1020,21 +948,6 @@ export default function TaskDetailPanel({
                         <DownOutlined className="tasklist-arrow" />
                       </span>
                     </Popover>
-                    <Dropdown
-                      menu={tasklistActionMenu}
-                      trigger={['click']}
-                      placement="bottomLeft"
-                    >
-                      <MoreOutlined
-                        className="tasklist-more"
-                        style={{
-                          marginLeft: 'auto',
-                          color: '#8f959e',
-                          cursor: 'pointer',
-                          padding: '2px 4px',
-                        }}
-                      />
-                    </Dropdown>
                   </span>
                 </div>
               </div>

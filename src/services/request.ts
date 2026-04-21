@@ -27,7 +27,17 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
       ...options?.headers,
     },
   })
-  const json: ApiResponse<T> = await res.json()
+
+  if (!res.ok) {
+    throw new Error(`请求失败 (${res.status})`)
+  }
+
+  const rawText = await res.text()
+  if (!rawText.trim()) {
+    return undefined as T
+  }
+
+  const json: ApiResponse<T> = JSON.parse(rawText) as ApiResponse<T>
   if (!json.success) {
     throw new Error(json.msg || `请求失败 (${json.code})`)
   }

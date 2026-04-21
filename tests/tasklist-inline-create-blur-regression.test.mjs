@@ -55,10 +55,26 @@ async function testSectionHeaderPlusCanShowInlineCreateWhenToolbarCreateHidden()
   )
 }
 
+async function testInlineCreateSubmitDoesNotAssignRefDuringRender() {
+  const source = await readTaskTableSource()
+
+  assert.doesNotMatch(
+    source,
+    /inlineCreateSubmitRef\.current =/,
+    '任务清单行内新建提交逻辑不应该在 render 期间写 ref，避免 React 19 下出现 ref 读写时序问题',
+  )
+  assert.match(
+    source,
+    /const handleInlineCreateSubmit = \(sectionGuid\?: string\) => \{/,
+    '任务清单行内新建应该用稳定函数封装提交逻辑，再给外部点击和 blur 共用',
+  )
+}
+
 async function main() {
   await testInlineCreateListensForOutsidePointerDown()
   await testInlineCreateHasSyncSubmitGuard()
   await testSectionHeaderPlusCanShowInlineCreateWhenToolbarCreateHidden()
+  await testInlineCreateSubmitDoesNotAssignRefDuringRender()
   console.log('tasklist inline create blur regressions ok')
 }
 

@@ -367,6 +367,14 @@
     font-size: 13px;
   }
 
+  .task-row-main {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 352px;
+    overflow: hidden;
+  }
+
   .cell-checkbox {
     width: 32px;
     justify-content: center;
@@ -567,14 +575,25 @@
   }
 
   .cell-more {
-    width: 28px;
-    justify-content: center;
+    width: 64px;
+    gap: 2px;
+    justify-content: flex-end;
     color: #c3c7cf;
     opacity: 0;
     transition: opacity 0.15s ease, color 0.15s ease;
 
     &:hover {
       color: #646a73;
+    }
+
+    .task-row-action-btn {
+      color: #8f959e !important;
+      border-radius: 6px !important;
+
+      &:hover {
+        color: #1f2329 !important;
+        background: #f2f3f5 !important;
+      }
     }
   }
 
@@ -1072,6 +1091,7 @@
   align-self: stretch;
   flex-shrink: 0;
   display: inline-block;
+  width: 0;
 
   &::before {
     content: '';

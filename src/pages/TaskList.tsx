@@ -135,13 +135,23 @@ export default function TaskListPage() {
           case 'my-created':
             params.creator_id = currentUserId
             break
+          case 'my-assigned-quick':
+            params.creator_id = currentUserId
+            break
+          case 'done':
+            params.status = 'done'
+            break
           case 'activity':
             params.creator_id = currentUserId
             break
         }
         try {
           const { items } = await listTasks(params)
-          nextTasks = items.map((t) => apiTaskToTask(t))
+          let filtered = items
+          if (activeNav === 'my-assigned-quick') {
+            filtered = items.filter((t) => t.assignee_id != null)
+          }
+          nextTasks = filtered.map((t) => apiTaskToTask(t))
         } catch {
           nextTasks = []
         }
@@ -190,8 +200,21 @@ export default function TaskListPage() {
   const removeTaskFromState = useCallback((taskGuid: string) => {
     setTasks((prev) => {
       const deletedTask = prev.find((task) => task.guid === taskGuid)
+      const removedTaskGuidSet = new Set([taskGuid])
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const task of prev) {
+          if (task.parent_task_guid && removedTaskGuidSet.has(task.parent_task_guid)) {
+            if (!removedTaskGuidSet.has(task.guid)) {
+              removedTaskGuidSet.add(task.guid)
+              changed = true
+            }
+          }
+        }
+      }
       return prev
-        .filter((task) => task.guid !== taskGuid)
+        .filter((task) => !removedTaskGuidSet.has(task.guid))
         .map((task) => {
           if (task.guid !== deletedTask?.parent_task_guid) {
             return task
@@ -302,15 +325,6 @@ export default function TaskListPage() {
       return <TeamsManagerView />
     }
 
-    // 未文档化的视图 → 占位页
-    if (activeNav === 'my-assigned-quick' || activeNav === 'done') {
-      const titles: Record<string, string> = {
-        'my-assigned-quick': '我分配的',
-        done: '已完成',
-      }
-      return <PlaceholderView title={titles[activeNav as string]} />
-    }
-
     // 其他视图都用 TaskTable，基于 viewConfig 差异化渲染
     const config = getViewConfig(activeNav, activeTasklist?.name)
     if (!config) {
@@ -337,6 +351,7 @@ export default function TaskListPage() {
         onTaskUpdated={updateTaskInState}
         onTasklistUpdated={updateTasklistInState}
         onTaskCreatedDetailOpen={handleOpenTaskDetail}
+        onTaskDeleted={removeTaskFromState}
         pendingExpandTaskGuid={pendingExpandTaskGuid}
         onPendingExpandConsumed={(taskGuid) => {
           setPendingExpandTaskGuid((prev) => (prev === taskGuid ? null : prev))
