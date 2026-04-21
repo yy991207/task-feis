@@ -1942,11 +1942,6 @@ export default function TaskTable({
               <span>{field.name}</span>
             </div>
           ))}
-          <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={headerAddOpen} onOpenChange={setHeaderAddOpen} content={fieldConfigPanel}>
-            <div className="col col-add">
-              <PlusOutlined />
-            </div>
-          </Popover>
         </div>
       )}
 

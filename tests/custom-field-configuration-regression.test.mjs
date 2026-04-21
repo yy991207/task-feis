@@ -88,10 +88,21 @@ async function testCustomFieldTypeMenuAnchorsInsidePanel() {
   )
 }
 
+async function testTableHeaderDoesNotRenderStandaloneAddFieldPlus() {
+  const source = await readTaskTableSource()
+
+  assert.doesNotMatch(
+    source,
+    /<Popover[\s\S]*open=\{headerAddOpen\}[\s\S]*<div className="col col-add">[\s\S]*<PlusOutlined \/>[\s\S]*<\/div>[\s\S]*<\/Popover>/,
+    '表头右侧不应该再单独渲染新增自定义字段的加号入口',
+  )
+}
+
 async function main() {
   await testCreatedCustomFieldBecomesVisibleColumn()
   await testCustomFieldCellCanEditValues()
   await testCustomFieldTypeMenuAnchorsInsidePanel()
+  await testTableHeaderDoesNotRenderStandaloneAddFieldPlus()
   console.log('custom field configuration regressions ok')
 }
 
