@@ -223,6 +223,13 @@ const statusFilterLabelMap: Record<StatusFilterKey, string> = {
   done: '已完成',
 }
 
+const taskStatusLabelMap: Record<Task['status'], string> = {
+  todo: '未开始',
+  in_progress: '进行中',
+  done: '已完成',
+  cancelled: '已取消',
+}
+
 const sortLabelMap: Record<SortModeKey, string> = {
   custom: '拖拽自定义',
   due: '截止时间',
@@ -3212,6 +3219,10 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
 }
 
 function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string {
+  if (field.guid === 'status') {
+    return taskStatusLabelMap[task.status] ?? '-'
+  }
+
   const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
   if (!fieldValue) {
     return '-'
