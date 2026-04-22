@@ -41,6 +41,139 @@ body.detail-panel-resizing {
   user-select: none;
 }
 
+/* ── History ── */
+.detail-history-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #fff;
+}
+
+.detail-history-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  padding: 0 48px;
+  border-bottom: 1px solid #f0f1f5;
+  flex-shrink: 0;
+}
+
+.detail-history-title {
+  color: #1f2329;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detail-history-back,
+.detail-history-close {
+  position: absolute;
+  top: 10px;
+  width: 28px !important;
+  height: 28px !important;
+  color: #4e5969 !important;
+  border-radius: 6px !important;
+
+  &:hover {
+    color: #1f2329 !important;
+    background: #f2f3f5 !important;
+  }
+}
+
+.detail-history-back {
+  left: 14px;
+}
+
+.detail-history-close {
+  right: 14px;
+}
+
+.detail-history-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 20px 28px;
+}
+
+.detail-history-loading,
+.detail-history-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+}
+
+.detail-history-group {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  column-gap: 14px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid #f0f1f5;
+}
+
+.detail-history-date {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.detail-history-date-label {
+  color: #4e5969;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.detail-history-date-day {
+  color: #1f2329;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34px;
+  letter-spacing: -0.03em;
+}
+
+.detail-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.detail-history-item {
+  display: grid;
+  grid-template-columns: 42px 18px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detail-history-time {
+  color: #8f959e;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-history-avatar {
+  margin-top: 1px;
+  background: #e8edf7 !important;
+  color: #596780 !important;
+  font-size: 10px !important;
+  font-weight: 600;
+}
+
+.detail-history-message {
+  min-width: 0;
+  color: #1f2329;
+  font-size: 13px;
+  line-height: 20px;
+  word-break: break-word;
+}
+
 /* ── Header ── */
 .detail-top {
   display: flex;

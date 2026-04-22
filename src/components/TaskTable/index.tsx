@@ -36,6 +36,7 @@ import {
   CheckCircleOutlined,
   AppstoreOutlined,
   DownOutlined,
+  CheckOutlined,
   FontSizeOutlined,
   ClockCircleOutlined,
   CalendarOutlined,
@@ -1246,20 +1247,36 @@ export default function TaskTable({
         })
         return Array.from(groupedTaskMap.values())
       }
-      case 'start':
-      case 'due': {
-        const definitions = groupMode === 'start' ? startDateGroupDefinitions : dueDateGroupDefinitions
-        const sections = definitions.map((item) => ({
+      case 'start': {
+        const sections = startDateGroupDefinitions.map((item) => ({
           section: {
-            guid: `__${groupMode}__${item.key}`,
+            guid: `__start__${item.key}`,
             name: item.name,
           } as GroupSection,
           tasks: [] as Task[],
         }))
         const sectionMap = new Map(sections.map((item) => [item.section.guid, item]))
         tasksAfterSort.forEach((task) => {
-          const groupKey = getDateGroupKey(groupMode, task)
-          const target = sectionMap.get(`__${groupMode}__${groupKey}`)
+          const groupKey = getDateGroupKey('start', task)
+          const target = sectionMap.get(`__start__${groupKey}`)
+          if (target) {
+            target.tasks.push(task)
+          }
+        })
+        return sections
+      }
+      case 'due': {
+        const sections = dueDateGroupDefinitions.map((item) => ({
+          section: {
+            guid: `__due__${item.key}`,
+            name: item.name,
+          } as GroupSection,
+          tasks: [] as Task[],
+        }))
+        const sectionMap = new Map(sections.map((item) => [item.section.guid, item]))
+        tasksAfterSort.forEach((task) => {
+          const groupKey = getDateGroupKey('due', task)
+          const target = sectionMap.get(`__due__${groupKey}`)
           if (target) {
             target.tasks.push(task)
           }
@@ -1274,7 +1291,6 @@ export default function TaskTable({
           const noneSection: GroupSection = { guid: `__custom__${fieldGuid}__none`, name: '未设置' }
           tasksAfterSort.forEach((task) => {
             const fieldValue = task.custom_fields.find((item) => item.guid === fieldGuid)
-            const optionValues = fieldValue?.multi_select_value ?? []
             const singleValues = fieldValue?.single_select_value ? [fieldValue.single_select_value] : []
             const groupValues = fieldValue?.multi_select_value ?? []
             const values = groupValues.length > 0 ? groupValues : singleValues
@@ -1795,19 +1811,20 @@ export default function TaskTable({
       <Typography.Text strong className="popover-title">
         分组方式
       </Typography.Text>
-      <div className="group-mode-actions">
-        {(Object.keys(groupLabelMap) as GroupModeKey[]).map((key) => (
-          <Button
-            key={key}
-            size="small"
-            type={groupMode === key ? 'primary' : 'text'}
-            onClick={() => setGroupMode(key)}
+      <div className="group-mode-list">
+        {groupModeOptions.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            className={`group-mode-item ${groupMode === option.key ? 'group-mode-item-active' : ''}`}
+            onClick={() => setGroupMode(option.key)}
           >
-            {groupLabelMap[key]}
-          </Button>
+            <span className="group-mode-item-label">{option.label}</span>
+            <CheckOutlined className="group-mode-item-check" />
+          </button>
         ))}
       </div>
-      {shouldGroupBySection && sortedSections.length > 0 && (
+      {isSectionGroupMode && sortedSections.length > 0 && (
         <>
           <div className="filter-panel-header">
             <Typography.Text strong className="popover-title">
@@ -2314,7 +2331,7 @@ export default function TaskTable({
       <Tag color="default" className="section-count-tag">
         {sectionTasks.length}
       </Tag>
-      {isTasklistView && (
+      {isTasklistView && isSectionGroupMode && (
         <div className="section-actions" onClick={(e) => e.stopPropagation()}>
           <Button
             size="small"
@@ -2712,7 +2729,7 @@ export default function TaskTable({
             section,
             content: createTaskInlineRow(section.guid),
           })
-        } else if (config.toolbar.showCreate && shouldGroupBySection) {
+        } else if (config.toolbar.showCreate && isSectionGroupMode) {
           rows.push({
             key: `new-task-${section.guid}`,
             guid: `new-task-${section.guid}`,
@@ -2770,12 +2787,15 @@ export default function TaskTable({
       }
       onRow={(record) => {
         if (record.rowKind === 'section') {
+          if (!isSectionGroupMode || record.section.guid.startsWith('__')) {
+            return {}
+          }
           return {
             onDragOver: (event) => {
-              if (draggingTaskGuid) {
-                event.preventDefault()
-                event.dataTransfer.dropEffect = 'move'
-                setDragOverSectionGuid(record.section.guid)
+                if (draggingTaskGuid) {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDragOverSectionGuid(record.section.guid)
                 setDragOverMode('task-into')
               }
             },
@@ -2865,7 +2885,7 @@ export default function TaskTable({
               </Dropdown>
               <Popover trigger="click" placement="bottomLeft" content={groupPanel}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<AppstoreOutlined />}>
-                  分组: {groupLabelMap[groupMode]}
+                  分组: {groupLabelMap[groupMode] ?? '无分组'}
                 </Button>
               </Popover>
               <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
@@ -2928,7 +2948,7 @@ export default function TaskTable({
         <>
           {renderTaskTable()}
 
-          {shouldGroupBySection && (
+          {isSectionGroupMode && (
             <Button
               type="text"
               icon={<PlusOutlined />}

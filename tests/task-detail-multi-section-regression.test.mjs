@@ -41,8 +41,8 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
   )
   assert.match(
     detailSource,
-    /const currentTasklistRefs = task\.tasklists\.filter\(\s*\(item\) => item\.tasklist_guid === currentTasklist\?\.guid,\s*\)/,
-    '任务详情应该先筛出当前清单下的所有任务分组引用，再做已添加分组展示',
+    /const currentTasklistRefs = tasklistOwner\.tasklists\.filter\(\s*\(item\) => item\.tasklist_guid === currentTasklist\?\.guid,\s*\)/,
+    '任务详情应该先筛出当前清单下的所有任务分组引用，再做已添加分组展示；子任务场景要支持沿用父任务分组',
   )
   assert.match(
     detailSource,

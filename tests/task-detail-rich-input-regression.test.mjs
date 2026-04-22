@@ -216,7 +216,7 @@ async function testRichInputSubmitsCommentOnEnter() {
   )
   assert.match(
     keydownSource,
-    /void onSubmit\?\.\(editorHtmlRef\.current, currentMentionIds\)/,
+    /void onSubmit\?\.\(editorHtmlRef\.current, currentMentionIdsRef\.current\)/,
     '评论输入框按 Enter 时应该直接复用现有 onSubmit 提交流程',
   )
   assert.match(
@@ -226,7 +226,7 @@ async function testRichInputSubmitsCommentOnEnter() {
   )
   assert.match(
     source,
-    /onClick=\{\(\) => void onSubmit\?\.\(editorHtmlRef\.current, currentMentionIds\)\}/,
+    /onClick=\{\(\) => void onSubmit\?\.\(editorHtmlRef\.current, currentMentionIdsRef\.current\)\}/,
     '评论仍然应该保留点击发送按钮提交',
   )
 }
@@ -236,18 +236,23 @@ async function testDescriptionModeDoesNotRewriteEditorDomOnSameHtml() {
 
   assert.match(
     source,
-    /const normalizeEditorHtml = \(html: string\): string => \{/,
-    '描述输入框应该先有独立的编辑器归一化逻辑，避免直接拿外部 value 覆盖当前 DOM',
+    /useLayoutEffect\(\(\) => \{[\s\S]*const nextEditorHtml = normalizeRichContent\(value\)/,
+    '描述输入框首次回填应该在布局阶段完成，避免 autoFocus 先把组件标成编辑中后跳过灌值',
   )
   assert.match(
     source,
-    /const isInitialEditorSyncRef = useRef\(true\)/,
-    '描述输入框应该区分首次挂载同步和输入过程同步，避免持续重写 DOM',
+    /const isDescriptionEditingRef = useRef\(false\)/,
+    '描述输入框应该有独立的编辑态标记，区分本地编辑和外部同步',
   )
   assert.match(
     source,
-    /if \(!isInitialEditorSyncRef\.current && editorHtmlRef\.current === nextEditorHtml\) \{/,
-    '描述输入框在输入过程中遇到相同内容时应该直接跳过回写，避免光标跳动和拼音倒序',
+    /if \(mode === 'description' && isDescriptionEditingRef\.current\) \{/,
+    '描述输入框编辑过程中应该跳过外部 value 回写，避免光标被重置',
+  )
+  assert.match(
+    source,
+    /if \(mode === 'description'\) \{[\s\S]*return[\s\S]*\}[\s\S]*onChange\(nextHtml\)/,
+    '描述输入框输入时应该只更新本地快照，不要边打字边把值抬回父组件',
   )
   assert.match(
     source,
@@ -256,8 +261,8 @@ async function testDescriptionModeDoesNotRewriteEditorDomOnSameHtml() {
   )
   assert.match(
     source,
-    /isInitialEditorSyncRef\.current = false/,
-    '描述输入框首次同步后应该关闭初始灌值标记，后续才按输入过程规则处理',
+    /const handleEditorFocus = \(\) => \{/,
+    '描述输入框聚焦时应该显式进入编辑态，方便后续失焦保存',
   )
   assert.doesNotMatch(
     source,

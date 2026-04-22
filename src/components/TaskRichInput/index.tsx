@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import Button from 'antd/es/button'
 import Input from 'antd/es/input'
@@ -395,8 +395,6 @@ export default function TaskRichInput({
   onDownloadAttachment,
   onRemoveAttachment,
 }: TaskRichInputProps) {
-  const [editorHtml, setEditorHtml] = useState(() => normalizeRichContent(value))
-  const [currentMentionIds, setCurrentMentionIds] = useState<string[]>(mentionIds ?? [])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionSearch, setMentionSearch] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -406,8 +404,10 @@ export default function TaskRichInput({
   const editorRef = useRef<HTMLDivElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const selectionRef = useRef<Range | null>(null)
-  const editorHtmlRef = useRef(editorHtml)
-  const isInitialEditorSyncRef = useRef(true)
+  const editorHtmlRef = useRef(normalizeRichContent(value))
+  const currentMentionIdsRef = useRef<string[]>(mentionIds ?? [])
+  const isDescriptionEditingRef = useRef(false)
+  const isDescriptionValueHydratedRef = useRef(false)
   const isComposingRef = useRef(false)
 
   useEffect(() => {
@@ -421,30 +421,26 @@ export default function TaskRichInput({
     editorRef.current?.focus()
   }, [focusVersion])
 
-  useEffect(() => {
-    const normalizeEditorHtml = (html: string): string => {
-      // 描述和评论共用同一套编辑器，但只有描述模式依赖浏览器原生换行。
-      // 这里先做统一归一化，再只在首次挂载或外部真改值时回写，避免输入过程被反复刷新打断。
-      return normalizeRichContent(html)
-    }
-
-    const nextEditorHtml = normalizeEditorHtml(value)
-    if (!isInitialEditorSyncRef.current && editorHtmlRef.current === nextEditorHtml) {
+  useLayoutEffect(() => {
+    const nextEditorHtml = normalizeRichContent(value)
+    if (mode === 'description' && isDescriptionEditingRef.current && isDescriptionValueHydratedRef.current) {
       return
     }
 
     const editor = editorRef.current
     editorHtmlRef.current = nextEditorHtml
-    setEditorHtml(nextEditorHtml)
     if (editor && editor.innerHTML !== nextEditorHtml) {
       editor.innerHTML = nextEditorHtml
     }
-    isInitialEditorSyncRef.current = false
-  }, [value])
+    if (mode === 'description') {
+      // 描述区首次打开要先把已有内容灌进编辑器，再允许后续聚焦进入编辑态。
+      isDescriptionValueHydratedRef.current = true
+    }
+  }, [mode, value])
 
   useEffect(() => {
     const nextMentionIds = mentionIds ?? []
-    setCurrentMentionIds(nextMentionIds)
+    currentMentionIdsRef.current = nextMentionIds
   }, [mentionIds])
 
   const syncFromEditor = () => {
@@ -454,12 +450,15 @@ export default function TaskRichInput({
     const nextHtml = normalizeRichContent(editor.innerHTML)
 
     editorHtmlRef.current = nextHtml
-    setEditorHtml(nextHtml)
-    onChange(nextHtml)
 
     const extractedMentionIds = extractMentionIds(nextHtml)
-    setCurrentMentionIds(extractedMentionIds)
+    currentMentionIdsRef.current = extractedMentionIds
     onMentionIdsChange?.(extractedMentionIds)
+    if (mode === 'description') {
+      // 描述区是本地编辑态，不在输入过程中回写父组件，避免每次按键都触发重绘。
+      return
+    }
+    onChange(nextHtml)
   }
 
   const saveSelection = () => {
@@ -597,7 +596,7 @@ export default function TaskRichInput({
       if (isRichContentEmpty(editorHtmlRef.current, attachments.length)) {
         return
       }
-      void onSubmit?.(editorHtmlRef.current, currentMentionIds)
+      void onSubmit?.(editorHtmlRef.current, currentMentionIdsRef.current)
       return
     }
 
@@ -626,7 +625,8 @@ export default function TaskRichInput({
     ) {
       return
     }
-    void onBlurCommit?.(editorHtmlRef.current, currentMentionIds)
+    isDescriptionEditingRef.current = false
+    void onBlurCommit?.(editorHtmlRef.current, currentMentionIdsRef.current)
   }
 
   const getOverlayPopupContainer = () => document.body
@@ -659,6 +659,13 @@ export default function TaskRichInput({
       document.removeEventListener('pointerdown', handleDocumentPointerDown)
     }
   }, [mode, disabled])
+
+  const handleEditorFocus = () => {
+    if (mode === 'description') {
+      isDescriptionEditingRef.current = true
+    }
+    saveSelection()
+  }
 
   const renderAttachmentItem = (attachment: ApiAttachment) => {
     const attachmentSource = attachmentOrigins[attachment.attachment_id] ?? 'upload'
@@ -1067,7 +1074,7 @@ export default function TaskRichInput({
               icon={<SendOutlined />}
               aria-label="发送评论"
               disabled={disabled || isRichContentEmpty(editorHtmlRef.current, attachments.length)}
-              onClick={() => void onSubmit?.(editorHtmlRef.current, currentMentionIds)}
+              onClick={() => void onSubmit?.(editorHtmlRef.current, currentMentionIdsRef.current)}
             >
               {submitLabel}
             </Button>,
@@ -1093,7 +1100,7 @@ export default function TaskRichInput({
           data-placeholder={placeholder}
           role="textbox"
           aria-multiline="true"
-          onFocus={saveSelection}
+          onFocus={handleEditorFocus}
           onMouseUp={saveSelection}
           onKeyUp={saveSelection}
           onCompositionStart={() => {

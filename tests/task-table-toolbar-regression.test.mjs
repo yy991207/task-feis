@@ -50,7 +50,7 @@ async function testSectionGroupDropdownSupportsMultiSectionFiltering() {
   )
   assert.match(
     source,
-    /const filteredSections = shouldGroupBySection\s*\?[\s\S]*visibleSectionGuids\.has\(section\.guid\)/,
+    /const filteredSections = isSectionGroupMode\s*\?[\s\S]*visibleSectionGuids\.has\(section\.guid\)/,
     'TaskTable 在任务分组模式下应该先过滤分组，再生成 groupedTasks',
   )
   assert.match(
@@ -60,10 +60,31 @@ async function testSectionGroupDropdownSupportsMultiSectionFiltering() {
   )
 }
 
+async function testGroupDropdownUsesSerialMenuLayout() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /<div className="group-mode-list">[\s\S]*groupModeOptions\.map\(\(option\) => \(/,
+    'TaskTable 分组下拉应该改成串行菜单列表，避免继续使用横向按钮宫格',
+  )
+  assert.match(
+    source,
+    /className=\{\`group-mode-item \$\{groupMode === option\.key \? 'group-mode-item-active' : ''\}`\}/,
+    'TaskTable 分组下拉的菜单项应该有选中态 class，方便按参考图做当前项高亮',
+  )
+  assert.match(
+    source,
+    /<span className="group-mode-item-label">\{option\.label\}<\/span>/,
+    'TaskTable 分组下拉的菜单项应该按一行一个标签串行展示',
+  )
+}
+
 async function main() {
   await testCreateButtonReferenceHasDefinition()
   await testSortMenuDoesNotExposeCustomDragOption()
   await testSectionGroupDropdownSupportsMultiSectionFiltering()
+  await testGroupDropdownUsesSerialMenuLayout()
   console.log('task table toolbar regressions ok')
 }
 

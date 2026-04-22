@@ -13,6 +13,8 @@ import Modal from 'antd/es/modal'
 import List from 'antd/es/list'
 import Tooltip from 'antd/es/tooltip'
 import Breadcrumb from 'antd/es/breadcrumb'
+import Empty from 'antd/es/empty'
+import Spin from 'antd/es/spin'
 import {
   CloseOutlined,
   MoreOutlined,
@@ -29,6 +31,8 @@ import {
   DownloadOutlined,
   DownOutlined,
   UnorderedListOutlined,
+  HistoryOutlined,
+  LeftOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import Calendar from 'antd/es/calendar'
@@ -64,9 +68,11 @@ import {
   removeParticipant,
   listSubtasks,
   getTask,
+  listTaskActivities,
   apiTaskToTask,
   applyParticipantIdsToTask,
   buildDefaultParticipantIds,
+  type ApiTaskActivity,
 } from '@/services/taskService'
 import {
   updateProject as apiUpdateProject,
@@ -106,6 +112,146 @@ function formatParentTaskPathSegment(parentTask: Task): string {
   const summary = parentTask.summary.trim() || '未命名任务'
   // 父链按“父任务/子任务/”展示，斜杠放在每级末尾，避免一级子任务显示成“/父任务”。
   return `${summary}/`
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function normalizeActivityValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return '空'
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeActivityValue(item)).join('、') || '空'
+  }
+  if (typeof value === 'string') {
+    const withoutTags = value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    return withoutTags || '空'
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  return JSON.stringify(value)
+}
+
+function formatActivityFieldName(field: unknown): string {
+  if (!isNonEmptyString(field)) {
+    return '字段'
+  }
+  const fieldLabelMap: Record<string, string> = {
+    title: '任务标题',
+    description: '任务描述',
+    status: '状态',
+    priority: '优先级',
+    assignee_id: '负责人',
+    assignee_ids: '负责人',
+    participant_ids: '关注人',
+    follower_ids: '关注人',
+    start_date: '开始时间',
+    due_date: '截止时间',
+    section_id: '任务分组',
+  }
+  return fieldLabelMap[field] ?? field
+}
+
+function formatTaskActivityText(activity: ApiTaskActivity): string {
+  const { event_type: eventType, actor_id: actorId, payload } = activity
+  const actorName = actorId || '有人'
+  const taskTitle = isNonEmptyString(payload.task_title)
+    ? payload.task_title.trim()
+    : '该任务'
+
+  switch (eventType) {
+    case 'task.created':
+      return `${actorName} 创建了任务 ${taskTitle}`
+    case 'task.completed':
+      return `${actorName} 完成了整个任务`
+    case 'task.status_changed':
+      return `${actorName} 将任务状态修改为 ${normalizeActivityValue(payload.new_value)}`
+    case 'task.title_changed':
+      return `${actorName} 将任务标题修改为 ${normalizeActivityValue(payload.new_value)}`
+    case 'task.description_changed':
+      return `${actorName} 将任务描述修改为：${normalizeActivityValue(payload.new_value)}`
+    case 'task.start_date_changed':
+      return `${actorName} 将开始时间修改为：${normalizeActivityValue(payload.new_value)}`
+    case 'task.due_date_changed':
+      return `${actorName} 将截止时间修改为：${normalizeActivityValue(payload.new_value)}`
+    case 'task.assignee_changed': {
+      const added = normalizeActivityValue(payload.added_assignee_ids)
+      const removed = normalizeActivityValue(payload.removed_assignee_ids)
+      if (added !== '空' && removed !== '空') {
+        return `${actorName} 新增负责人 ${added}，移除负责人 ${removed}`
+      }
+      if (added !== '空') {
+        return `${actorName} 添加负责人 ${added}`
+      }
+      if (removed !== '空') {
+        return `${actorName} 移除负责人 ${removed}`
+      }
+      return `${actorName} 修改了负责人`
+    }
+    case 'task.participants_added':
+      return `${actorName} 添加关注人 ${normalizeActivityValue(payload.target_user_ids)}`
+    case 'task.participants_removed':
+      return `${actorName} 移除关注人 ${normalizeActivityValue(payload.target_user_ids)}`
+    case 'task.custom_field_changed':
+      return `${actorName} 将“${formatActivityFieldName(payload.field_name)}”的字段值修改为：${normalizeActivityValue(payload.new_value)}`
+    case 'comment.created':
+      return `${actorName} 发表了评论：${normalizeActivityValue(payload.comment_excerpt)}`
+    case 'comment.updated':
+      return `${actorName} 编辑了评论：${normalizeActivityValue(payload.comment_excerpt)}`
+    case 'comment.deleted':
+      return `${actorName} 删除了评论`
+    case 'attachment.created':
+    case 'attachment.uploaded':
+      return `${actorName} 上传了附件：${normalizeActivityValue(payload.file_name)}`
+    case 'attachment.deleted':
+      return `${actorName} 移除了附件：${normalizeActivityValue(payload.file_name)}`
+    default:
+      if (payload.field) {
+        return `${actorName} 将“${formatActivityFieldName(payload.field)}”修改为：${normalizeActivityValue(payload.new_value)}`
+      }
+      return `${actorName} 更新了任务`
+  }
+}
+
+function formatActivityDateLabel(date: dayjs.Dayjs): string {
+  const now = dayjs()
+  if (date.isSame(now, 'day')) {
+    return '今天'
+  }
+  if (date.isSame(now.subtract(1, 'day'), 'day')) {
+    return '昨天'
+  }
+  const weekdayMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return weekdayMap[date.day()]
+}
+
+function groupTaskActivitiesByDate(activities: ApiTaskActivity[]): Array<{
+  key: string
+  label: string
+  day: string
+  items: ApiTaskActivity[]
+}> {
+  const groups = new Map<string, ApiTaskActivity[]>()
+  for (const activity of activities) {
+    const date = dayjs(activity.created_at)
+    const key = date.format('YYYY-MM-DD')
+    const current = groups.get(key) ?? []
+    current.push(activity)
+    groups.set(key, current)
+  }
+
+  return Array.from(groups.entries()).map(([key, items]) => {
+    const date = dayjs(key)
+    return {
+      key,
+      label: formatActivityDateLabel(date),
+      day: date.format('D'),
+      items,
+    }
+  })
 }
 
 interface TaskDetailPanelProps {
@@ -148,6 +294,7 @@ export default function TaskDetailPanel({
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
   const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
   const [detailTasklistSections, setDetailTasklistSections] = useState<Section[]>([])
+  const [detailTasklistSectionsLoading, setDetailTasklistSectionsLoading] = useState(false)
   const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
   const [activeSubtaskAssigneeGuid, setActiveSubtaskAssigneeGuid] = useState<string | null>(null)
   const [selectedFollowerId, setSelectedFollowerId] = useState<string>()
@@ -174,6 +321,9 @@ export default function TaskDetailPanel({
   const [previewImageUrl, setPreviewImageUrl] = useState<string>()
   const [tasklistRenaming, setTasklistRenaming] = useState(false)
   const [tasklistRenameValue, setTasklistRenameValue] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyActivities, setHistoryActivities] = useState<ApiTaskActivity[]>([])
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
@@ -182,12 +332,15 @@ export default function TaskDetailPanel({
   const assignees = task.members.filter((m) => m.role === 'assignee')
   const isSubtask = Boolean(task.parent_task_guid)
   const creator: User = { id: task.creator.id, name: task.creator.id }
-  const primaryTasklistRef = task.tasklists[0]
+  const rootParentTask = parentTaskChain[0]
+  // 主表里的所有子任务都跟随顶级父任务所在分组展示，详情页这里保持同一套来源。
+  const tasklistOwner = isSubtask && rootParentTask ? rootParentTask : task
+  const primaryTasklistRef = tasklistOwner.tasklists[0]
   const creatorName = creator.name
   const currentTasklist = primaryTasklistRef
     ? tasklists.find((item) => item.guid === primaryTasklistRef.tasklist_guid)
     : undefined
-  const currentTasklistRefs = task.tasklists.filter(
+  const currentTasklistRefs = tasklistOwner.tasklists.filter(
     (item) => item.tasklist_guid === currentTasklist?.guid,
   )
   const tasklistSectionSource = detailTasklistSections
@@ -205,10 +358,13 @@ export default function TaskDetailPanel({
     .map((item) => tasklistSectionSource.find((section) => section.guid === item.section_guid))
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
+  const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
 
   useEffect(() => {
     setSectionPopoverOpen(false)
     setSectionSearchValue('')
+    setHistoryOpen(false)
+    setHistoryActivities([])
   }, [task.guid])
 
   useEffect(() => {
@@ -216,6 +372,7 @@ export default function TaskDetailPanel({
       setSectionPopoverOpen(false)
       setSectionSearchValue('')
       setDetailTasklistSections([])
+      setDetailTasklistSectionsLoading(false)
     }
   }, [currentTasklist])
 
@@ -225,6 +382,7 @@ export default function TaskDetailPanel({
     }
 
     let cancelled = false
+    setDetailTasklistSectionsLoading(true)
     void listSections(currentTasklist.guid)
       .then((items) => {
         if (cancelled) return
@@ -241,6 +399,11 @@ export default function TaskDetailPanel({
       .catch(() => {
         if (!cancelled) {
           setDetailTasklistSections([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailTasklistSectionsLoading(false)
         }
       })
 
@@ -349,6 +512,36 @@ export default function TaskDetailPanel({
   useEffect(() => {
     setDescriptionEditing(false)
   }, [task.guid])
+
+  useEffect(() => {
+    if (!historyOpen) {
+      return undefined
+    }
+
+    let cancelled = false
+    setHistoryLoading(true)
+    void listTaskActivities(task.guid, 1, 100)
+      .then((items) => {
+        if (!cancelled) {
+          setHistoryActivities(items)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setHistoryActivities([])
+          message.error(getActionErrorMessage(err, '加载历史记录失败'))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHistoryLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [historyOpen, task.guid])
 
   useEffect(() => {
     let cancelled = false
@@ -1126,12 +1319,17 @@ export default function TaskDetailPanel({
 
   const moreMenu = {
     items: [
+      { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
       ...(task.parent_task_guid
         ? [{ key: 'detach', icon: <BranchesOutlined />, label: '设为独立任务' }]
         : []),
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
+      if (key === 'history') {
+        setHistoryOpen(true)
+        return
+      }
       if (key === 'detach') {
         void handleDetachTask()
         return
@@ -1152,6 +1350,79 @@ export default function TaskDetailPanel({
       startWidth: panelWidth,
     }
     document.body.classList.add('detail-panel-resizing')
+  }
+
+  if (historyOpen) {
+    return (
+      <div className="detail-panel" style={{ width: panelWidth, minWidth: panelWidth }}>
+        <div
+          className="detail-resize-handle"
+          onPointerDown={handleResizeStart}
+        />
+        <div className="detail-history-panel">
+          <div className="detail-history-header">
+            <Tooltip title="返回详情" placement="bottom">
+              <Button
+                type="text"
+                size="small"
+                className="detail-history-back"
+                icon={<LeftOutlined />}
+                onClick={() => setHistoryOpen(false)}
+              />
+            </Tooltip>
+            <div className="detail-history-title">历史记录</div>
+            <Tooltip title="关闭详情" placement="bottom">
+              <Button
+                type="text"
+                size="small"
+                className="detail-history-close"
+                icon={<CloseOutlined />}
+                onClick={onClose}
+              />
+            </Tooltip>
+          </div>
+
+          <div className="detail-history-content">
+            {historyLoading ? (
+              <div className="detail-history-loading">
+                <Spin size="small" />
+              </div>
+            ) : historyActivityGroups.length === 0 ? (
+              <div className="detail-history-empty">
+                <Empty description="暂无历史记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              </div>
+            ) : (
+              historyActivityGroups.map((group) => (
+                <section key={group.key} className="detail-history-group">
+                  <div className="detail-history-date">
+                    <span className="detail-history-date-label">{group.label}</span>
+                    <span className="detail-history-date-day">{group.day}</span>
+                  </div>
+                  <div className="detail-history-list">
+                    {group.items.map((activity) => (
+                      <div key={activity.activity_id} className="detail-history-item">
+                        <div className="detail-history-time">
+                          {dayjs(activity.created_at).format('HH:mm')}
+                        </div>
+                        <Avatar
+                          size={18}
+                          className="detail-history-avatar"
+                        >
+                          {(activity.actor_id || 'U').slice(0, 1).toUpperCase()}
+                        </Avatar>
+                        <div className="detail-history-message">
+                          {formatTaskActivityText(activity)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1395,7 +1666,9 @@ export default function TaskDetailPanel({
                             <Text strong>已添加任务分组</Text>
                           </div>
                           <div className="tasklist-section-tags">
-                            {currentTasklistSections.length > 0 ? (
+                            {detailTasklistSectionsLoading ? (
+                              <span className="tasklist-section-empty">分组加载中</span>
+                            ) : currentTasklistSections.length > 0 ? (
                               currentTasklistSections.map((item) => (
                                 <span key={item.guid} className="tasklist-section-chip">
                                   <span className="tasklist-section-chip-name">{item.name}</span>
@@ -1447,7 +1720,9 @@ export default function TaskDetailPanel({
                       }
                     >
                       <span className="tasklist-section-trigger">
-                        {currentTasklistSections.length > 0
+                        {detailTasklistSectionsLoading
+                          ? '分组加载中'
+                          : currentTasklistSections.length > 0
                           ? currentTasklistSections.map((item) => item.name).join('、')
                           : '选择分组'}
                         <Tooltip title="选择任务分组">

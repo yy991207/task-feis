@@ -35,6 +35,19 @@ export interface ApiTask {
   custom_fields?: Record<string, unknown>
 }
 
+export interface ApiTaskActivity {
+  activity_id: string
+  task_id: string
+  project_id: string
+  team_id: string
+  event_type: string
+  actor_id: string
+  involved_user_ids: string[]
+  mentions: string[]
+  payload: Record<string, unknown>
+  created_at: string
+}
+
 interface PaginatedResponse<T> {
   items: T[]
   total: number
@@ -241,6 +254,21 @@ export function listSubtasks(taskId: string): Promise<ApiTask[]> {
   return request<ApiTask[]>(
     `api/v1/task-center/tasks/${taskId}/subtasks?user_id=${encodeURIComponent(appConfig.user_id)}`,
   )
+}
+
+export async function listTaskActivities(
+  taskId: string,
+  page = 1,
+  pageSize = 100,
+): Promise<ApiTaskActivity[]> {
+  const qs = new URLSearchParams()
+  qs.set('user_id', appConfig.user_id)
+  qs.set('page', String(page))
+  qs.set('page_size', String(pageSize))
+  const resp = await request<PaginatedResponse<ApiTaskActivity> | ApiTaskActivity[]>(
+    `api/v1/task-center/tasks/${taskId}/activities?${qs}`,
+  )
+  return Array.isArray(resp) ? resp : resp.items
 }
 
 // ---- Create / Update / Delete ----

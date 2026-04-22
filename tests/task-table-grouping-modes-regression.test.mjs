@@ -60,8 +60,23 @@ async function testTaskTableBuildsGroupedTasksForSystemAndCustomFields() {
   )
   assert.match(
     source,
-    /case 'assignee':[\s\S]*case 'start':[\s\S]*case 'due':[\s\S]*case 'creator':/,
-    'TaskTable 统一分组函数里应该覆盖负责人、开始时间、截止时间、创建人这些系统分组',
+    /case 'assignee':/,
+    'TaskTable 统一分组函数里应该覆盖负责人分组',
+  )
+  assert.match(
+    source,
+    /case 'start':/,
+    'TaskTable 统一分组函数里应该覆盖开始时间分组',
+  )
+  assert.match(
+    source,
+    /case 'due':/,
+    'TaskTable 统一分组函数里应该覆盖截止时间分组',
+  )
+  assert.match(
+    source,
+    /case 'creator':/,
+    'TaskTable 统一分组函数里应该覆盖创建人分组',
   )
   assert.match(
     source,

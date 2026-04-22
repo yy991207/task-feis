@@ -778,11 +778,55 @@
   }
 }
 
-.group-mode-actions {
+.group-mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group-mode-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #1f2329;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+
+  &:hover {
+    background: #f2f3f5;
+  }
+}
+
+.group-mode-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-mode-item-check {
+  color: #1456f0;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.group-mode-item-active {
+  background: #eaf2ff;
+  color: #1456f0;
+
+  .group-mode-item-check {
+    opacity: 1;
+  }
 }
 
 .filter-panel-header {
