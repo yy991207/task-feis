@@ -5,6 +5,8 @@ export interface ApiComment {
   comment_id: string
   task_id: string
   author_id: string
+  author_name?: string | null
+  author_avatar_url?: string | null
   user_id?: string
   content: string
   mentions: string[] | null

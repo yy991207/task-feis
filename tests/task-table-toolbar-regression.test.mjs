@@ -95,6 +95,21 @@ async function testFilterPanelNoLongerUsesLegacyCheckboxes() {
   )
 }
 
+async function testFilterBadgeUsesInlineCountLabel() {
+  const source = await readTaskTableSource()
+
+  assert.doesNotMatch(
+    source,
+    /<Badge[\s\S]*count=\{activeFilterCount\}[\s\S]*>[\s\S]*<Button size="small" type="text" icon=\{<FilterOutlined \/>\}>[\s\S]*筛选[\s\S]*<\/Button>[\s\S]*<\/Badge>/,
+    '筛选按钮不应该继续使用红色 Badge 角标显示数量',
+  )
+  assert.match(
+    source,
+    /筛选\s*\{activeFilterCount\}/,
+    '筛选按钮应该把条件数量直接显示在按钮文字里',
+  )
+}
+
 async function testGroupedTaskRowsUseSectionScopedKeys() {
   const source = await readTaskTableSource()
 
@@ -116,6 +131,7 @@ async function main() {
   await testSectionGroupDropdownSupportsMultiSectionFiltering()
   await testGroupDropdownUsesSerialMenuLayout()
   await testFilterPanelNoLongerUsesLegacyCheckboxes()
+  await testFilterBadgeUsesInlineCountLabel()
   await testGroupedTaskRowsUseSectionScopedKeys()
   console.log('task table toolbar regressions ok')
 }

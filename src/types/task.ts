@@ -31,6 +31,7 @@ export interface Member {
   role: MemberRole
   type: MemberType
   name?: string
+  avatar?: string
 }
 
 export interface TimeValue {
@@ -99,7 +100,7 @@ export interface Task {
   completed_at: string
   created_at: string
   updated_at: string
-  creator: { id: string; type: MemberType }
+  creator: { id: string; type: MemberType; name?: string; avatar?: string }
   mode: TaskMode
   priority: Priority
   is_milestone: boolean

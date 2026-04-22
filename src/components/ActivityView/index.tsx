@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import Typography from 'antd/es/typography'
-import Space from 'antd/es/space'
 import Empty from 'antd/es/empty'
-import Button from 'antd/es/button'
 import Avatar from 'antd/es/avatar'
 import Spin from 'antd/es/spin'
 import message from 'antd/es/message'
-import { FilterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Task, User } from '@/types/task'
 import { appConfig } from '@/config/appConfig'
 import { listMembers } from '@/services/teamService'
+import { normalizeRichContent } from '@/components/TaskRichInput'
 import {
   apiTaskToTask,
   getTask,
@@ -65,7 +63,33 @@ function groupActivitiesByDate(activities: ApiTaskActivity[]): ActivityGroup[] {
   })
 }
 
-function buildActivitySummary(activity: ApiTaskActivity, actorLabel: string): string {
+function normalizeActivityValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return '空'
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeActivityValue(item)).join('、') || '空'
+  }
+  if (typeof value === 'string') {
+    const normalizedHtml = normalizeRichContent(value)
+    if (!normalizedHtml) {
+      return '空'
+    }
+    if (typeof DOMParser !== 'undefined') {
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(normalizedHtml, 'text/html')
+      const text = (doc.body.textContent ?? '').replaceAll(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
+      return text || '空'
+    }
+    return normalizedHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || '空'
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  return JSON.stringify(value)
+}
+
+function buildActivityMessage(activity: ApiTaskActivity, actorLabel: string): ReactNode {
   const payload = activity.payload as Record<string, unknown>
   const taskTitle =
     typeof payload.task_title === 'string' && payload.task_title.trim().length > 0
@@ -75,23 +99,68 @@ function buildActivitySummary(activity: ApiTaskActivity, actorLabel: string): st
 
   switch (activity.event_type) {
     case 'task.created':
-      return `${actor} 创建了 ${taskTitle}`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 创建了任务 </span>
+          <span className="activity-task-title">{taskTitle}</span>
+        </>
+      )
     case 'task.completed':
-      return `${actor} 完成了 ${taskTitle}`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 完成了任务 </span>
+          <span className="activity-task-title">{taskTitle}</span>
+        </>
+      )
     case 'task.status_changed':
-      return `${actor} 更新了 ${taskTitle} 的状态`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 将任务状态更新为 </span>
+          <span className="activity-task-title">{normalizeActivityValue(payload.new_value)}</span>
+        </>
+      )
     case 'task.description_changed':
-      return `${actor} 修改了 ${taskTitle} 的描述`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 修改了 </span>
+          <span className="activity-task-title">{taskTitle}</span>
+          <span> 的描述</span>
+        </>
+      )
     case 'task.assignee_changed':
-      return `${actor} 更新了 ${taskTitle} 的负责人`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 更新了 </span>
+          <span className="activity-task-title">{taskTitle}</span>
+          <span> 的负责人</span>
+        </>
+      )
     case 'comment.created':
-      return `${actor} 在 ${taskTitle} 发了评论`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 在 </span>
+          <span className="activity-task-title">{taskTitle}</span>
+          <span> 发了评论</span>
+        </>
+      )
     default:
-      return `${actor} 更新了 ${taskTitle}`
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 更新了 </span>
+          <span className="activity-task-title">{taskTitle}</span>
+        </>
+      )
   }
 }
 
-function formatActivityText(activity: ApiTaskActivity, actorLabel: string): ReactNode {
+function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): ReactNode {
   const payload = activity.payload as Record<string, unknown>
   const fieldLabel =
     typeof payload.field_name === 'string' && payload.field_name.trim().length > 0
@@ -99,52 +168,54 @@ function formatActivityText(activity: ApiTaskActivity, actorLabel: string): Reac
       : '字段'
   const value =
     typeof payload.new_value === 'string'
-      ? payload.new_value
+      ? normalizeActivityValue(payload.new_value)
       : typeof payload.comment_excerpt === 'string'
-        ? payload.comment_excerpt
+        ? normalizeActivityValue(payload.comment_excerpt)
         : typeof payload.file_name === 'string'
-          ? payload.file_name
-          : '空'
+          ? normalizeActivityValue(payload.file_name)
+          : normalizeActivityValue(payload.new_value)
 
   switch (activity.event_type) {
     case 'task.created':
       return (
-        <>
+        <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
           <span> 创建了任务 </span>
-          <span className="activity-task-title">{String(payload.task_title ?? '该任务')}</span>
-        </>
+          <span className="activity-task-title">
+            {normalizeActivityValue(payload.task_title ?? '该任务')}
+          </span>
+        </span>
       )
     case 'task.description_changed':
       return (
-        <>
+        <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
           <span> 将“{fieldLabel}”修改为：</span>
-          <span className="activity-value">{String(value)}</span>
-        </>
+          <span className="activity-value">{value}</span>
+        </span>
       )
     case 'comment.created':
       return (
-        <>
+        <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
           <span> 发表了评论：</span>
-          <span className="activity-value">{String(value)}</span>
-        </>
+          <span className="activity-value">{value}</span>
+        </span>
       )
     case 'attachment.uploaded':
       return (
-        <>
+        <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
           <span> 上传了附件：</span>
-          <span className="activity-value">{String(value)}</span>
-        </>
+          <span className="activity-value">{value}</span>
+        </span>
       )
     default:
       return (
-        <>
+        <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
           <span> 更新了任务</span>
-        </>
+        </span>
       )
   }
 }
@@ -218,14 +289,6 @@ export default function ActivityView({
         </Title>
       </div>
 
-      <div className="activity-toolbar">
-        <Space className="activity-toolbar-right">
-          <Button size="small" type="text" icon={<FilterOutlined />}>
-            筛选
-          </Button>
-        </Space>
-      </div>
-
       {loading ? (
         <div className="activity-empty">
           <Spin size="small" />
@@ -248,7 +311,6 @@ export default function ActivityView({
               <div className="activity-items">
                 {group.items.map((activity) => {
                   const actorLabel = resolveUserLabel(activity.actor_id)
-                  const summary = buildActivitySummary(activity, actorLabel)
                   return (
                     <div
                       key={activity.activity_id}
@@ -258,13 +320,15 @@ export default function ActivityView({
                       <div className="activity-time">
                         {dayjs(activity.created_at).format('HH:mm')}
                       </div>
-                      <Avatar size={20} className="activity-avatar">
+                      <Avatar size={24} className="activity-avatar">
                         {actorLabel.slice(0, 1).toUpperCase()}
                       </Avatar>
                       <div className="activity-content">
-                        <div className="activity-summary">{summary}</div>
+                        <div className="activity-message" title={normalizeActivityValue(activity.payload)}>
+                          {buildActivityMessage(activity, actorLabel)}
+                        </div>
                         <div className="activity-detail">
-                          {formatActivityText(activity, actorLabel)}
+                          {formatActivityDetail(activity, actorLabel)}
                         </div>
                       </div>
                     </div>

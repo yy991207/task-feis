@@ -180,7 +180,14 @@ export default function TaskListPage() {
           const { items } = await listTasks(params)
           let filtered = items
           if (activeNav === 'my-assigned-quick') {
-            filtered = items.filter((t) => t.assignee_id != null)
+            filtered = items.filter((t) => {
+              // “我分配的”只展示我创建且已经分配负责人的任务；这里要同时兼容新旧负责人字段。
+              const assignedUserIds = [
+                ...(t.assignee_ids ?? []),
+                ...(t.assignee_id ? [t.assignee_id] : []),
+              ].filter(Boolean)
+              return assignedUserIds.length > 0
+            })
           }
           nextTasks = filtered.map((t) => apiTaskToTask(t))
         } catch {

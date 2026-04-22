@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import Button from 'antd/es/button'
 import Checkbox from 'antd/es/checkbox'
 import Input from 'antd/es/input'
@@ -130,6 +130,54 @@ function formatParentTaskPathSegment(parentTask: Task): string {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function getUserDisplayName(user: { id: string; name?: string | null }): string {
+  const name = user.name?.trim()
+  if (name) {
+    return name
+  }
+  return user.id || '未知用户'
+}
+
+function normalizeAvatarSrc(avatar?: string | null): string | undefined {
+  if (typeof avatar !== 'string') {
+    return undefined
+  }
+  const trimmed = avatar.trim()
+  return trimmed || undefined
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function renderUserAvatar(
+  user: { id: string; name?: string | null; avatar?: string | null },
+  options: {
+    size: number
+    style?: CSSProperties
+    className?: string
+    icon?: ReactNode
+  },
+): ReactNode {
+  const avatarSrc = normalizeAvatarSrc(user.avatar)
+  const fallback = options.icon ?? (getUserDisplayName(user).slice(0, 1).toUpperCase() || 'U')
+  return (
+    <Avatar
+      size={options.size}
+      style={options.style}
+      className={options.className}
+      src={avatarSrc}
+    >
+      {avatarSrc ? null : fallback}
+    </Avatar>
+  )
 }
 
 function normalizeActivityValue(value: unknown): string {
@@ -649,10 +697,14 @@ export default function TaskDetailPanel({
   })
   const assignees = task.members.filter((m) => m.role === 'assignee')
   const isSubtask = Boolean(task.parent_task_guid)
-  const creator: User = { id: task.creator.id, name: task.creator.id }
+  const creator: User = {
+    id: task.creator.id,
+    name: task.creator.name ?? task.creator.id,
+    avatar: task.creator.avatar,
+  }
   // 任务分组直接跟随当前任务自身的 tasklists，父任务链只负责路径展示。
   const primaryTasklistRef = task.tasklists[0]
-  const creatorName = creator.name
+  const creatorName = getUserDisplayName(creator)
   const currentTasklist = primaryTasklistRef
     ? tasklists.find((item) => item.guid === primaryTasklistRef.tasklist_guid)
     : undefined
@@ -682,8 +734,7 @@ export default function TaskDetailPanel({
     if (userId === appConfig.user_id) {
       return '我'
     }
-    const matched = availableUsers.find((user) => user.id === userId)
-    return matched?.name ?? userId
+    return getUserDisplayName(resolveTaskUserById(userId))
   }
 
   useLayoutEffect(() => {
@@ -989,10 +1040,47 @@ export default function TaskDetailPanel({
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
   const commentInputUsers = availableUsers
 
+  const resolveTaskUserById = (
+    userId: string,
+    fallback?: { name?: string | null; avatar?: string | null },
+  ): User => {
+    const matchedAvailableUser = availableUsers.find((user) => user.id === userId)
+    const matchedTaskMember = task.members.find((member) => member.id === userId)
+    const matchedCreator = task.creator.id === userId ? task.creator : undefined
+    return {
+      id: userId,
+      name:
+        fallback?.name?.trim() ||
+        matchedTaskMember?.name?.trim() ||
+        matchedAvailableUser?.name?.trim() ||
+        matchedCreator?.name?.trim() ||
+        userId,
+      avatar:
+        normalizeAvatarSrc(fallback?.avatar ?? matchedTaskMember?.avatar ?? matchedAvailableUser?.avatar ?? matchedCreator?.avatar),
+    }
+  }
+
+  const resolveCommentAuthorUser = (comment: ApiComment): User => {
+    const authorId = comment.author_id ?? comment.user_id ?? ''
+    if (!authorId) {
+      return { id: '', name: '未知用户' }
+    }
+    return resolveTaskUserById(authorId, {
+      name: comment.author_name ?? null,
+      avatar: comment.author_avatar_url ?? null,
+    })
+  }
+
   useEffect(() => {
     listMembers()
       .then((members) =>
-        setAvailableUsers(members.map((m) => ({ id: m.user_id, name: m.user_id }))),
+        setAvailableUsers(
+          members.map((member) => ({
+            id: member.user_id,
+            name: member.user_name ?? member.user_id,
+            avatar: member.avatar_url ?? undefined,
+          })),
+        ),
       )
       .catch(() => {})
   }, [])
@@ -1004,10 +1092,7 @@ export default function TaskDetailPanel({
       .map((member) => member.id),
   ]))
   const followedUserIdsKey = followedUserIds.join(',')
-  const followedUsers = followedUserIds.map((userId) => {
-    const matched = availableUsers.find((user) => user.id === userId)
-    return matched ?? { id: userId, name: userId }
-  })
+  const followedUsers = followedUserIds.map((userId) => resolveTaskUserById(userId))
   const visibleFollowedUsers = followedUsers.slice(0, 3)
   const availableFollowerUsers = availableUsers.filter((user) => !followedUserIds.includes(user.id))
 
@@ -1162,12 +1247,11 @@ export default function TaskDetailPanel({
                   ]}
                 >
                   <List.Item.Meta
-                    avatar={
-                      <Avatar size={30} style={{ backgroundColor: '#7b67ee' }}>
-                        {(user.name ?? user.id).slice(0, 1)}
-                      </Avatar>
-                    }
-                    title={<Text className="followers-user-name">{user.name ?? user.id}</Text>}
+                    avatar={renderUserAvatar(user, {
+                      size: 30,
+                      style: { backgroundColor: '#7b67ee', color: '#fff' },
+                    })}
+                    title={<Text className="followers-user-name">{getUserDisplayName(user)}</Text>}
                   />
                 </List.Item>
               )}
@@ -1189,9 +1273,12 @@ export default function TaskDetailPanel({
         {visibleFollowedUsers.length > 0 ? (
           <Avatar.Group max={{ count: 3 }} size={24}>
             {visibleFollowedUsers.map((user) => (
-              <Avatar key={user.id} size={20} style={{ backgroundColor: '#7b67ee' }}>
-                {(user.name ?? user.id).slice(0, 1)}
-              </Avatar>
+              <Tooltip key={user.id} title={getUserDisplayName(user)}>
+                {renderUserAvatar(user, {
+                  size: 20,
+                  style: { backgroundColor: '#7b67ee', color: '#fff' },
+                })}
+              </Tooltip>
             ))}
           </Avatar.Group>
         ) : (
@@ -1671,10 +1758,11 @@ export default function TaskDetailPanel({
   }
 
   const handleReplyComment = (comment: ApiComment) => {
-    const targetUserId = comment.author_id ?? comment.user_id ?? ''
+    const authorUser = resolveCommentAuthorUser(comment)
+    const targetUserId = authorUser.id
     if (!targetUserId) return
 
-    const mentionHtml = `<span class="task-rich-input-mention" data-mention-id="${targetUserId}" contenteditable="false">@${targetUserId}</span>&nbsp;`
+    const mentionHtml = `<span class="task-rich-input-mention" data-mention-id="${targetUserId}" contenteditable="false">@${escapeHtml(getUserDisplayName(authorUser))}</span>&nbsp;`
 
     setCommentMentions((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]))
     setCommentValue((prev) => {
@@ -1786,12 +1874,11 @@ export default function TaskDetailPanel({
                         <div className="detail-history-time">
                           {dayjs(activity.created_at).format('HH:mm')}
                         </div>
-                        <Avatar
-                          size={20}
-                          className="detail-history-avatar"
-                        >
-                          {resolveHistoryUserLabel(activity.actor_id).slice(0, 1).toUpperCase()}
-                        </Avatar>
+                        {renderUserAvatar(resolveTaskUserById(activity.actor_id), {
+                          size: 20,
+                          className: 'detail-history-avatar',
+                          style: { backgroundColor: '#7b67ee', color: '#fff' },
+                        })}
                         <div className="detail-history-message" title={activityText}>
                           <div className="detail-history-message-line">
                             {renderTaskActivityMessage(activity, resolveHistoryUserLabel)}
@@ -1910,17 +1997,18 @@ export default function TaskDetailPanel({
               }
             >
               <div className="field-content field-clickable">
-                {assignees.length > 0 ? (
-                  <Avatar.Group size={16} max={{ count: 4 }}>
-                    {assignees.map((a) => (
-                      <Tooltip key={a.id} title={a.name ?? a.id}>
-                        <Avatar size={16} style={{ backgroundColor: '#7b67ee', fontSize: 10 }}>
-                          {(a.name ?? a.id).slice(0, 1)}
-                        </Avatar>
-                      </Tooltip>
-                    ))}
-                  </Avatar.Group>
-                ) : (
+              {assignees.length > 0 ? (
+                <Avatar.Group size={16} max={{ count: 4 }}>
+                  {assignees.map((a) => (
+                    <Tooltip key={a.id} title={getUserDisplayName(a)}>
+                      {renderUserAvatar(a, {
+                        size: 16,
+                        style: { backgroundColor: '#7b67ee', fontSize: 10, color: '#fff' },
+                      })}
+                    </Tooltip>
+                  ))}
+                </Avatar.Group>
+              ) : (
                   <span className="field-placeholder">添加负责人</span>
                 )}
               </div>
@@ -2323,19 +2411,16 @@ export default function TaskDetailPanel({
                               <>
                                 <Avatar.Group size={20} max={{ count: 3 }}>
                                   {assigneeUsers.map((assigneeUser) => (
-                                    <Avatar
-                                      key={assigneeUser.id}
-                                      size={20}
-                                      style={{ backgroundColor: '#7b67ee' }}
-                                    >
-                                      {(assigneeUser.name ?? assigneeUser.id).slice(0, 1)}
-                                    </Avatar>
+                                    <Tooltip key={assigneeUser.id} title={getUserDisplayName(assigneeUser)}>
+                                      {renderUserAvatar(assigneeUser, {
+                                        size: 20,
+                                        style: { backgroundColor: '#7b67ee', color: '#fff' },
+                                      })}
+                                    </Tooltip>
                                   ))}
                                 </Avatar.Group>
                                 <span className="subtask-assignee-name">
-                                  {assigneeUsers
-                                    .map((assigneeUser) => assigneeUser.name ?? assigneeUser.id)
-                                    .join('、')}
+                                  {assigneeUsers.map(getUserDisplayName).join('、')}
                                 </span>
                               </>
                             ) : (
@@ -2565,17 +2650,19 @@ export default function TaskDetailPanel({
               </div>
             </div>
             {comments.map((comment) => {
-              const authorId = comment.author_id ?? comment.user_id ?? ''
+              const authorUser = resolveCommentAuthorUser(comment)
+              const authorId = authorUser.id
               const isMine = authorId === appConfig.user_id
               const isEditing = editingCommentId === comment.comment_id
               return (
                 <div key={comment.comment_id} className="comment-card">
-                  <Avatar size={28} style={{ backgroundColor: '#7b67ee' }}>
-                    {(authorId || 'U').slice(0, 1).toUpperCase()}
-                  </Avatar>
+                  {renderUserAvatar(authorUser, {
+                    size: 28,
+                    style: { backgroundColor: '#7b67ee', color: '#fff' },
+                  })}
                   <div className="comment-body">
                     <div className="comment-meta">
-                      <span className="comment-author">{authorId}</span>
+                      <span className="comment-author">{getUserDisplayName(authorUser)}</span>
                       <span className="comment-time">
                         {dayjs(comment.created_at).format('MM-DD HH:mm')}
                       </span>

@@ -4,6 +4,8 @@ import { appConfig } from '@/config/appConfig'
 export interface TeamMember {
   team_id: string
   user_id: string
+  user_name?: string | null
+  avatar_url?: string | null
   role: 'owner' | 'admin' | 'member'
   joined_at: string
 }

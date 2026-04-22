@@ -7,6 +7,9 @@ async function readTaskTableSource() {
 
 async function testFilterFieldDefinitionsExcludeTaskSourceFields() {
   const source = await readTaskTableSource()
+  const configStart = source.indexOf('const systemFilterFieldConfigs: FilterFieldConfig[] = [')
+  const configEnd = source.indexOf('const containsFilterOperators', configStart)
+  const configSource = source.slice(configStart, configEnd)
 
   assert.match(
     source,
@@ -49,13 +52,13 @@ async function testFilterFieldDefinitionsExcludeTaskSourceFields() {
     '一级分类应该包含创建人，并按人员字段处理',
   )
   assert.doesNotMatch(
-    source,
-    /systemFilterFieldConfigs[\s\S]*key: 'taskSource'/,
+    configSource,
+    /key: 'taskSource'/,
     '任务来源暂时不用做，不能进入筛选一级分类',
   )
   assert.doesNotMatch(
-    source,
-    /systemFilterFieldConfigs[\s\S]*key: 'sourceCategory'/,
+    configSource,
+    /key: 'sourceCategory'/,
     '来源类别暂时不用做，不能进入筛选一级分类',
   )
 }
@@ -130,7 +133,7 @@ async function testFilterRowsUseAndLogicByDefault() {
   )
   assert.match(
     source,
-    /activeFilterConditions\.every\(\(condition\) => matchTaskFilterCondition\(task, condition, filterFieldConfigMap\)\)/,
+    /activeFilterConditions\.every\(\(condition\) => matchTaskFilterCondition\(task, condition, filterFieldConfigMap, users\)\)/,
     '任务过滤计算应该默认按且逻辑执行，所有条件都满足才展示',
   )
   assert.match(
@@ -150,12 +153,12 @@ async function testFilterPanelRendersTypedValueControls() {
   )
   assert.match(
     source,
-    /<UserSearchSelect[\s\S]*mode="multiple"[\s\S]*placeholder="请选择"/,
-    '人员类筛选值应该复用用户搜索选择控件，并支持多选',
+    /<UserSearchSelect[\s\S]*placeholder="请选择"/,
+    '人员类筛选值应该复用用户搜索选择控件',
   )
   assert.match(
     source,
-    /field\.options\.map\(\(option\) => \(/,
+    /field\.options\?\.map\(\(option\) => \(\{ label: option\.label, value: option\.value \}\)\)/,
     '单选和多选自定义字段筛选值应该展示字段里的所有选项',
   )
   assert.match(

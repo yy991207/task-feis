@@ -2,6 +2,12 @@ import { request } from './request'
 import { appConfig } from '@/config/appConfig'
 import type { Task, Priority, CustomFieldValue, TasklistRef } from '@/types/task'
 
+export interface ApiUserProfile {
+  user_id: string
+  user_name?: string | null
+  avatar_url?: string | null
+}
+
 export interface ApiTask {
   task_id: string
   project_id: string
@@ -15,10 +21,15 @@ export interface ApiTask {
   tags: string[]
   section_id: string
   creator_id: string
+  creator_name?: string | null
+  creator_avatar_url?: string | null
   assignee_id: string | null
   assignee_ids?: string[]
+  assignees?: ApiUserProfile[]
   participant_ids: string[]
   follower_ids: string[]
+  participants?: ApiUserProfile[]
+  followers?: ApiUserProfile[]
   start_date: string | null
   due_date: string | null
   completed_at: string | null
@@ -134,18 +145,61 @@ function mapApiCustomFieldValue(fieldId: string, rawValue: unknown): CustomField
   }
 }
 
+function buildApiUserProfileMap(api: ApiTask): Map<string, ApiUserProfile> {
+  const profileMap = new Map<string, ApiUserProfile>()
+  const profileList = [
+    ...(api.assignees ?? []),
+    ...(api.participants ?? []),
+    ...(api.followers ?? []),
+  ]
+
+  for (const profile of profileList) {
+    if (!profile?.user_id) {
+      continue
+    }
+    profileMap.set(profile.user_id, profile)
+  }
+
+  if (api.creator_id) {
+    const currentProfile = profileMap.get(api.creator_id)
+    profileMap.set(api.creator_id, {
+      user_id: api.creator_id,
+      user_name: api.creator_name ?? currentProfile?.user_name,
+      avatar_url: api.creator_avatar_url ?? currentProfile?.avatar_url,
+    })
+  }
+
+  return profileMap
+}
+
 export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
   const apiAssigneeIds = Array.from(
     new Set([...(api.assignee_ids ?? []), ...(api.assignee_id ? [api.assignee_id] : [])]),
   )
+  const profileMap = buildApiUserProfileMap(api)
   const members = [
-    ...apiAssigneeIds.map((id) => ({ id, role: 'assignee' as const, type: 'user' as const })),
-    ...[...api.participant_ids, ...api.follower_ids].map((id) => ({
-      id,
-      role: 'follower' as const,
-      type: 'user' as const,
-    })),
+    ...apiAssigneeIds.map((id) => {
+      const profile = profileMap.get(id)
+      return {
+        id,
+        role: 'assignee' as const,
+        type: 'user' as const,
+        name: profile?.user_name ?? id,
+        avatar: profile?.avatar_url ?? undefined,
+      }
+    }),
+    ...[...api.participant_ids, ...api.follower_ids].map((id) => {
+      const profile = profileMap.get(id)
+      return {
+        id,
+        role: 'follower' as const,
+        type: 'user' as const,
+        name: profile?.user_name ?? id,
+        avatar: profile?.avatar_url ?? undefined,
+      }
+    }),
   ]
+  const creatorProfile = profileMap.get(api.creator_id)
 
   const tlGuid = projectId ?? api.project_id
   const mappedCustomFields = Object.entries(api.custom_fields ?? {})
@@ -163,7 +217,12 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
       : '0',
     created_at: new Date(api.created_at).getTime().toString(),
     updated_at: new Date(api.updated_at).getTime().toString(),
-    creator: { id: api.creator_id, type: 'user' },
+    creator: {
+      id: api.creator_id,
+      type: 'user',
+      name: api.creator_name ?? creatorProfile?.user_name ?? api.creator_id,
+      avatar: api.creator_avatar_url ?? creatorProfile?.avatar_url ?? undefined,
+    },
     mode: 2,
     priority: (priorityStringToNum[api.priority] ?? 0) as Priority,
     is_milestone: false,

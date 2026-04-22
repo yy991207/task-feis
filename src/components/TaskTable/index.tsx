@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Input from 'antd/es/input'
 import Checkbox from 'antd/es/checkbox'
 import Popover from 'antd/es/popover'
@@ -57,6 +57,7 @@ import {
   HolderOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  CloseOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -217,6 +218,52 @@ type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
 type GroupModeKey = BaseGroupModeKey | CustomFieldGroupModeKey
 type DateFieldKey = 'start' | 'due'
 type CalendarViewMode = 'month' | 'year'
+type FilterFieldType = 'member' | 'date' | 'text' | 'number' | 'select' | 'multiSelect'
+type FilterOperator =
+  | 'contains'
+  | 'not_contains'
+  | 'eq'
+  | 'neq'
+  | 'lt'
+  | 'lte'
+  | 'gt'
+  | 'gte'
+  | 'before'
+  | 'after'
+  | 'between'
+  | 'is_empty'
+  | 'is_not_empty'
+type FilterDateMode =
+  | 'today'
+  | 'thisWeek'
+  | 'lastWeek'
+  | 'nextWeek'
+  | 'thisMonth'
+  | 'lastMonth'
+  | 'nextMonth'
+  | 'custom'
+
+interface FilterFieldConfig {
+  key: string
+  label: string
+  type: FilterFieldType
+  customField?: CustomFieldDef
+  options?: { label: string; value: string; color?: string | null }[]
+}
+
+interface FilterOperatorOption {
+  key: FilterOperator
+  label: string
+}
+
+interface FilterCondition {
+  id: string
+  fieldKey: string
+  operator: FilterOperator
+  dateMode?: FilterDateMode
+  value?: string | string[]
+  endValue?: string
+}
 
 const INLINE_CREATE_FLOATING_SELECTOR = [
   '.ant-popover',
@@ -245,6 +292,66 @@ const sortLabelMap: Record<VisibleSortModeKey, string> = {
 }
 
 const visibleSortModes: VisibleSortModeKey[] = ['due', 'start', 'created']
+
+const systemFilterFieldConfigs: FilterFieldConfig[] = [
+  { key: 'assignee', label: '负责人', type: 'member' },
+  { key: 'start', label: '开始时间', type: 'date' },
+  { key: 'due', label: '截止时间', type: 'date' },
+  { key: 'completed', label: '完成时间', type: 'date' },
+  { key: 'assigner', label: '分配人', type: 'member' },
+  { key: 'followers', label: '关注人', type: 'member' },
+  { key: 'creator', label: '创建人', type: 'member' },
+  { key: 'created', label: '创建时间', type: 'date' },
+  { key: 'updated', label: '更新时间', type: 'date' },
+  { key: 'priority', label: '优先级', type: 'select' },
+  { key: 'taskId', label: '任务 ID', type: 'text' },
+]
+
+const containsFilterOperators: FilterOperatorOption[] = [
+  { key: 'contains', label: '包含' },
+  { key: 'not_contains', label: '不包含' },
+  { key: 'is_empty', label: '为空' },
+  { key: 'is_not_empty', label: '不为空' },
+]
+
+const dateFilterOperators: FilterOperatorOption[] = [
+  { key: 'eq', label: '等于' },
+  { key: 'before', label: '早于' },
+  { key: 'after', label: '晚于' },
+  { key: 'between', label: '介于' },
+  { key: 'is_empty', label: '为空' },
+  { key: 'is_not_empty', label: '不为空' },
+]
+
+const numberFilterOperators: FilterOperatorOption[] = [
+  { key: 'eq', label: '等于' },
+  { key: 'neq', label: '不等于' },
+  { key: 'lt', label: '小于' },
+  { key: 'lte', label: '小于等于' },
+  { key: 'gt', label: '大于' },
+  { key: 'gte', label: '大于等于' },
+  { key: 'is_empty', label: '为空' },
+  { key: 'is_not_empty', label: '不为空' },
+]
+
+const dateModeOptions: { key: FilterDateMode; label: string }[] = [
+  { key: 'today', label: '今天' },
+  { key: 'thisWeek', label: '本周' },
+  { key: 'lastWeek', label: '上周' },
+  { key: 'nextWeek', label: '下周' },
+  { key: 'thisMonth', label: '本月' },
+  { key: 'lastMonth', label: '上月' },
+  { key: 'nextMonth', label: '下月' },
+  { key: 'custom', label: '指定日期' },
+]
+
+const priorityFilterOptions = [
+  { label: '无', value: String(Priority.None) },
+  { label: '低', value: String(Priority.Low) },
+  { label: '中', value: String(Priority.Medium) },
+  { label: '高', value: String(Priority.High) },
+  { label: '紧急', value: String(Priority.Urgent) },
+]
 
 const baseGroupLabelMap: Record<BaseGroupModeKey, string> = {
   section: '任务分组',
@@ -276,6 +383,347 @@ const dueDateGroupDefinitions = [
   { key: 'later', name: '以后' },
   { key: 'none', name: '未安排' },
 ] as const
+
+function buildCustomFilterFieldConfig(field: CustomFieldDef): FilterFieldConfig {
+  if (field.type === 'single_select' || field.type === 'select') {
+    return {
+      key: field.guid,
+      label: field.name,
+      type: 'select',
+      customField: field,
+      options: (field.options ?? []).map((option) => ({
+        label: option.name,
+        value: option.guid,
+        color: option.color,
+      })),
+    }
+  }
+
+  if (field.type === 'multi_select') {
+    return {
+      key: field.guid,
+      label: field.name,
+      type: 'multiSelect',
+      customField: field,
+      options: (field.options ?? []).map((option) => ({
+        label: option.name,
+        value: option.guid,
+        color: option.color,
+      })),
+    }
+  }
+
+  if (field.type === 'member') {
+    return { key: field.guid, label: field.name, type: 'member', customField: field }
+  }
+
+  if (field.type === 'number') {
+    return { key: field.guid, label: field.name, type: 'number', customField: field }
+  }
+
+  if (field.type === 'datetime' || field.type === 'date') {
+    return { key: field.guid, label: field.name, type: 'date', customField: field }
+  }
+
+  return { key: field.guid, label: field.name, type: 'text', customField: field }
+}
+
+function getFilterOperatorsByFieldType(type: FilterFieldType): FilterOperatorOption[] {
+  if (type === 'date') {
+    return dateFilterOperators
+  }
+  if (type === 'number') {
+    return numberFilterOperators
+  }
+  return containsFilterOperators
+}
+
+function createDefaultFilterCondition(field: FilterFieldConfig): FilterCondition {
+  const defaultOperator = getFilterOperatorsByFieldType(field.type)[0]?.key ?? 'contains'
+  return {
+    id: `filter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    fieldKey: field.key,
+    operator: defaultOperator,
+    dateMode: field.type === 'date' ? 'custom' : undefined,
+    value: undefined,
+    endValue: undefined,
+  }
+}
+
+function normalizeFilterTextValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? ''
+  }
+  return value ?? ''
+}
+
+function resolveDateModeRange(mode: FilterDateMode): { start: dayjs.Dayjs; end: dayjs.Dayjs } {
+  const now = dayjs()
+  switch (mode) {
+    case 'today':
+      return { start: now.startOf('day'), end: now.endOf('day') }
+    case 'thisWeek':
+      return { start: now.startOf('week'), end: now.endOf('week') }
+    case 'lastWeek': {
+      const lastWeek = now.subtract(1, 'week')
+      return { start: lastWeek.startOf('week'), end: lastWeek.endOf('week') }
+    }
+    case 'nextWeek': {
+      const nextWeek = now.add(1, 'week')
+      return { start: nextWeek.startOf('week'), end: nextWeek.endOf('week') }
+    }
+    case 'thisMonth':
+      return { start: now.startOf('month'), end: now.endOf('month') }
+    case 'lastMonth': {
+      const lastMonth = now.subtract(1, 'month')
+      return { start: lastMonth.startOf('month'), end: lastMonth.endOf('month') }
+    }
+    case 'nextMonth': {
+      const nextMonth = now.add(1, 'month')
+      return { start: nextMonth.startOf('month'), end: nextMonth.endOf('month') }
+    }
+    default:
+      return { start: now.startOf('day'), end: now.endOf('day') }
+  }
+}
+
+function isFilterConditionValueEmpty(condition: FilterCondition, field: FilterFieldConfig): boolean {
+  if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') {
+    return false
+  }
+
+  if (field.type === 'date') {
+    if (condition.dateMode && condition.dateMode !== 'custom') {
+      return false
+    }
+    if (condition.operator === 'between') {
+      return !normalizeFilterTextValue(condition.value) || !normalizeFilterTextValue(condition.endValue)
+    }
+    return !normalizeFilterTextValue(condition.value)
+  }
+
+  return !normalizeFilterTextValue(condition.value)
+}
+
+function getTaskMemberLabels(task: Task, role: 'assignee' | 'follower', users: User[]): string[] {
+  if (role === 'follower') {
+    const followerIds = new Set([
+      ...(task.participant_ids ?? []),
+      ...task.members.filter((member) => member.role === 'follower').map((member) => member.id),
+    ])
+    return Array.from(followerIds).map((id) => users.find((user) => user.id === id)?.name ?? id)
+  }
+
+  return task.members
+    .filter((member) => member.role === role)
+    .map((member) => users.find((user) => user.id === member.id)?.name ?? member.name ?? member.id)
+}
+
+function getTaskDateValue(task: Task, fieldKey: string): dayjs.Dayjs | null {
+  switch (fieldKey) {
+    case 'start':
+      return task.start?.timestamp ? dayjs(Number(task.start.timestamp)) : null
+    case 'due':
+      return task.due?.timestamp ? dayjs(Number(task.due.timestamp)) : null
+    case 'completed':
+      return task.completed_at && task.completed_at !== '0' ? dayjs(Number(task.completed_at)) : null
+    case 'created':
+      return task.created_at ? dayjs(Number(task.created_at)) : null
+    case 'updated':
+      return task.updated_at ? dayjs(Number(task.updated_at)) : null
+    default:
+      return null
+  }
+}
+
+function getTaskCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string[] {
+  const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
+  if (!fieldValue) {
+    return []
+  }
+
+  switch (field.type) {
+    case 'single_select':
+    case 'select':
+      return fieldValue.single_select_value ? [fieldValue.single_select_value] : []
+    case 'multi_select':
+      return fieldValue.multi_select_value ?? []
+    case 'member':
+      return fieldValue.member_value?.map((member) => member.name ?? users.find((user) => user.id === member.id)?.name ?? member.id) ?? []
+    case 'number':
+      return fieldValue.number_value ? [fieldValue.number_value] : []
+    case 'datetime':
+    case 'date':
+      return fieldValue.datetime_value ? [fieldValue.datetime_value] : []
+    case 'text':
+      return fieldValue.text_value ? [fieldValue.text_value] : []
+    default:
+      return []
+  }
+}
+
+function getTaskFilterValues(
+  task: Task,
+  field: FilterFieldConfig,
+  users: User[],
+): { values: string[]; dateValue: dayjs.Dayjs | null } {
+  if (field.customField) {
+    if (field.type === 'date') {
+      const rawValue = getTaskCustomFieldValue(task, field.customField, users)[0]
+      return {
+        values: rawValue ? [rawValue] : [],
+        dateValue: rawValue ? dayjs(Number(rawValue)) : null,
+      }
+    }
+    return {
+      values: getTaskCustomFieldValue(task, field.customField, users),
+      dateValue: null,
+    }
+  }
+
+  switch (field.key) {
+    case 'assignee':
+      return { values: getTaskMemberLabels(task, 'assignee', users), dateValue: null }
+    case 'assigner':
+    case 'creator':
+      return { values: [users.find((user) => user.id === task.creator.id)?.name ?? task.creator.id], dateValue: null }
+    case 'followers':
+      return { values: getTaskMemberLabels(task, 'follower', users), dateValue: null }
+    case 'priority':
+      return { values: [String(task.priority)], dateValue: null }
+    case 'taskId':
+      return { values: [task.task_id], dateValue: null }
+    case 'start':
+    case 'due':
+    case 'completed':
+    case 'created':
+    case 'updated':
+      return { values: [], dateValue: getTaskDateValue(task, field.key) }
+    default:
+      return { values: [], dateValue: null }
+  }
+}
+
+function matchContainsOperator(values: string[], condition: FilterCondition): boolean {
+  if (condition.operator === 'is_empty') {
+    return values.length === 0 || values.every((value) => !value)
+  }
+  if (condition.operator === 'is_not_empty') {
+    return values.some(Boolean)
+  }
+
+  const targetValue = normalizeFilterTextValue(condition.value)
+  if (!targetValue) {
+    return true
+  }
+
+  if (condition.operator === 'contains') {
+    return values.includes(targetValue)
+  }
+  if (condition.operator === 'not_contains') {
+    return !values.includes(targetValue)
+  }
+  return true
+}
+
+function matchNumberOperator(values: string[], condition: FilterCondition): boolean {
+  if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') {
+    return matchContainsOperator(values, condition)
+  }
+
+  const rawValue = values[0]
+  const left = rawValue ? Number(rawValue) : NaN
+  const right = Number(normalizeFilterTextValue(condition.value))
+  if (!Number.isFinite(left) || !Number.isFinite(right)) {
+    return false
+  }
+
+  switch (condition.operator) {
+    case 'eq':
+      return left === right
+    case 'neq':
+      return left !== right
+    case 'lt':
+      return left < right
+    case 'lte':
+      return left <= right
+    case 'gt':
+      return left > right
+    case 'gte':
+      return left >= right
+    default:
+      return true
+  }
+}
+
+function matchDateOperator(dateValue: dayjs.Dayjs | null, condition: FilterCondition): boolean {
+  if (condition.operator === 'is_empty') {
+    return !dateValue
+  }
+  if (condition.operator === 'is_not_empty') {
+    return Boolean(dateValue)
+  }
+  if (!dateValue) {
+    return false
+  }
+
+  if (condition.dateMode && condition.dateMode !== 'custom') {
+    const range = resolveDateModeRange(condition.dateMode)
+    return dateValue.isSame(range.start, 'day') || dateValue.isSame(range.end, 'day') || (dateValue.isAfter(range.start) && dateValue.isBefore(range.end))
+  }
+
+  const left = dateValue.startOf('day')
+  const rightRaw = normalizeFilterTextValue(condition.value)
+  const right = rightRaw ? dayjs(Number(rightRaw)).startOf('day') : null
+  if (!right) {
+    return false
+  }
+
+  switch (condition.operator) {
+    case 'eq':
+      return left.isSame(right, 'day')
+    case 'before':
+      return left.isBefore(right, 'day')
+    case 'after':
+      return left.isAfter(right, 'day')
+    case 'between': {
+      const endRaw = normalizeFilterTextValue(condition.endValue)
+      const end = endRaw ? dayjs(Number(endRaw)).startOf('day') : null
+      if (!end) {
+        return false
+      }
+      const rangeStart = right.isBefore(end) ? right : end
+      const rangeEnd = right.isBefore(end) ? end : right
+      return left.isSame(rangeStart, 'day') || left.isSame(rangeEnd, 'day') || (left.isAfter(rangeStart) && left.isBefore(rangeEnd))
+    }
+    default:
+      return true
+  }
+}
+
+function matchTaskFilterCondition(
+  task: Task,
+  condition: FilterCondition,
+  filterFieldConfigMap: Map<string, FilterFieldConfig>,
+  users: User[],
+): boolean {
+  const field = filterFieldConfigMap.get(condition.fieldKey)
+  if (!field) {
+    return true
+  }
+  if (isFilterConditionValueEmpty(condition, field)) {
+    return true
+  }
+
+  const { values, dateValue } = getTaskFilterValues(task, field, users)
+  if (field.type === 'date') {
+    return matchDateOperator(dateValue, condition)
+  }
+  if (field.type === 'number') {
+    return matchNumberOperator(values, condition)
+  }
+  return matchContainsOperator(values, condition)
+}
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
@@ -569,11 +1017,11 @@ export default function TaskTable({
   selectedTaskGuid,
   statusFilter: controlledStatusFilter,
   sortMode: controlledSortMode,
-  mineOnly: controlledMineOnly,
+  mineOnly: _controlledMineOnly,
   pendingExpandTaskGuid,
   onStatusFilterChange,
   onSortModeChange,
-  onMineOnlyChange,
+  onMineOnlyChange: _onMineOnlyChange,
   onPendingExpandConsumed,
   onTaskClick,
   onRefresh,
@@ -634,14 +1082,7 @@ export default function TaskTable({
   const [groupMode, setGroupMode] = useState<GroupModeKey>(
     config.groupBySection ? 'section' : 'none',
   )
-  const [internalMineOnly, setInternalMineOnly] = useState(false)
-  const mineOnlyFilter = controlledMineOnly ?? internalMineOnly
-  const setMineOnlyFilter = (v: boolean) => {
-    setInternalMineOnly(v)
-    onMineOnlyChange?.(v)
-  }
   const [visibleSectionGuids, setVisibleSectionGuids] = useState<Set<string>>(new Set())
-  const [hasDueFilter, setHasDueFilter] = useState(false)
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ExtendedColumnKey[]>(config.columns)
   const [localSections, setLocalSections] = useState<Section[]>(sections ?? [])
   const [hasLocalSectionEdits, setHasLocalSectionEdits] = useState(false)
@@ -856,6 +1297,21 @@ export default function TaskTable({
   const animationTimerRef = useRef<number | null>(null)
   const inlineCreateInteractingRef = useRef(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  const filterFieldConfigs = useMemo(() => [
+    ...systemFilterFieldConfigs.map((field) =>
+      field.key === 'priority'
+        ? { ...field, options: priorityFilterOptions }
+        : field,
+    ),
+    ...(tasklist?.custom_fields ?? []).map((field) => buildCustomFilterFieldConfig(field)),
+  ], [tasklist?.custom_fields])
+  const filterFieldConfigMap = useMemo(
+    () => new Map(filterFieldConfigs.map((field) => [field.key, field])),
+    [filterFieldConfigs],
+  )
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>(() => [
+    createDefaultFilterCondition(systemFilterFieldConfigs[0]),
+  ])
 
   useEffect(() => {
     listMembers()
@@ -864,6 +1320,37 @@ export default function TaskTable({
       )
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    setFilterConditions((prev) => {
+      const next = prev
+        .filter((condition) => filterFieldConfigMap.has(condition.fieldKey))
+        .map((condition) => {
+          const field = filterFieldConfigMap.get(condition.fieldKey)
+          if (!field) {
+            return condition
+          }
+          const operators = getFilterOperatorsByFieldType(field.type)
+          const operatorExists = operators.some((item) => item.key === condition.operator)
+          if (operatorExists) {
+            return condition
+          }
+          return {
+            ...condition,
+            operator: operators[0]?.key ?? condition.operator,
+            dateMode: field.type === 'date' ? (condition.dateMode ?? 'custom') : undefined,
+            value: undefined,
+            endValue: undefined,
+          }
+        })
+
+      if (next.length > 0) {
+        return next
+      }
+
+      return [createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0])]
+    })
+  }, [filterFieldConfigMap, filterFieldConfigs])
 
   const sectionSource = hasLocalSectionEdits ? localSections : (sections ?? [])
 
@@ -1112,6 +1599,14 @@ export default function TaskTable({
     }
   }, [onRefresh, onTaskUpdated])
 
+  const activeFilterConditions = filterConditions.filter((condition) => {
+    const field = filterFieldConfigMap.get(condition.fieldKey)
+    if (!field) {
+      return false
+    }
+    return !isFilterConditionValueEmpty(condition, field)
+  })
+
   const tasksAfterFilter = tasks.filter((task) => {
     // 过滤掉有父任务的子任务，子任务通过父行展开显示
     if (task.parent_task_guid) {
@@ -1121,20 +1616,7 @@ export default function TaskTable({
       return false
     }
 
-    if (
-      mineOnlyFilter &&
-      !task.members.some(
-        (member) => member.role === 'assignee' && member.id === currentUser.id,
-      )
-    ) {
-      return false
-    }
-
-    if (hasDueFilter && !task.due) {
-      return false
-    }
-
-    return true
+    return activeFilterConditions.every((condition) => matchTaskFilterCondition(task, condition, filterFieldConfigMap, users))
   })
 
   const tasksAfterSort = [...tasksAfterFilter].sort((left, right) => {
@@ -1755,7 +2237,7 @@ export default function TaskTable({
     }
   }
 
-  const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
+  const activeFilterCount = activeFilterConditions.length
   const taskCreateMotionStyle = {
     ['--task-create-duration' as string]: token.motionDurationMid,
     ['--task-create-ease' as string]: token.motionEaseOutBack,
@@ -1790,6 +2272,162 @@ export default function TaskTable({
     onClick: ({ key }: { key: string }) => setSortMode(key as SortModeKey),
   }
 
+  const updateFilterCondition = useCallback((conditionId: string, patch: Partial<FilterCondition>) => {
+    setFilterConditions((prev) =>
+      prev.map((condition) =>
+        condition.id === conditionId
+          ? { ...condition, ...patch }
+          : condition,
+      ),
+    )
+  }, [])
+
+  const handleSelectFilterField = useCallback((conditionId: string, fieldKey: string) => {
+    const field = filterFieldConfigMap.get(fieldKey)
+    if (!field) {
+      return
+    }
+    const nextCondition = createDefaultFilterCondition(field)
+    updateFilterCondition(conditionId, {
+      fieldKey,
+      operator: nextCondition.operator,
+      dateMode: nextCondition.dateMode,
+      value: undefined,
+      endValue: undefined,
+    })
+  }, [filterFieldConfigMap, updateFilterCondition])
+
+  const handleSelectFilterOperator = useCallback((conditionId: string, operator: FilterOperator) => {
+    setFilterConditions((prev) =>
+      prev.map((condition) => {
+        if (condition.id !== conditionId) {
+          return condition
+        }
+        return {
+          ...condition,
+          operator,
+          value: undefined,
+          endValue: undefined,
+        }
+      }),
+    )
+  }, [])
+
+  const handleAddFilterCondition = useCallback(() => {
+    setFilterConditions((prev) => [
+      ...prev,
+      createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0]),
+    ])
+  }, [filterFieldConfigs])
+
+  const handleRemoveFilterCondition = useCallback((conditionId: string) => {
+    setFilterConditions((prev) => {
+      if (prev.length === 1) {
+        return [createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0])]
+      }
+      return prev.filter((condition) => condition.id !== conditionId)
+    })
+  }, [filterFieldConfigs])
+
+  const handleResetFilterConditions = useCallback(() => {
+    setFilterConditions([createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0])])
+  }, [filterFieldConfigs])
+
+  function renderFilterValueControl(condition: FilterCondition) {
+    const field = filterFieldConfigMap.get(condition.fieldKey)
+    if (!field) {
+      return null
+    }
+
+    if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') {
+      return <div className="filter-condition-value filter-condition-value-placeholder" />
+    }
+
+    if (field.type === 'date') {
+      const isCustomDate = !condition.dateMode || condition.dateMode === 'custom'
+      return (
+        <div className="filter-condition-value filter-condition-value-date">
+          <Select
+            size="small"
+            value={condition.dateMode ?? 'custom'}
+            options={dateModeOptions.map((option) => ({ label: option.label, value: option.key }))}
+            onChange={(value) => {
+              updateFilterCondition(condition.id, {
+                dateMode: value,
+                value: value === 'custom' ? condition.value : undefined,
+                endValue: value === 'custom' ? condition.endValue : undefined,
+              })
+            }}
+          />
+          {isCustomDate && (
+            <>
+              <DatePicker
+                size="small"
+                value={normalizeFilterTextValue(condition.value) ? dayjs(Number(normalizeFilterTextValue(condition.value))) : null}
+                placeholder="请选择日期"
+                onChange={(value) =>
+                  updateFilterCondition(condition.id, {
+                    value: value ? value.valueOf().toString() : undefined,
+                  })
+                }
+              />
+              {condition.operator === 'between' && (
+                <DatePicker
+                  size="small"
+                  value={normalizeFilterTextValue(condition.endValue) ? dayjs(Number(normalizeFilterTextValue(condition.endValue))) : null}
+                  placeholder="请选择日期"
+                  onChange={(value) =>
+                    updateFilterCondition(condition.id, {
+                      endValue: value ? value.valueOf().toString() : undefined,
+                    })
+                  }
+                />
+              )}
+            </>
+          )}
+        </div>
+      )
+    }
+
+    if (field.type === 'member') {
+      return (
+        <div className="filter-condition-value">
+          <UserSearchSelect
+            users={users}
+            placeholder="请选择"
+            value={normalizeFilterTextValue(condition.value) || undefined}
+            onChange={(value) => updateFilterCondition(condition.id, { value: Array.isArray(value) ? value[0] : value })}
+          />
+        </div>
+      )
+    }
+
+    if (field.type === 'select' || field.type === 'multiSelect') {
+      return (
+        <div className="filter-condition-value">
+          <Select
+            size="small"
+            value={normalizeFilterTextValue(condition.value) || undefined}
+            placeholder="请选择"
+            options={field.options?.map((option) => ({ label: option.label, value: option.value })) ?? []}
+            onChange={(value) => updateFilterCondition(condition.id, { value })}
+          />
+        </div>
+      )
+    }
+
+    return (
+      <div className="filter-condition-value">
+        <Input
+          size="small"
+          value={normalizeFilterTextValue(condition.value)}
+          placeholder="请输入"
+          onChange={(event) => updateFilterCondition(condition.id, { value: event.target.value })}
+        />
+      </div>
+    )
+  }
+
   const groupPanel = (
     <div className="toolbar-popover-panel">
       <Typography.Text strong className="popover-title">
@@ -1812,22 +2450,51 @@ export default function TaskTable({
   )
 
   const filterPanel = (
-    <div className="toolbar-popover-panel">
-      <Typography.Text strong className="popover-title">
-        筛选条件
-      </Typography.Text>
-      <Checkbox
-        checked={mineOnlyFilter}
-        onChange={(e) => setMineOnlyFilter(e.target.checked)}
-      >
-        仅看我负责的
-      </Checkbox>
-      <Checkbox
-        checked={hasDueFilter}
-        onChange={(e) => setHasDueFilter(e.target.checked)}
-      >
-        仅看有截止时间
-      </Checkbox>
+    <div className="task-filter-panel">
+      <div className="task-filter-panel-header">
+        <Typography.Text strong className="task-filter-panel-title">
+          筛选
+        </Typography.Text>
+        <button type="button" className="task-filter-clear-btn" onClick={handleResetFilterConditions}>
+          清空
+        </button>
+      </div>
+      <div className="task-filter-condition-list">
+        {filterConditions.map((condition, index) => {
+          const field = filterFieldConfigMap.get(condition.fieldKey) ?? filterFieldConfigs[0] ?? systemFilterFieldConfigs[0]
+          const operatorOptions = getFilterOperatorsByFieldType(field.type)
+          return (
+            <div key={condition.id} className="task-filter-condition-row">
+              <div className="task-filter-condition-logic">{index === 0 ? '当' : '且'}</div>
+              <Select
+                size="small"
+                className="task-filter-field-select"
+                value={condition.fieldKey}
+                options={filterFieldConfigs.map((item) => ({ label: item.label, value: item.key }))}
+                onChange={(value) => handleSelectFilterField(condition.id, value)}
+              />
+              <Select
+                size="small"
+                className="task-filter-operator-select"
+                value={condition.operator}
+                options={operatorOptions.map((item) => ({ label: item.label, value: item.key }))}
+                onChange={(value) => handleSelectFilterOperator(condition.id, value)}
+              />
+              {renderFilterValueControl(condition)}
+              <Button
+                type="text"
+                size="small"
+                className="task-filter-remove-btn"
+                icon={<CloseOutlined />}
+                onClick={() => handleRemoveFilterCondition(condition.id)}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <Button size="small" className="task-filter-add-btn" onClick={handleAddFilterCondition}>
+        添加条件
+      </Button>
     </div>
   )
 
@@ -2853,16 +3520,17 @@ export default function TaskTable({
                 </Button>
               </Dropdown>
               <Popover trigger="click" placement="bottomLeft" content={filterPanel}>
-                <Badge
-                  count={activeFilterCount}
+                <Button
                   size="small"
-                  offset={[-2, 2]}
-                  className="toolbar-badge"
+                  type="text"
+                  className={`toolbar-trigger-btn toolbar-filter-btn ${activeFilterCount > 0 ? 'toolbar-filter-btn-active' : ''}`}
+                  icon={<FilterOutlined />}
                 >
-                  <Button size="small" type="text" className="toolbar-trigger-btn" icon={<FilterOutlined />}>
-                    筛选
-                  </Button>
-                </Badge>
+                  <span>筛选</span>
+                  {activeFilterCount > 0 && (
+                    <span className="toolbar-filter-count">{activeFilterCount}</span>
+                  )}
+                </Button>
               </Popover>
               <Dropdown menu={sortMenu} trigger={['click']}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<SortAscendingOutlined />}>
@@ -2900,11 +3568,17 @@ export default function TaskTable({
                 </Dropdown>
               )}
               <Popover trigger="click" placement="bottomLeft" content={filterPanel}>
-                <Badge count={activeFilterCount} size="small" offset={[-2, 2]}>
-                  <Button size="small" type="text" icon={<FilterOutlined />}>
-                    筛选
-                  </Button>
-                </Badge>
+                <Button
+                  size="small"
+                  type="text"
+                  className={`toolbar-trigger-btn toolbar-filter-btn ${activeFilterCount > 0 ? 'toolbar-filter-btn-active' : ''}`}
+                  icon={<FilterOutlined />}
+                >
+                  <span>筛选</span>
+                  {activeFilterCount > 0 && (
+                    <span className="toolbar-filter-count">{activeFilterCount}</span>
+                  )}
+                </Button>
               </Popover>
               {config.toolbar.showSort && (
                 <Dropdown menu={sortMenu} trigger={['click']}>
