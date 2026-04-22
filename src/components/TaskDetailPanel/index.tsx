@@ -1763,6 +1763,7 @@ export default function TaskDetailPanel({
                         comment.updated_at !== comment.created_at && (
                           <span className="comment-edited">（已编辑）</span>
                         )}
+                      <div className="comment-actions">
                       <Tooltip title="评论当前评论">
                         <Button
                           type="text"
@@ -1807,6 +1808,7 @@ export default function TaskDetailPanel({
                           />
                         </Dropdown>
                       )}
+                      </div>
                     </div>
                     {isEditing ? (
                       <div className="comment-edit-wrap">

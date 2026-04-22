@@ -307,13 +307,13 @@ async function testCommentCardsSupportReplyPrefill() {
   )
   assert.match(
     detailSource,
-    /<div className="comment-meta">[\s\S]*className="comment-reply-btn"[\s\S]*className="comment-more-btn"/,
-    '评论按钮应该放在评论头部右侧，并且紧挨着更多按钮显示',
+    /<div className="comment-meta">[\s\S]*className="comment-time"[\s\S]*className="comment-reply-btn"[\s\S]*className="comment-more-btn"/,
+    '评论按钮和更多按钮应该和时间放在同一行，靠右显示在评论头部',
   )
   assert.doesNotMatch(
     detailSource,
-    /className="comment-actions"/,
-    '评论按钮不应该继续放在评论正文下面，避免占掉内容区域',
+    /<div className="comment-meta">[\s\S]*<\/div>[\s\S]*<div className="comment-actions">/s,
+    '评论动作区不应该再单独占一行放在头部信息下面',
   )
   assert.match(
     detailSource,
@@ -327,8 +327,8 @@ async function testCommentCardsSupportReplyPrefill() {
   )
   assert.match(
     styleSource,
-    /\.comment-reply-btn \{/,
-    '评论互动按钮应该有独立样式，保证 hover 后可见且不显得突兀',
+    /\.comment-actions \{/,
+    '评论动作区应该有独立布局样式，方便把按钮放到正文上方同一行',
   )
   assert.match(
     detailSource,

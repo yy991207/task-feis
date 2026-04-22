@@ -217,7 +217,6 @@ async function testRichInputProvidesToolbarTooltips() {
   )
   ;[
     '正文样式：加粗',
-    '正文样式：删除线',
     '正文样式：斜体',
     '正文样式：下划线',
     '正文样式：有序列表',
@@ -236,6 +235,16 @@ async function testRichInputProvidesToolbarTooltips() {
       `底部工具组件应该有“${title}”鼠标浮窗提示`,
     )
   })
+  assert.doesNotMatch(
+    source,
+    /renderToolbarTooltip\(\s*'正文样式：删除线'/,
+    '输入组件不应该再渲染删除线按钮和对应提示',
+  )
+  assert.doesNotMatch(
+    source,
+    /icon={<StrikethroughOutlined \/>}/,
+    '输入组件工具栏不应该再显示删除线图标按钮',
+  )
   assert.match(
     source,
     /renderToolbarTooltip\(\s*'正文样式：加粗'/,
@@ -444,6 +453,38 @@ async function testRichInputProvidesLinkPopoverAndMentionPanelStyles() {
   )
 }
 
+async function testCommentComposerLayoutFitsPanelAndGrowsWithContent() {
+  const source = await readRichInputSource()
+  const richInputStyleSource = await readRichInputStyleSource()
+  const detailStyleSource = await readTaskDetailStyleSource()
+
+  assert.doesNotMatch(
+    source,
+    /支持 @ 选人、链接和图片粘贴/,
+    '评论输入框底部不应该再显示固定提示文字，避免占用底部空间',
+  )
+  assert.doesNotMatch(
+    source,
+    /task-rich-input-footer/,
+    '评论输入框不应该再渲染额外 footer，底部只保留工具栏和发送按钮',
+  )
+  assert.match(
+    detailStyleSource,
+    /\.detail-footer \{[\s\S]*padding: 12px 16px 14px;/,
+    '详情页底部评论区应该有左右内边距，避免输入框边界贴住详情面板',
+  )
+  assert.match(
+    detailStyleSource,
+    /\.comment-input-wrapper \{[\s\S]*width: 100%;[\s\S]*min-width: 0;/,
+    '评论输入框外层应该限制在底部容器内，避免和侧边栏边界重合',
+  )
+  assert.match(
+    richInputStyleSource,
+    /\.comment-input-wrapper \{[\s\S]*\.task-rich-input-editor \{[\s\S]*min-height: 72px;[\s\S]*max-height: 180px;[\s\S]*overflow-y: auto;/,
+    '评论输入框应该允许多行内容撑高，并在超过上限后通过内部滚动查看',
+  )
+}
+
 async function main() {
   await testTaskDetailUsesSharedRichInput()
   await testTaskDescriptionUsesReadOnlyViewUntilEditing()
@@ -456,6 +497,7 @@ async function main() {
   await testRichInputSupportsEmojiInsertion()
   await testCommentComposerAttachmentsUseFileCardLayout()
   await testRichInputProvidesLinkPopoverAndMentionPanelStyles()
+  await testCommentComposerLayoutFitsPanelAndGrowsWithContent()
   console.log('task detail rich input regressions ok')
 }
 

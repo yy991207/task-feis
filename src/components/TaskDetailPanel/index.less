@@ -406,6 +406,18 @@ body.detail-panel-resizing {
   }
 }
 
+.detail-footer {
+  flex-shrink: 0;
+  padding: 12px 16px 14px;
+  border-top: 1px solid #f0f1f5;
+  background: #fff;
+}
+
+.comment-input-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
 .comment-timeline {
   display: flex;
   flex-direction: column;
@@ -1087,7 +1099,7 @@ body.detail-panel-resizing {
     gap: 8px;
     font-size: 12px;
     color: #86909c;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
 
     .comment-author {
       color: #1d2129;
@@ -1099,8 +1111,15 @@ body.detail-panel-resizing {
     }
   }
 
-  .comment-more-btn {
+  .comment-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-left: auto;
+    min-height: 24px;
+  }
+
+  .comment-more-btn {
     opacity: 0;
     transition: opacity 0.15s;
   }
@@ -1114,7 +1133,6 @@ body.detail-panel-resizing {
   }
 
   .comment-reply-btn {
-    margin-left: auto;
     padding: 0 4px !important;
     color: #86909c !important;
     border-radius: 6px !important;

@@ -22,7 +22,6 @@ import {
   PictureOutlined,
   SendOutlined,
   SmileOutlined,
-  StrikethroughOutlined,
   UnderlineOutlined,
   UnorderedListOutlined,
   UsergroupAddOutlined,
@@ -734,18 +733,6 @@ export default function TaskRichInput({
           '让选中的文字加粗',
         )}
         {renderToolbarTooltip(
-          '正文样式：删除线',
-          <Button
-            type="text"
-            size="small"
-            className="task-rich-input-tool-btn"
-            icon={<StrikethroughOutlined />}
-            aria-label="删除线"
-            onClick={() => applyCommand('strikeThrough')}
-          />,
-          '给选中的文字添加删除线',
-        )}
-        {renderToolbarTooltip(
           '正文样式：斜体',
           <Button
             type="text"
@@ -1053,13 +1040,6 @@ export default function TaskRichInput({
       {attachments.length > 0 && (
         <div className="detail-attachment-list task-rich-input-attachment-list">
           {attachments.map((attachment) => renderAttachmentItem(attachment))}
-        </div>
-      )}
-      {(mode === 'comment' || mode === 'comment-edit') && (
-        <div className="task-rich-input-footer">
-          <Text type="secondary" className="task-rich-input-hint">
-            支持 @ 选人、链接和图片粘贴
-          </Text>
         </div>
       )}
     </div>
