@@ -314,12 +314,23 @@ export default function TaskDetailPanel({
       .then((api) => {
         if (cancelled) return
         const fresh = apiTaskToTask(api)
+        const tasklistsChanged =
+          fresh.tasklists.length !== task.tasklists.length ||
+          fresh.tasklists.some((item, index) => {
+            const current = task.tasklists[index]
+            return (
+              !current ||
+              current.tasklist_guid !== item.tasklist_guid ||
+              current.section_guid !== item.section_guid
+            )
+          })
         // 仅在 start/due/status/title 等关键字段有差异时回写，避免不必要的渲染
         if (
           fresh.start?.timestamp !== task.start?.timestamp ||
           fresh.due?.timestamp !== task.due?.timestamp ||
           fresh.status !== task.status ||
-          fresh.summary !== task.summary
+          fresh.summary !== task.summary ||
+          tasklistsChanged
         ) {
           onTaskUpdated?.(fresh)
         }

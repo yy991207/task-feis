@@ -30,6 +30,24 @@ async function testTaskDetailUsesSameSectionApiSource() {
     '任务详情里已添加分组和候选分组都应该统一使用接口返回的分组源',
   )
 
+  assert.match(
+    source,
+    /const \[detailTasklistSectionsLoading, setDetailTasklistSectionsLoading\] = useState\(false\)/,
+    '任务详情应该维护分组接口加载态，避免接口返回前先显示未分组或选择分组',
+  )
+
+  assert.match(
+    source,
+    /setDetailTasklistSectionsLoading\(true\)[\s\S]*void listSections\(currentTasklist\.guid\)[\s\S]*finally\(\(\) => \{[\s\S]*setDetailTasklistSectionsLoading\(false\)/,
+    '任务详情拉取当前清单分组时，应该在请求前后正确切换加载态',
+  )
+
+  assert.match(
+    source,
+    /detailTasklistSectionsLoading[\s\S]*分组加载中/,
+    '任务详情分组展示区在接口未返回前应该显示加载占位，不要闪旧分组空态',
+  )
+
   assert.doesNotMatch(
     source,
     /const filteredTasklistSections = \(currentTasklist\?\.sections \?\? \[\]\)\.filter\(/,
