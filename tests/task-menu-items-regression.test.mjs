@@ -45,16 +45,16 @@ async function testTaskTableMenuKeepsParentAndDeleteItems() {
   }
 }
 
-async function testTaskDetailMenuKeepsParentAndDeleteItems() {
+async function testTaskDetailMenuKeepsDetachAndDeleteItems() {
   const source = await readSource('../src/components/TaskDetailPanel/index.tsx')
   const menuStart = source.indexOf('const moreMenu = {')
   const menuEnd = source.indexOf('const handleResizeStart', menuStart)
   const menuSource = source.slice(menuStart, menuEnd)
 
-  assert.match(
+  assert.doesNotMatch(
     menuSource,
     /label: '设置父任务'/,
-    '任务详情页菜单应该保留“设置父任务”入口',
+    '任务详情页菜单不应该再出现“设置父任务”入口',
   )
   assert.match(
     menuSource,
@@ -88,7 +88,7 @@ async function testUpdateTaskApiSupportsParentTaskPatch() {
 
 async function main() {
   await testTaskTableMenuKeepsParentAndDeleteItems()
-  await testTaskDetailMenuKeepsParentAndDeleteItems()
+  await testTaskDetailMenuKeepsDetachAndDeleteItems()
   await testUpdateTaskApiSupportsParentTaskPatch()
   console.log('task menu items regressions ok')
 }

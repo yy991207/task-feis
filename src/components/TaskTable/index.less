@@ -346,13 +346,6 @@
 }
 
 .task-title-cell {
-  &:hover {
-    .task-detail-hotspot {
-      background: #edf3ff;
-      border-color: #d7e6ff;
-    }
-  }
-
   .cell {
     display: flex;
     align-items: center;
@@ -435,21 +428,14 @@
     }
 
     .task-detail-hotspot {
-      min-width: 160px;
-      width: clamp(160px, 28%, 280px);
+      flex: 1;
+      min-width: 0;
       min-height: 28px;
       margin-left: 8px;
       cursor: pointer;
-      flex-shrink: 0;
       border-radius: 6px;
       background: transparent;
       border: 1px solid transparent;
-      transition: background 0.15s ease, border-color 0.15s ease;
-
-      &:hover {
-        background: #edf3ff;
-        border-color: #d7e6ff;
-      }
     }
   }
 

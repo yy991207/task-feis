@@ -32,11 +32,19 @@ async function testSectionActionButtonsAreProminent() {
 
 async function testTaskRowActionButtonsAreProminent() {
   const source = await readTaskTableStyleSource()
+  const hotspotStart = source.indexOf('.task-detail-hotspot {')
+  const hotspotEnd = source.indexOf('    }', hotspotStart)
+  const hotspotSource = source.slice(hotspotStart, hotspotEnd)
+
+  assert.ok(
+    hotspotStart !== -1 && hotspotEnd !== -1,
+    '任务标题后面应该保留透明详情热区样式块',
+  )
 
   assert.match(
     source,
-    /\.task-detail-hotspot \{[\s\S]*min-width: 160px;[\s\S]*width: clamp\(160px, 28%, 280px\);[\s\S]*min-height: 28px;/,
-    '任务标题后的空白详情热区需要有稳定的可点击宽度，方便点空白处打开详情',
+    /\.task-detail-hotspot \{[\s\S]*flex: 1;[\s\S]*min-width: 0;[\s\S]*min-height: 28px;/,
+    '任务标题后的空白详情热区应该填满标题列剩余空间，不能再是固定长度',
   )
   assert.match(
     source,
@@ -45,13 +53,18 @@ async function testTaskRowActionButtonsAreProminent() {
   )
   assert.match(
     source,
-    /\.task-detail-hotspot \{[\s\S]*transition: background 0\.15s ease, border-color 0\.15s ease;/,
-    '任务标题后的空白详情热区应该明确表现为可点击区域',
+    /\.task-detail-hotspot \{[\s\S]*cursor: pointer;[\s\S]*background: transparent;[\s\S]*border: 1px solid transparent;/,
+    '任务标题后的空白详情热区应该只保留透明点击层，不显示任何按钮样式',
   )
-  assert.match(
-    source,
-    /\.task-title-cell \{[\s\S]*&:hover \{[\s\S]*\.task-detail-hotspot \{[\s\S]*background: #edf3ff;[\s\S]*border-color: #d7e6ff;/,
-    '任务行悬停时空白详情热区才应该出现轻量蓝色反馈，避免平时显示成蓝色方条',
+  assert.doesNotMatch(
+    hotspotSource,
+    /&:hover[\s\S]*(background|border-color):/,
+    '任务标题后的空白详情热区 hover 时也不能显示背景或边框',
+  )
+  assert.doesNotMatch(
+    hotspotSource,
+    /background: #(?!transparent)|border-color:/,
+    '任务行 hover 时也不能把隐藏热区显示成蓝色方条',
   )
 }
 

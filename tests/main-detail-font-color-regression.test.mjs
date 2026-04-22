@@ -7,6 +7,9 @@ async function readSource(relativePath) {
 
 async function testMainPageTextUsesDeepBlackAndDetailHotspotBlue() {
   const styleSource = await readSource('../src/components/TaskTable/index.less')
+  const hotspotStart = styleSource.indexOf('.task-detail-hotspot {')
+  const hotspotEnd = styleSource.indexOf('    }', hotspotStart)
+  const hotspotSource = styleSource.slice(hotspotStart, hotspotEnd)
 
   assert.match(
     styleSource,
@@ -28,10 +31,10 @@ async function testMainPageTextUsesDeepBlackAndDetailHotspotBlue() {
     /\.task-detail-hotspot \{[\s\S]*background: transparent;[\s\S]*border: 1px solid transparent;/,
     '主页面任务行里的详情空白热区默认应该隐藏样式，不要一直显示蓝色方条',
   )
-  assert.match(
-    styleSource,
-    /\.task-title-cell \{[\s\S]*&:hover \{[\s\S]*\.task-detail-hotspot \{[\s\S]*background: #edf3ff;[\s\S]*border-color: #d7e6ff;/,
-    '主页面任务行 hover 时详情空白热区才应该出现轻量蓝色强调',
+  assert.doesNotMatch(
+    hotspotSource,
+    /&:hover[\s\S]*(background|border-color):/,
+    '主页面任务行 hover 时也不能显示详情空白热区样式',
   )
 }
 
