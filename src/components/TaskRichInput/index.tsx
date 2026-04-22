@@ -407,6 +407,7 @@ export default function TaskRichInput({
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const selectionRef = useRef<Range | null>(null)
   const editorHtmlRef = useRef(editorHtml)
+  const isInitialEditorSyncRef = useRef(true)
   const isComposingRef = useRef(false)
 
   useEffect(() => {
@@ -421,13 +422,24 @@ export default function TaskRichInput({
   }, [focusVersion])
 
   useEffect(() => {
-    const nextHtml = normalizeRichContent(value)
-    editorHtmlRef.current = nextHtml
-    setEditorHtml(nextHtml)
-    const editor = editorRef.current
-    if (editor && editor.innerHTML !== nextHtml) {
-      editor.innerHTML = nextHtml
+    const normalizeEditorHtml = (html: string): string => {
+      // 描述和评论共用同一套编辑器，但只有描述模式依赖浏览器原生换行。
+      // 这里先做统一归一化，再只在首次挂载或外部真改值时回写，避免输入过程被反复刷新打断。
+      return normalizeRichContent(html)
     }
+
+    const nextEditorHtml = normalizeEditorHtml(value)
+    if (!isInitialEditorSyncRef.current && editorHtmlRef.current === nextEditorHtml) {
+      return
+    }
+
+    const editor = editorRef.current
+    editorHtmlRef.current = nextEditorHtml
+    setEditorHtml(nextEditorHtml)
+    if (editor && editor.innerHTML !== nextEditorHtml) {
+      editor.innerHTML = nextEditorHtml
+    }
+    isInitialEditorSyncRef.current = false
   }, [value])
 
   useEffect(() => {

@@ -33,6 +33,11 @@ async function testDetailFollowersSupportAddAndRemove() {
     /const followedUserIds = Array\.from\(new Set\(\[/,
     '详情页应该统一从任务数据里整理关注人列表，避免只看旧的 follower members',
   )
+  assert.doesNotMatch(
+    detailSource,
+    /const defaultFollowerIds = buildDefaultParticipantIds\(/,
+    '详情页关注人列表不应该再把创建者和负责人强制并入默认关注人，否则删除后会被前端补回',
+  )
   assert.match(
     detailSource,
     /const handleAddFollowers = async \(\) => \{/,
@@ -125,6 +130,11 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.doesNotMatch(
     detailSource,
+    /isDefaultFollower/,
+    '详情页关注人列表不应该再区分默认关注人和普通关注人，所有关注人都应该允许删除',
+  )
+  assert.doesNotMatch(
+    detailSource,
     /description=\{user\.id\}/,
     '关注人列表只应该显示一行名称，不要再把同一个用户 id 放到第二行重复显示',
   )
@@ -210,10 +220,10 @@ async function testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips() {
 async function testTaskTableFollowerCountUsesParticipantIds() {
   const taskTableSource = await readSource('../src/components/TaskTable/index.tsx')
 
-  assert.match(
+  assert.doesNotMatch(
     taskTableSource,
-    /const followerCount = new Set\(\[/,
-    '任务表格里应该先整理真实关注人集合，再展示关注人数',
+    /const defaultFollowerIds = buildDefaultParticipantIds\(/,
+    '任务表格关注人数不应该再把创建者和负责人强制算作默认关注人，否则和可删除行为冲突',
   )
   assert.match(
     taskTableSource,

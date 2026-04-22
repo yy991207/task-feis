@@ -51,8 +51,28 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
   )
   assert.match(
     detailSource,
-    /const filteredTasklistSections = \(currentTasklist\?\.sections \?\? \[\]\)\.filter\(/,
-    '任务详情应该能根据输入内容过滤当前清单的任务分组候选列表',
+    /import \{ listSections \} from '@\/services\/sectionService'/,
+    '任务详情任务分组候选必须和主页面一样从 sections 接口加载，不能只依赖清单缓存',
+  )
+  assert.match(
+    detailSource,
+    /const \[detailTasklistSections, setDetailTasklistSections\] = useState<Section\[\]>\(\[\]\)/,
+    '任务详情应该单独维护接口返回的当前清单分组数据',
+  )
+  assert.match(
+    detailSource,
+    /void listSections\(currentTasklist\.guid\)[\s\S]*const sections: Section\[\] = items[\s\S]*section_id[\s\S]*sort_order[\s\S]*is_default[\s\S]*setDetailTasklistSections\(sections\)/,
+    '任务详情切换清单后应该调用 listSections 并把接口字段转成前端 Section',
+  )
+  assert.match(
+    detailSource,
+    /const tasklistSectionSource = detailTasklistSections/,
+    '任务详情计算已添加和候选分组时，应该统一使用接口返回的分组源',
+  )
+  assert.match(
+    detailSource,
+    /const filteredTasklistSections = tasklistSectionSource\.filter\(/,
+    '任务详情应该根据输入内容过滤接口返回的当前清单任务分组候选列表',
   )
   assert.match(
     detailSource,
@@ -98,6 +118,11 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
     detailSource,
     /已添加任务分组/,
     '弹层里应该明确区分“已添加任务分组”和搜索结果',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /\+\s*添加至任务清单/,
+    '任务详情里不应该再单独渲染“添加至任务清单”入口，避免和上面的清单分组区域重复',
   )
   assert.match(
     styleSource,

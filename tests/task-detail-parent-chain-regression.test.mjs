@@ -68,8 +68,42 @@ async function testSubtaskDetailRendersClickableParentChain() {
 
   assert.match(
     source,
-    /className="detail-parent-chain-link"[\s\S]*>\s*\{`\/\$\{parentTask\.summary\}`\}\s*<\/button>/,
-    '直接父任务前面应该补一个“/”，避免一级子任务只显示父任务名字',
+    /function formatParentTaskPathSegment\(parentTask: Task\): string \{[\s\S]*return `\$\{summary\}\/`[\s\S]*\}/,
+    '父任务路径每一级都应该统一由格式化函数生成，并在名称后面补“/”',
+  )
+
+  assert.match(
+    source,
+    /separator=""/,
+    '父任务链路每个节点已经自带后置“/”，Breadcrumb 不应该再额外插入分隔符',
+  )
+
+  assert.match(
+    source,
+    /formatParentTaskPathSegment\(parentTask\)/,
+    '父任务链路渲染时应该复用路径片段格式化函数，避免 JSX 里临时拼接“/”',
+  )
+
+  assert.doesNotMatch(
+    source,
+    /\{`\/\$\{parentTask\.summary\}`\}/,
+    '父任务链路不能再把“/”放到父任务名前面，一级子任务应显示为“父任务/”',
+  )
+}
+
+async function testParentChainPathLabelExamples() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.tsx')
+
+  assert.match(
+    source,
+    /const summary = parentTask\.summary\.trim\(\) \|\| '未命名任务'/,
+    '父任务名称为空时应该有兜底文案，避免路径只显示一个“/”',
+  )
+
+  assert.match(
+    source,
+    /return `\$\{summary\}\/`/,
+    '一级子任务路径应该显示成“父任务/”，多级路径由多个片段自然串成“父任务/子任务/”',
   )
 }
 
@@ -92,6 +126,7 @@ async function testParentChainHasDedicatedStyle() {
 async function main() {
   await testSubtaskDetailLoadsParentChain()
   await testSubtaskDetailRendersClickableParentChain()
+  await testParentChainPathLabelExamples()
   await testParentChainHasDedicatedStyle()
   console.log('task detail parent chain regressions ok')
 }

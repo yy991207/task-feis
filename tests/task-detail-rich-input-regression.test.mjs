@@ -231,6 +231,36 @@ async function testRichInputSubmitsCommentOnEnter() {
   )
 }
 
+async function testDescriptionModeDoesNotRewriteEditorDomOnSameHtml() {
+  const source = await readRichInputSource()
+
+  assert.match(
+    source,
+    /const normalizeEditorHtml = \(html: string\): string => \{/,
+    '描述输入框应该先有独立的编辑器归一化逻辑，避免直接拿外部 value 覆盖当前 DOM',
+  )
+  assert.match(
+    source,
+    /const isInitialEditorSyncRef = useRef\(true\)/,
+    '描述输入框应该区分首次挂载同步和输入过程同步，避免持续重写 DOM',
+  )
+  assert.match(
+    source,
+    /if \(!isInitialEditorSyncRef\.current && editorHtmlRef\.current === nextEditorHtml\) \{/,
+    '描述输入框在输入过程中遇到相同内容时应该直接跳过回写，避免光标跳动和拼音倒序',
+  )
+  assert.match(
+    source,
+    /editorHtmlRef\.current = nextEditorHtml/,
+    '描述输入框同步后应该继续更新当前编辑器快照，保证提交时内容一致',
+  )
+  assert.match(
+    source,
+    /isInitialEditorSyncRef\.current = false/,
+    '描述输入框首次同步后应该关闭初始灌值标记，后续才按输入过程规则处理',
+  )
+}
+
 async function testDescriptionEditorBlursOnOutsideClick() {
   const source = await readRichInputSource()
 
@@ -563,6 +593,7 @@ async function main() {
   await testTaskDescriptionMentionsRenderLikeComments()
   await testRichInputSupportsMentionLinkAndPasteImage()
   await testRichInputSubmitsCommentOnEnter()
+  await testDescriptionModeDoesNotRewriteEditorDomOnSameHtml()
   await testDescriptionEditorBlursOnOutsideClick()
   await testRichInputProvidesToolbarTooltips()
   await testLinkPopoverInputsCanReceiveMouseDown()

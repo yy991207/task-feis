@@ -504,14 +504,14 @@ export default function Sidebar({
       {
         key: 'rename',
         icon: <EditOutlined />,
-        label: '重命名清单分组',
+        label: '重命名',
         disabled: group.is_default,
         onClick: () => handleStartRenameGroup(group.group_id),
       },
       {
         key: 'delete',
         icon: <DeleteOutlined />,
-        label: '删除清单分组',
+        label: '删除',
         danger: true,
         disabled: group.is_default,
         onClick: () => {

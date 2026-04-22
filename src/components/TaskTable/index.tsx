@@ -210,6 +210,7 @@ const toCustomFieldColumnKey = (guid: string): CustomFieldColumnKey => `custom:$
 
 type StatusFilterKey = 'all' | 'todo' | 'done'
 type SortModeKey = 'custom' | 'due' | 'start' | 'created'
+type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
 type GroupModeKey = 'section' | 'none'
 type DateFieldKey = 'start' | 'due'
 type CalendarViewMode = 'month' | 'year'
@@ -234,13 +235,11 @@ const taskStatusLabelMap: Record<Task['status'], string> = {
   cancelled: '已取消',
 }
 
-const sortLabelMap: Record<Exclude<SortModeKey, 'custom'>, string> = {
+const sortLabelMap: Record<VisibleSortModeKey, string> = {
   due: '截止时间',
   start: '开始时间',
   created: '创建时间',
 }
-
-type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
 
 const visibleSortModes: VisibleSortModeKey[] = ['due', 'start', 'created']
 
@@ -612,6 +611,7 @@ export default function TaskTable({
     setInternalMineOnly(v)
     onMineOnlyChange?.(v)
   }
+  const [visibleSectionGuids, setVisibleSectionGuids] = useState<Set<string>>(new Set())
   const [hasDueFilter, setHasDueFilter] = useState(false)
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ExtendedColumnKey[]>(config.columns)
   const [localSections, setLocalSections] = useState<Section[]>(sections ?? [])
@@ -837,6 +837,29 @@ export default function TaskTable({
   }, [])
 
   const sectionSource = hasLocalSectionEdits ? localSections : (sections ?? [])
+
+  useEffect(() => {
+    setVisibleSectionGuids((prev) => {
+      const nextSectionGuids = sectionSource.map((section) => section.guid)
+      if (nextSectionGuids.length === 0) {
+        return prev.size === 0 ? prev : new Set()
+      }
+
+      const hasVisibleMatch = nextSectionGuids.some((guid) => prev.has(guid))
+      const nextVisibleGuids = hasVisibleMatch
+        ? nextSectionGuids.filter((guid) => prev.has(guid))
+        : nextSectionGuids
+
+      if (
+        prev.size === nextVisibleGuids.length &&
+        nextVisibleGuids.every((guid) => prev.has(guid))
+      ) {
+        return prev
+      }
+
+      return new Set(nextVisibleGuids)
+    })
+  }, [sectionSource])
 
   useEffect(() => {
     return () => {
@@ -1110,9 +1133,12 @@ export default function TaskTable({
   const sortedSections = [...sectionSource].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
   )
+  const filteredSections = shouldGroupBySection
+    ? sortedSections.filter((section) => visibleSectionGuids.has(section.guid))
+    : sortedSections
   const groupedTasks = shouldGroupBySection
-    ? sortedSections.length > 0
-      ? sortedSections.map((section) => ({
+    ? filteredSections.length > 0
+      ? filteredSections.map((section) => ({
           section,
           tasks: tasksAfterSort.filter((t) =>
             t.tasklists.some(
@@ -1597,15 +1623,64 @@ export default function TaskTable({
     onClick: ({ key }: { key: string }) => setSortMode(key as SortModeKey),
   }
 
-  const groupMenu = {
-    items: (Object.keys(groupLabelMap) as GroupModeKey[]).map((key) => ({
-      key,
-      label: groupLabelMap[key],
-    })),
-    selectable: true,
-    selectedKeys: [groupMode],
-    onClick: ({ key }: { key: string }) => setGroupMode(key as GroupModeKey),
+  const toggleVisibleSection = (sectionGuid: string, checked: boolean) => {
+    setVisibleSectionGuids((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(sectionGuid)
+      } else if (next.size > 1) {
+        next.delete(sectionGuid)
+      }
+      return next
+    })
   }
+
+  const handleSelectAllSections = () => {
+    setVisibleSectionGuids(new Set(sortedSections.map((section) => section.guid)))
+  }
+
+  const groupPanel = (
+    <div className="toolbar-popover-panel">
+      <Typography.Text strong className="popover-title">
+        分组方式
+      </Typography.Text>
+      <div className="group-mode-actions">
+        {(Object.keys(groupLabelMap) as GroupModeKey[]).map((key) => (
+          <Button
+            key={key}
+            size="small"
+            type={groupMode === key ? 'primary' : 'text'}
+            onClick={() => setGroupMode(key)}
+          >
+            {groupLabelMap[key]}
+          </Button>
+        ))}
+      </div>
+      {shouldGroupBySection && sortedSections.length > 0 && (
+        <>
+          <div className="filter-panel-header">
+            <Typography.Text strong className="popover-title">
+              展示分组
+            </Typography.Text>
+            <Button size="small" type="link" onClick={handleSelectAllSections}>
+              全选
+            </Button>
+          </div>
+          <div className="filter-checkbox-list">
+            {sortedSections.map((section) => (
+              <Checkbox
+                key={section.guid}
+                checked={visibleSectionGuids.has(section.guid)}
+                onChange={(event) => toggleVisibleSection(section.guid, event.target.checked)}
+              >
+                {section.name}
+              </Checkbox>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 
   const filterPanel = (
     <div className="toolbar-popover-panel">
@@ -2376,15 +2451,7 @@ export default function TaskTable({
         if (!isTaskTableTaskRow(record)) {
           return null
         }
-        // 创建者和负责人默认也算关注人，主表人数要和详情页关注人列表保持一致。
-        const defaultFollowerIds = buildDefaultParticipantIds(
-          record.creator.id,
-          record.members
-            .filter((member) => member.role === 'assignee')
-            .map((member) => member.id),
-        )
         const followerCount = new Set([
-          ...defaultFollowerIds,
           ...(record.participant_ids ?? []),
           ...record.members
             .filter((member) => member.role === 'follower')
@@ -2645,11 +2712,11 @@ export default function TaskTable({
                   排序: {sortLabelMap[sortMode]}
                 </Button>
               </Dropdown>
-              <Dropdown menu={groupMenu} trigger={['click']}>
+              <Popover trigger="click" placement="bottomLeft" content={groupPanel}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<AppstoreOutlined />}>
                   分组: {groupLabelMap[groupMode]}
                 </Button>
-              </Dropdown>
+              </Popover>
               <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
                 <Button size="small" type="text" className="toolbar-trigger-btn" icon={<SettingOutlined />}>
                   字段配置

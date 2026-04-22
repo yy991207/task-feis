@@ -14,8 +14,10 @@ async function readSources() {
 async function testGroupTerminology() {
   const { sidebar, taskTable, taskDetail } = await readSources()
 
-  assert.match(sidebar, /重命名清单分组/, '左侧边栏分组操作应明确为“清单分组”')
-  assert.match(sidebar, /删除清单分组/, '左侧边栏删除操作应明确为“清单分组”')
+  assert.match(sidebar, /label: '重命名'/, '左侧边栏分组菜单重命名操作应显示为“重命名”')
+  assert.match(sidebar, /label: '删除'/, '左侧边栏分组菜单删除操作应显示为“删除”')
+  assert.doesNotMatch(sidebar, /label: '重命名清单分组'/, '左侧边栏分组菜单不应再显示“重命名清单分组”')
+  assert.doesNotMatch(sidebar, /label: '删除清单分组'/, '左侧边栏分组菜单不应再显示“删除清单分组”')
   assert.match(sidebar, /输入清单分组名称/, '左侧边栏输入占位应明确为“清单分组名称”')
 
   assert.match(taskTable, /任务分组/, '主页面清单内 section 文案应明确为“任务分组”')

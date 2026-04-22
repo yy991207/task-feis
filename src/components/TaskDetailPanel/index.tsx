@@ -32,7 +32,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import Calendar from 'antd/es/calendar'
-import type { Task, Tasklist, User } from '@/types/task'
+import type { Section, Task, Tasklist, User } from '@/types/task'
 import { appConfig } from '@/config/appConfig'
 import {
   listComments,
@@ -71,6 +71,7 @@ import {
 import {
   updateProject as apiUpdateProject,
 } from '@/services/projectService'
+import { listSections } from '@/services/sectionService'
 import { FilePreviewRenderer } from '@/components/file-preview'
 import TaskRichInput, {
   TaskRichText,
@@ -99,6 +100,12 @@ function isSubtaskCreateFloatingTarget(target: EventTarget | null): boolean {
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
+}
+
+function formatParentTaskPathSegment(parentTask: Task): string {
+  const summary = parentTask.summary.trim() || '未命名任务'
+  // 父链按“父任务/子任务/”展示，斜杠放在每级末尾，避免一级子任务显示成“/父任务”。
+  return `${summary}/`
 }
 
 interface TaskDetailPanelProps {
@@ -140,6 +147,7 @@ export default function TaskDetailPanel({
   const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
   const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
+  const [detailTasklistSections, setDetailTasklistSections] = useState<Section[]>([])
   const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
   const [activeSubtaskAssigneeGuid, setActiveSubtaskAssigneeGuid] = useState<string | null>(null)
   const [selectedFollowerId, setSelectedFollowerId] = useState<string>()
@@ -182,20 +190,21 @@ export default function TaskDetailPanel({
   const currentTasklistRefs = task.tasklists.filter(
     (item) => item.tasklist_guid === currentTasklist?.guid,
   )
+  const tasklistSectionSource = detailTasklistSections
   const primaryCurrentTasklistRef = currentTasklistRefs[0] ?? primaryTasklistRef
-  const currentSection = currentTasklist?.sections.find(
+  const currentSection = tasklistSectionSource.find(
     (item) => item.guid === primaryCurrentTasklistRef?.section_guid,
   )
-  const filteredTasklistSections = (currentTasklist?.sections ?? []).filter((item) => {
+  const filteredTasklistSections = tasklistSectionSource.filter((item) => {
     const keyword = sectionSearchValue.trim().toLowerCase()
     const matchedKeyword = !keyword || item.name.toLowerCase().includes(keyword)
     const alreadyAdded = currentTasklistRefs.some((ref) => ref.section_guid === item.guid)
     return matchedKeyword && !alreadyAdded
   })
   const currentTasklistSections = currentTasklistRefs
-    .map((item) => currentTasklist?.sections.find((section) => section.guid === item.section_guid))
+    .map((item) => tasklistSectionSource.find((section) => section.guid === item.section_guid))
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
-  const primarySectionGuid = currentSection?.guid ?? currentTasklist?.sections[0]?.guid ?? ''
+  const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
 
   useEffect(() => {
     setSectionPopoverOpen(false)
@@ -206,6 +215,37 @@ export default function TaskDetailPanel({
     if (!currentTasklist) {
       setSectionPopoverOpen(false)
       setSectionSearchValue('')
+      setDetailTasklistSections([])
+    }
+  }, [currentTasklist])
+
+  useEffect(() => {
+    if (!currentTasklist) {
+      return undefined
+    }
+
+    let cancelled = false
+    void listSections(currentTasklist.guid)
+      .then((items) => {
+        if (cancelled) return
+        const sections: Section[] = items
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map((item) => ({
+            guid: item.section_id,
+            name: item.name,
+            sort_order: item.sort_order,
+            is_default: item.is_default,
+          }))
+        setDetailTasklistSections(sections)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetailTasklistSections([])
+        }
+      })
+
+    return () => {
+      cancelled = true
     }
   }, [currentTasklist])
 
@@ -367,13 +407,7 @@ export default function TaskDetailPanel({
       .catch(() => {})
   }, [])
 
-  // 创建者和负责人是任务的默认关注人，这里先本地兜底，避免旧任务没有 participant 回写时漏展示。
-  const defaultFollowerIds = buildDefaultParticipantIds(
-    task.creator.id,
-    assignees.map((member) => member.id),
-  )
   const followedUserIds = Array.from(new Set([
-    ...defaultFollowerIds,
     ...(task.participant_ids ?? []),
     ...task.members
       .filter((member) => member.role === 'follower')
@@ -1137,6 +1171,7 @@ export default function TaskDetailPanel({
           {isSubtask && parentTaskChain.length > 0 && (
             <Breadcrumb
               className="detail-parent-chain"
+              separator=""
               items={parentTaskChain.map((parentTask) => ({
                 key: parentTask.guid,
                 title: (
@@ -1145,7 +1180,7 @@ export default function TaskDetailPanel({
                     className="detail-parent-chain-link"
                     onClick={() => handleOpenParentTask(parentTask)}
                   >
-                    {`/${parentTask.summary}`}
+                    {formatParentTaskPathSegment(parentTask)}
                   </button>
                 ),
               }))}
@@ -1411,14 +1446,6 @@ export default function TaskDetailPanel({
                     </Popover>
                   </span>
                 </div>
-              </div>
-              <div className="detail-field-indent">
-                <span
-                  className="field-add-link"
-                  onClick={() => setSectionPopoverOpen(true)}
-                >
-                  + 添加至任务清单
-                </span>
               </div>
             </>
           )}

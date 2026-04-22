@@ -40,9 +40,30 @@ async function testSortMenuDoesNotExposeCustomDragOption() {
   )
 }
 
+async function testSectionGroupDropdownSupportsMultiSectionFiltering() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /const \[visibleSectionGuids, setVisibleSectionGuids\] = useState<Set<string>>/,
+    'TaskTable 需要维护任务分组筛选状态，支持只展示选中的几个分组',
+  )
+  assert.match(
+    source,
+    /const filteredSections = shouldGroupBySection\s*\?[\s\S]*visibleSectionGuids\.has\(section\.guid\)/,
+    'TaskTable 在任务分组模式下应该先过滤分组，再生成 groupedTasks',
+  )
+  assert.match(
+    source,
+    /Checkbox[\s\S]*checked=\{visibleSectionGuids\.has\(section\.guid\)\}/,
+    '任务分组下拉里应该提供分组多选项，而不是只能切换“任务分组/无分组”',
+  )
+}
+
 async function main() {
   await testCreateButtonReferenceHasDefinition()
   await testSortMenuDoesNotExposeCustomDragOption()
+  await testSectionGroupDropdownSupportsMultiSectionFiltering()
   console.log('task table toolbar regressions ok')
 }
 

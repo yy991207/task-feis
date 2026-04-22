@@ -123,30 +123,35 @@ async function testSubtaskCreateAddsCreatorAndAssigneeAsParticipants() {
     /await addParticipants\(subtask\.guid, defaultParticipantIds\)/,
     '详情页修改子任务负责人成功后应该补调 participants 接口，让新负责人默认进入关注人',
   )
-  assert.match(
+  assert.doesNotMatch(
     source,
     /const defaultFollowerIds = buildDefaultParticipantIds\(\s*task\.creator\.id,\s*assignees\.map\(\(member\) => member\.id\),\s*\)/,
-    '详情页关注人列表应该默认合并当前任务创建人和负责人，避免旧任务没有 participant 回写时漏人',
+    '详情页关注人列表不应该再把创建者和负责人强制并入默认关注人，否则默认关注人无法真正删除',
   )
-  assert.match(
+  assert.doesNotMatch(
     source,
     /const followedUserIds = Array\.from\(new Set\(\[[\s\S]*\.\.\.defaultFollowerIds,[\s\S]*\.\.\.\(task\.participant_ids \?\? \[\]\),/,
-    '详情页整理关注人列表时应该优先把默认关注人放进集合',
+    '详情页整理关注人列表时不应该再优先补默认关注人，应该只展示真实 participant 数据',
   )
 }
 
 async function testTaskTableFollowerCountIncludesDefaultParticipants() {
   const source = await readSource('../src/components/TaskTable/index.tsx')
 
-  assert.match(
+  assert.doesNotMatch(
     source,
     /const defaultFollowerIds = buildDefaultParticipantIds\(\s*record\.creator\.id,\s*record\.members[\s\S]*\.filter\(\(member\) => member\.role === 'assignee'\)[\s\S]*\.map\(\(member\) => member\.id\),\s*\)/,
-    '主表关注人数应该默认合并创建人和负责人，避免列表列数和详情页不一致',
+    '主表关注人数不应该再默认合并创建人和负责人，否则和详情页“可删空关注人”行为不一致',
+  )
+  assert.doesNotMatch(
+    source,
+    /const followerCount = new Set\(\[[\s\S]*\.\.\.defaultFollowerIds,[\s\S]*\.\.\.\(record\.participant_ids \?\? \[\]\),/,
+    '主表关注人数统计不应该再补默认关注人，应该按真实 participant 数据展示',
   )
   assert.match(
     source,
-    /const followerCount = new Set\(\[[\s\S]*\.\.\.defaultFollowerIds,[\s\S]*\.\.\.\(record\.participant_ids \?\? \[\]\),/,
-    '主表关注人数统计时应该把默认关注人放进关注人集合',
+    /const followerCount = new Set\(\[[\s\S]*\.\.\.\(record\.participant_ids \?\? \[\]\),/,
+    '主表关注人数统计应该继续基于真实 participant 数据去重展示',
   )
 }
 
