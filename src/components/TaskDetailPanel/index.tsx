@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import Button from 'antd/es/button'
+import Checkbox from 'antd/es/checkbox'
 import Input from 'antd/es/input'
 import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
-import Tag from 'antd/es/tag'
 import Avatar from 'antd/es/avatar'
+import Tag from 'antd/es/tag'
 import Popover from 'antd/es/popover'
 import Select from 'antd/es/select'
 import Card from 'antd/es/card'
@@ -97,6 +98,10 @@ function isSubtaskCreateFloatingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(SUBTASK_CREATE_FLOATING_SELECTOR))
 }
 
+function getActionErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 interface TaskDetailPanelProps {
   task: Task
   tasklists: Tasklist[]
@@ -119,10 +124,8 @@ export default function TaskDetailPanel({
   onClose,
 }: TaskDetailPanelProps) {
   const [panelWidth, setPanelWidth] = useState(360)
-  const [selectedTasklistGuid] = useState(task.tasklists[0]?.tasklist_guid)
-  const [selectedSectionGuid, setSelectedSectionGuid] = useState(
-    task.tasklists[0]?.section_guid ?? '',
-  )
+  const [sectionPopoverOpen, setSectionPopoverOpen] = useState(false)
+  const [sectionSearchValue, setSectionSearchValue] = useState('')
   const [commentValue, setCommentValue] = useState('')
   const [commentMentions, setCommentMentions] = useState<string[]>([])
   const [commentFocusVersion, setCommentFocusVersion] = useState(0)
@@ -172,18 +175,47 @@ export default function TaskDetailPanel({
   const assignees = task.members.filter((m) => m.role === 'assignee')
   const isSubtask = Boolean(task.parent_task_guid)
   const creator: User = { id: task.creator.id, name: task.creator.id }
-  const tasklistRef = task.tasklists[0]
+  const primaryTasklistRef = task.tasklists[0]
   const creatorName = creator.name
-  const currentTasklist = tasklistRef
-    ? tasklists.find((item) => item.guid === tasklistRef.tasklist_guid)
+  const currentTasklist = primaryTasklistRef
+    ? tasklists.find((item) => item.guid === primaryTasklistRef.tasklist_guid)
     : undefined
+  const currentTasklistRefs = task.tasklists.filter(
+    (item) => item.tasklist_guid === currentTasklist?.guid,
+  )
+  const primaryCurrentTasklistRef = currentTasklistRefs[0] ?? primaryTasklistRef
   const currentSection = currentTasklist?.sections.find(
-    (item) => item.guid === tasklistRef?.section_guid,
+    (item) => item.guid === primaryCurrentTasklistRef?.section_guid,
   )
-  const selectedTasklist = tasklists.find((item) => item.guid === selectedTasklistGuid)
-  const selectedSection = selectedTasklist?.sections.find(
-    (item) => item.guid === selectedSectionGuid,
-  )
+  const filteredTasklistSections = (currentTasklist?.sections ?? []).filter((item) => {
+    const keyword = sectionSearchValue.trim().toLowerCase()
+    const matchedKeyword = !keyword || item.name.toLowerCase().includes(keyword)
+    const alreadyAdded = currentTasklistRefs.some((ref) => ref.section_guid === item.guid)
+    return matchedKeyword && !alreadyAdded
+  })
+  const currentTasklistSections = currentTasklistRefs
+    .map((item) => currentTasklist?.sections.find((section) => section.guid === item.section_guid))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  const primarySectionGuid = currentSection?.guid ?? currentTasklist?.sections[0]?.guid ?? ''
+
+  useEffect(() => {
+    setSectionPopoverOpen(false)
+    setSectionSearchValue('')
+  }, [task.guid])
+
+  useEffect(() => {
+    if (!currentTasklist) {
+      setSectionPopoverOpen(false)
+      setSectionSearchValue('')
+    }
+  }, [currentTasklist])
+
+  useEffect(() => {
+    if (!sectionPopoverOpen && sectionSearchValue) {
+      setSectionSearchValue('')
+    }
+  }, [sectionPopoverOpen, sectionSearchValue])
+
   useEffect(() => {
     void listSubtasks(task.guid).then((items) =>
       setSubtaskDrafts(inheritParentStartForTasks(items.map((t) => apiTaskToTask(t)), task)),
@@ -351,11 +383,18 @@ export default function TaskDetailPanel({
     setSelectedFollowerId(undefined)
   }, [task.guid, followedUserIdsKey])
 
-  const handleTaskPatch = async (patch: Partial<Task>) => {
+  const handleTaskPatch = async (
+    patch: Partial<Task>,
+    options?: { descriptionMentions?: string[] },
+  ) => {
     const apiPatch: Record<string, unknown> = {}
     if (patch.summary !== undefined) apiPatch.title = patch.summary
     if (patch.description !== undefined) apiPatch.description = patch.description
+    if (options?.descriptionMentions !== undefined) {
+      apiPatch.description_mentions = options.descriptionMentions
+    }
     if (patch.status !== undefined) apiPatch.status = patch.status
+    if (patch.tasklists !== undefined) apiPatch.tasklists = patch.tasklists
     if (patch.start !== undefined)
       apiPatch.start_date = patch.start
         ? new Date(Number(patch.start.timestamp)).toISOString()
@@ -387,8 +426,8 @@ export default function TaskDetailPanel({
       const nextTask = apiTaskToTask(fresh)
       onTaskUpdated?.(nextTask)
       if (!onTaskUpdated) onRefresh?.()
-    } catch {
-      message.error('更新负责人失败')
+    } catch (err) {
+      message.error(getActionErrorMessage(err, '更新负责人失败'))
     }
   }
 
@@ -410,7 +449,7 @@ export default function TaskDetailPanel({
       setSelectedFollowerId(undefined)
       message.success('已添加关注人')
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '添加关注人失败')
+      message.error(getActionErrorMessage(err, '添加关注人失败'))
     }
   }
 
@@ -423,7 +462,18 @@ export default function TaskDetailPanel({
       if (!onTaskUpdated) onRefresh?.()
       message.success('已移除关注人')
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '移除关注人失败')
+      message.error(getActionErrorMessage(err, '移除关注人失败'))
+    }
+  }
+
+  const handleToggleTaskStatus = async () => {
+    try {
+      const apiTask = await patchTaskStatus(task.guid, task.status === 'done' ? 'todo' : 'done')
+      const nextTask = apiTaskToTask(apiTask)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) onRefresh?.()
+    } catch (err) {
+      message.error(getActionErrorMessage(err, '状态更新失败'))
     }
   }
 
@@ -565,17 +615,16 @@ export default function TaskDetailPanel({
     }
 
     subtaskSubmittingRef.current = true
-    const tasklistRef = task.tasklists[0]
     // 开始时间默认继承父任务
     const parentStart = task.start?.timestamp
       ? new Date(Number(task.start.timestamp)).toISOString()
       : undefined
     try {
       const apiTask = await createTaskApi({
-        project_id: tasklistRef?.tasklist_guid ?? '',
+        project_id: primaryTasklistRef?.tasklist_guid ?? '',
         title: summary,
         parent_task_id: task.guid,
-        section_id: selectedSectionGuid || tasklistRef?.section_guid,
+        section_id: primarySectionGuid || primaryTasklistRef?.section_guid,
         assignee_id: subtaskAssigneeId,
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
@@ -657,7 +706,7 @@ export default function TaskDetailPanel({
       setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
       onTaskUpdated?.(next)
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '状态更新失败')
+      message.error(getActionErrorMessage(err, '状态更新失败'))
     }
   }
 
@@ -680,7 +729,7 @@ export default function TaskDetailPanel({
       setActiveSubtaskDueGuid(null)
       message.success(value ? '已更新子任务截止时间' : '已清空子任务截止时间')
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '更新子任务截止时间失败')
+      message.error(getActionErrorMessage(err, '更新子任务截止时间失败'))
     }
   }
 
@@ -693,7 +742,7 @@ export default function TaskDetailPanel({
       setActiveSubtaskAssigneeGuid(null)
       message.success(value ? '已更新子任务负责人' : '已清空子任务负责人')
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '更新子任务负责人失败')
+      message.error(getActionErrorMessage(err, '更新子任务负责人失败'))
     }
   }
 
@@ -759,34 +808,52 @@ export default function TaskDetailPanel({
     setPreviewAttachment(attachment)
   }
 
-  const handleChangeSection = async (nextSectionGuid: string) => {
-    setSelectedSectionGuid(nextSectionGuid)
-    try {
-      const apiTask = await updateTaskApi(task.guid, {
-        section_id: nextSectionGuid,
-      })
-      const nextTask = apiTaskToTask(apiTask)
-      onTaskUpdated?.(nextTask)
-      if (!onTaskUpdated) onRefresh?.()
-      message.success('已移动到新分组')
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '移动失败')
-    }
-  }
-
-  const handleMoveTask = async () => {
-    if (!selectedTasklistGuid || !selectedSectionGuid) {
+  const handleAddTaskToSection = async (sectionGuid: string) => {
+    if (!currentTasklist) {
       return
     }
 
-    await handleTaskPatch({
-      tasklists: [
-        {
-          tasklist_guid: selectedTasklistGuid,
-          section_guid: selectedSectionGuid,
-        },
-      ],
-    })
+    const nextTasklists = [
+      ...task.tasklists,
+      {
+        tasklist_guid: currentTasklist.guid,
+        section_guid: sectionGuid,
+      },
+    ]
+
+    try {
+      await handleTaskPatch({
+        tasklists: nextTasklists,
+      })
+      setSectionSearchValue('')
+      message.success('已添加任务分组')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '添加任务分组失败')
+    }
+  }
+
+  const handleRemoveTaskFromSection = async (sectionGuid: string) => {
+    if (!currentTasklist) {
+      return
+    }
+
+    const nextTasklists = task.tasklists.filter(
+      (item) =>
+        item.tasklist_guid !== currentTasklist.guid || item.section_guid !== sectionGuid,
+    )
+
+    if (nextTasklists.length === task.tasklists.length) {
+      return
+    }
+
+    try {
+      await handleTaskPatch({
+        tasklists: nextTasklists,
+      })
+      message.success('已移除任务分组')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '移除任务分组失败')
+    }
   }
 
   const handleRenameTasklistSubmit = async () => {
@@ -1024,51 +1091,6 @@ export default function TaskDetailPanel({
       />
       {/* Header */}
       <div className="detail-top">
-        {task.status === 'done' ? (
-          <Tag
-            icon={<CheckOutlined />}
-            color="success"
-            className="done-tag"
-            style={{
-              cursor: 'pointer',
-              padding: '4px 10px',
-              fontSize: 13,
-              borderRadius: 6,
-            }}
-            onClick={() => {
-              void patchTaskStatus(task.guid, 'todo')
-                .then((apiTask) => {
-                  const nextTask = apiTaskToTask(apiTask)
-                  onTaskUpdated?.(nextTask)
-                  if (!onTaskUpdated) onRefresh?.()
-                })
-                .catch((err) => {
-                  message.error(err instanceof Error ? err.message : '状态更新失败')
-                })
-            }}
-          >
-            任务已完成
-          </Tag>
-        ) : (
-          <Button
-            size="small"
-            icon={<CheckOutlined />}
-            className="complete-btn"
-            onClick={() => {
-              void patchTaskStatus(task.guid, 'done')
-                .then((apiTask) => {
-                  const nextTask = apiTaskToTask(apiTask)
-                  onTaskUpdated?.(nextTask)
-                  if (!onTaskUpdated) onRefresh?.()
-                })
-                .catch((err) => {
-                  message.error(err instanceof Error ? err.message : '状态更新失败')
-                })
-            }}
-          >
-            完成任务
-          </Button>
-        )}
         <div className="detail-actions">
           <Tooltip title="更多操作" placement="bottom">
             <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
@@ -1107,7 +1129,26 @@ export default function TaskDetailPanel({
           )}
 
           {/* Title */}
-          <div className="detail-title">{task.summary}</div>
+          <div className={`detail-title-row ${task.status === 'done' ? 'is-done' : ''}`}>
+            <Tooltip
+              title={task.status === 'done' ? '标记未完成' : '标记已完成'}
+              placement="top"
+              color="#000"
+              overlayInnerStyle={{ color: '#fff' }}
+            >
+              <Checkbox
+                className="detail-title-checkbox"
+                checked={task.status === 'done'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                }}
+                onChange={() => {
+                  void handleToggleTaskStatus()
+                }}
+              />
+            </Tooltip>
+            <div className="detail-title">{task.summary}</div>
+          </div>
 
           {/* Assignee row */}
           <div className="detail-field-row">
@@ -1125,7 +1166,7 @@ export default function TaskDetailPanel({
                     showSearch
                     allowClear
                     value={assignees[0]?.id}
-                    onChange={(value) => void handleAssigneeChange(value)}
+                    onChange={(value: string | undefined) => void handleAssigneeChange(value)}
                     options={availableUsers.map((user) => ({
                       value: user.id,
                       label: user.name,
@@ -1291,30 +1332,76 @@ export default function TaskDetailPanel({
                       />
                     ) : (
                       <span className="tasklist-name">
-                        {selectedTasklist?.name ?? currentTasklist.name}
+                        {currentTasklist.name}
                       </span>
                     )}
                     <span className="tasklist-divider">|</span>
                     <Popover
                       trigger="click"
                       placement="bottomLeft"
+                      open={sectionPopoverOpen}
+                      onOpenChange={setSectionPopoverOpen}
                       content={
-                        <div className="detail-popover-panel">
-                          <Text strong>选择分组</Text>
-                          <Select
+                        <div className="detail-popover-panel tasklist-section-panel">
+                          <div className="tasklist-section-panel-title">
+                            <Text strong>已添加任务分组</Text>
+                          </div>
+                          <div className="tasklist-section-tags">
+                            {currentTasklistSections.length > 0 ? (
+                              currentTasklistSections.map((item) => (
+                                <span key={item.guid} className="tasklist-section-chip">
+                                  <span className="tasklist-section-chip-name">{item.name}</span>
+                                  <button
+                                    type="button"
+                                    className="tasklist-section-chip-remove"
+                                    onClick={() => void handleRemoveTaskFromSection(item.guid)}
+                                    disabled={currentTasklistSections.length === 1}
+                                    title={
+                                      currentTasklistSections.length === 1
+                                        ? '至少保留一个任务分组'
+                                        : '移除任务分组'
+                                    }
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))
+                            ) : (
+                              <span className="tasklist-section-empty">当前还没有任务分组</span>
+                            )}
+                          </div>
+                          <Input
                             size="small"
-                            value={selectedSectionGuid}
-                            onChange={(value) => void handleChangeSection(value)}
-                            options={(selectedTasklist?.sections ?? []).map((item) => ({
-                              value: item.guid,
-                              label: item.name,
-                            }))}
+                            value={sectionSearchValue}
+                            onChange={(e) => setSectionSearchValue(e.target.value)}
+                            placeholder="搜索或新建任务清单"
+                            className="tasklist-section-search"
                           />
+                          <div className="tasklist-section-search-list">
+                            {filteredTasklistSections.length > 0 ? (
+                              filteredTasklistSections.map((item) => (
+                                <button
+                                  key={item.guid}
+                                  type="button"
+                                  className="tasklist-section-search-item"
+                                  onClick={() => void handleAddTaskToSection(item.guid)}
+                                >
+                                  {item.name}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="tasklist-section-search-empty">
+                                没有匹配的任务分组
+                              </div>
+                            )}
+                          </div>
                         </div>
                       }
                     >
                       <span className="tasklist-section-trigger">
-                        {(selectedSection ?? currentSection)?.name ?? '选择分组'}
+                        {currentTasklistSections.length > 0
+                          ? currentTasklistSections.map((item) => item.name).join('、')
+                          : '选择分组'}
                         <Tooltip title="选择任务分组">
                           <DownOutlined className="tasklist-arrow" />
                         </Tooltip>
@@ -1326,7 +1413,7 @@ export default function TaskDetailPanel({
               <div className="detail-field-indent">
                 <span
                   className="field-add-link"
-                  onClick={() => void handleMoveTask()}
+                  onClick={() => setSectionPopoverOpen(true)}
                 >
                   + 添加至任务清单
                 </span>
@@ -1350,9 +1437,13 @@ export default function TaskDetailPanel({
                   autoFocus
                   onChange={setDescriptionDraft}
                   onBlurCommit={async (nextValue) => {
+                    // 描述区支持 @ 选人，保存时要把提及人一起传给后端，后端才能据此生成通知。
                     const next = nextValue.trim()
                     if (next !== (task.description ?? '')) {
-                      await handleTaskPatch({ description: next })
+                      await handleTaskPatch(
+                        { description: next },
+                        { descriptionMentions: [] },
+                      )
                     } else {
                       setDescriptionEditing(false)
                     }
@@ -1417,7 +1508,12 @@ export default function TaskDetailPanel({
                     key={subtask.guid}
                     className={`detail-subtask-row ${isDone ? 'is-done' : ''}`}
                   >
-                    <Tooltip title="切换子任务状态">
+                    <Tooltip
+                      title={isDone ? '标记未完成' : '标记已完成'}
+                      placement="top"
+                      color="#000"
+                      overlayInnerStyle={{ color: '#fff' }}
+                    >
                       <span
                         className={`subtask-check ${isDone ? 'checked' : ''}`}
                         onClick={(e) => {
@@ -1609,7 +1705,9 @@ export default function TaskDetailPanel({
                                 size="small"
                                 placeholder="选择负责人"
                                 value={subtaskAssigneeId}
-                                onChange={(value) => setSubtaskAssigneeId(value ?? undefined)}
+                                onChange={(value: string | undefined) =>
+                                  setSubtaskAssigneeId(value ?? undefined)
+                                }
                                 options={availableUsers.map((u) => ({
                                   value: u.id,
                                   label: u.name,

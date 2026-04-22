@@ -1,6 +1,6 @@
 import { request } from './request'
 import { appConfig } from '@/config/appConfig'
-import type { Task, Priority, CustomFieldValue } from '@/types/task'
+import type { Task, Priority, CustomFieldValue, TasklistRef } from '@/types/task'
 
 export interface ApiTask {
   task_id: string
@@ -29,6 +29,7 @@ export interface ApiTask {
   created_at: string
   updated_at: string
   is_deleted: boolean
+  is_completed: boolean
   is_starred: boolean
   custom_fields?: Record<string, unknown>
 }
@@ -55,7 +56,10 @@ const priorityNumToString: Record<number, string> = {
   4: 'urgent',
 }
 
-function normalizeTaskStatus(status: string): Task['status'] {
+function normalizeTaskStatus(status: string, isCompleted: boolean): Task['status'] {
+  if (isCompleted) {
+    return 'done'
+  }
   if (status === 'done' || status === 'in_progress' || status === 'cancelled') {
     return status
   }
@@ -138,7 +142,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     task_id: api.task_id,
     summary: api.title,
     description: api.description ?? '',
-    status: normalizeTaskStatus(api.status),
+    status: normalizeTaskStatus(api.status, api.is_completed),
     completed_at: api.completed_at
       ? new Date(api.completed_at).getTime().toString()
       : '0',
@@ -234,11 +238,13 @@ export function updateTaskApi(
   patch: {
     title?: string
     description?: string
+    description_mentions?: string[]
     status?: string
     priority?: string
     assignee_id?: string | null
     tags?: string[]
     section_id?: string | null
+    tasklists?: TasklistRef[]
     start_date?: string | null
     due_date?: string | null
   },

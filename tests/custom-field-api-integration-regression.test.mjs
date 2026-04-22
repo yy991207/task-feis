@@ -99,13 +99,13 @@ async function testSystemStatusFieldUsesTaskStatusApi() {
   )
   assert.match(
     taskServiceSource,
-    /function normalizeTaskStatus\(status: string\): Task\['status'\]/,
-    'taskService 应该统一收敛接口返回的任务状态值',
+    /function normalizeTaskStatus\(status: string, isCompleted: boolean\): Task\['status'\]/,
+    'taskService 应该统一收敛接口返回的任务状态值，并兼容新的 is_completed 完成态字段',
   )
   assert.match(
     taskServiceSource,
-    /status: normalizeTaskStatus\(api\.status\)/,
-    'apiTaskToTask 应该保留接口返回的真实任务状态，而不是把进行中压成 todo',
+    /status: normalizeTaskStatus\(api\.status,\s*api\.is_completed\)/,
+    'apiTaskToTask 应该优先结合 is_completed 和 status 还原真实任务状态',
   )
   assert.match(
     taskTableSource,

@@ -673,12 +673,32 @@ export default function Sidebar({
     activeKey,
   ])
 
+  const selectableTreeKeySet = useMemo(() => {
+    const keySet = new Set<string>()
+
+    const walk = (nodes: DataNode[]) => {
+      nodes.forEach((node) => {
+        if (node.selectable !== false) {
+          keySet.add(String(node.key))
+        }
+        if (Array.isArray(node.children) && node.children.length > 0) {
+          walk(node.children)
+        }
+      })
+    }
+
+    walk(treeData)
+    return keySet
+  }, [treeData])
+
   const selectedKeys = useMemo<React.Key[]>(() => {
     if (typeof activeKey === 'object' && activeKey.type === 'tasklist') {
-      return [encodeTasklistKey(activeKey.guid)]
+      const nextKey = encodeTasklistKey(activeKey.guid)
+      // Tree 内部会对受控 selectedKeys 做滚动定位，节点尚未渲染出来时要先拦住不存在的 key。
+      return selectableTreeKeySet.has(nextKey) ? [nextKey] : []
     }
     return []
-  }, [activeKey])
+  }, [activeKey, selectableTreeKeySet])
 
   const handleSelect: TreeProps['onSelect'] = (_keys, info) => {
     const key = String(info.node.key)

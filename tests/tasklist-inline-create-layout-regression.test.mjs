@@ -9,34 +9,49 @@ async function readTaskTableStyleSource() {
   return readFile(new URL('../src/components/TaskTable/index.less', import.meta.url), 'utf8')
 }
 
-async function testInlineCreateRowSpansWholeTable() {
+async function testInlineCreateUsesRealTableColumns() {
   const source = await readTaskTableSource()
 
+  assert.doesNotMatch(
+    source,
+    /colSpan: index === 0 \? taskColumns\.length : 0/,
+    '行内新建任务不应该再把整行合并成一个大单元格，否则永远做不到和表头逐列对齐',
+  )
   assert.match(
     source,
-    /const taskColumnsWithInlineCreateSpan[\s\S]*record\.rowKind !== 'inlineCreate'[\s\S]*colSpan: index === 0 \? taskColumns\.length : 0/,
-    '行内新建任务行应该占满整张表，不能把整行内容挤在任务标题单元格里',
+    /record\.rowKind === 'inlineCreate'[\s\S]*renderInlineCreateTitleCell\(record\.section\.guid\)/,
+    '行内新建任务标题列应该走独立的标题单元格渲染，直接占用真实表格列宽',
+  )
+  assert.match(
+    source,
+    /record\.rowKind === 'inlineCreate'[\s\S]*renderInlineCreatePriorityCell\(record\.section\.guid\)/,
+    '行内新建任务优先级列也应该走真实表格列渲染，避免和表头错位',
   )
 }
 
-async function testInlineCreateRowKeepsHorizontalCells() {
+async function testInlineCreateRowKeepsAlignedCells() {
   const style = await readTaskTableStyleSource()
 
   assert.match(
     style,
-    /\.inline-create-row \{[\s\S]*display: flex;[\s\S]*align-items: center;/,
-    '行内新建任务内部单元格应该横向排列，避免字段竖向堆叠',
+    /\.inline-create-table-row > td \{/,
+    '行内新建任务应该直接使用表格自己的 td 容器，和表头列宽保持一一对应',
   )
   assert.match(
     style,
-    /\.inline-create-row \{[\s\S]*\.cell-title \{[\s\S]*flex: 1;[\s\S]*min-width: 240px;/,
-    '行内新建任务标题输入框应该占主要宽度，和任务列表列布局保持一致',
+    /\.inline-create-title-cell \{[\s\S]*\.inline-title-input \{[\s\S]*width: 100%;/,
+    '行内新建任务标题输入框应该占满标题列，而不是再缩在一小段区域里',
+  )
+  assert.match(
+    style,
+    /\.inline-create-field-cell \{[\s\S]*display: flex;[\s\S]*align-items: center;[\s\S]*width: 100%;/,
+    '行内新建任务的普通字段单元格应该铺满各自列宽，避免只跟着内容宽度走',
   )
 }
 
 async function main() {
-  await testInlineCreateRowSpansWholeTable()
-  await testInlineCreateRowKeepsHorizontalCells()
+  await testInlineCreateUsesRealTableColumns()
+  await testInlineCreateRowKeepsAlignedCells()
   console.log('tasklist inline create layout regressions ok')
 }
 

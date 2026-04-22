@@ -242,6 +242,10 @@ const groupLabelMap: Record<GroupModeKey, string> = {
   none: '无分组',
 }
 
+function getActionErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 interface TaskTableProps {
   config: ViewConfig
   tasks: Task[]
@@ -367,6 +371,10 @@ function AssigneePicker({
       </div>
     </Popover>
   )
+}
+
+function isInlineCreateRow(record: TaskTableDisplayRow): record is TaskTableInlineCreateRow {
+  return record.rowKind === 'inlineCreate'
 }
 
 function DateConfigPanel({
@@ -931,6 +939,21 @@ export default function TaskTable({
 
   useEffect(() => {
     if (!creatingInSection) {
+      inlineCreateRowRef.current = null
+      return undefined
+    }
+
+    queueMicrotask(() => {
+      inlineCreateRowRef.current = document.querySelector(
+        '.task-grid-table .inline-create-table-row',
+      ) as HTMLDivElement | null
+    })
+
+    return undefined
+  }, [creatingInSection, visibleColumnKeys])
+
+  useEffect(() => {
+    if (!creatingInSection) {
       return undefined
     }
 
@@ -967,10 +990,10 @@ export default function TaskTable({
       const next = apiTaskToTask(apiTask, tasklist?.guid)
       handleTaskUpdate(next)
       updateSubtaskInCache(next)
-    } catch {
+    } catch (err) {
       handleTaskUpdate(task)
       updateSubtaskInCache(task)
-      message.error('更新状态失败')
+      message.error(getActionErrorMessage(err, '更新状态失败'))
     }
   }
 
@@ -1729,157 +1752,134 @@ export default function TaskTable({
     </div>
   )
 
-  const createTaskInlineRow = (sectionGuid: string) => (
-    <div
-      ref={inlineCreateRowRef}
-      className="task-row creating task-row-enter inline-create-row"
-    >
+  const createTaskInlineRow = (_sectionGuid: string) => null
+
+  const renderInlineCreateTitleCell = (sectionGuid: string) => (
+    <div className="inline-create-title-cell">
       <div className="cell cell-checkbox">
         <Checkbox disabled />
       </div>
-      {showColumn('title') && (
-        <div className="cell cell-title" style={{ overflow: 'visible' }}>
-          <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
-            <Input
-              size="small"
-              className="inline-title-input"
-              placeholder="输入标题，回车确认"
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              onPressEnter={() => handleInlineCreate(sectionGuid)}
-              onFocus={() => setInlineCreateFocusedField('title')}
-              onBlur={() => {
-                if (inlineCreateInteractingRef.current) {
-                  inlineCreateInteractingRef.current = false
-                  return
-                }
-                if (inlineCreateFocusedField !== 'title') {
-                  return
-                }
-                void handleInlineCreate(sectionGuid)
-              }}
-              autoFocus
-            />
-          </Tooltip>
-        </div>
-      )}
-      {showColumn('priority') && (
-        <div
-          className="cell cell-priority"
-          onMouseDownCapture={markInlineCreateInteracting}
-        >
-          <Select
+      <div className="cell cell-title" style={{ overflow: 'visible' }}>
+        <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
+          <Input
             size="small"
-            variant="borderless"
-            value={newTaskPriority}
-            onChange={(value) => setNewTaskPriority(value)}
-            onDropdownVisibleChange={(open) => {
-              if (open) markInlineCreateInteracting()
-              setInlineCreateFocusedField(open ? 'priority' : null)
+            className="inline-title-input"
+            placeholder="输入标题，回车确认"
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            onPressEnter={() => handleInlineCreate(sectionGuid)}
+            onFocus={() => setInlineCreateFocusedField('title')}
+            onBlur={() => {
+              if (inlineCreateInteractingRef.current) {
+                inlineCreateInteractingRef.current = false
+                return
+              }
+              if (inlineCreateFocusedField !== 'title') {
+                return
+              }
+              void handleInlineCreate(sectionGuid)
             }}
-            style={{ width: '100%' }}
-            options={[
-              { label: '无优先级', value: Priority.None },
-              { label: '低', value: Priority.Low },
-              { label: '中', value: Priority.Medium },
-              { label: '高', value: Priority.High },
-              { label: '紧急', value: Priority.Urgent },
-            ]}
+            autoFocus
           />
-        </div>
-      )}
-      {showColumn('assignee') && (
-        <div className="cell cell-assignee">
-          <AssigneePicker
-            pickerKey={`inline-assignee-${sectionGuid}`}
-            open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
-            value={newTaskAssigneeId}
-            users={users}
-            isTasklistView={isTasklistView}
-            placeholderIcon={
-              <UserAddOutlined
-                className="empty-assignee"
-                style={{ color: '#b8bcc5', fontSize: 16 }}
-              />
-            }
-            onChange={setNewTaskAssigneeId}
-            onInteract={markInlineCreateInteracting}
-            onOpenChange={(open) => {
-              setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
-              setInlineCreateFocusedField(open ? 'assignee' : null)
-            }}
+        </Tooltip>
+      </div>
+    </div>
+  )
+
+  const renderInlineCreatePriorityCell = (sectionGuid: string) => (
+    <div
+      className="inline-create-field-cell cell cell-priority"
+      onMouseDownCapture={markInlineCreateInteracting}
+      data-section-guid={sectionGuid}
+    >
+      <Select
+        size="small"
+        variant="borderless"
+        value={newTaskPriority}
+        onChange={(value) => setNewTaskPriority(value)}
+        onDropdownVisibleChange={(open) => {
+          if (open) markInlineCreateInteracting()
+          setInlineCreateFocusedField(open ? 'priority' : null)
+        }}
+        style={{ width: '100%' }}
+        options={[
+          { label: '无优先级', value: Priority.None },
+          { label: '低', value: Priority.Low },
+          { label: '中', value: Priority.Medium },
+          { label: '高', value: Priority.High },
+          { label: '紧急', value: Priority.Urgent },
+        ]}
+      />
+    </div>
+  )
+
+  const renderInlineCreateAssigneeCell = (sectionGuid: string) => (
+    <div className="inline-create-field-cell cell cell-assignee">
+      <AssigneePicker
+        pickerKey={`inline-assignee-${sectionGuid}`}
+        open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
+        value={newTaskAssigneeId}
+        users={users}
+        isTasklistView={isTasklistView}
+        placeholderIcon={
+          <UserAddOutlined
+            className="empty-assignee"
+            style={{ color: '#b8bcc5', fontSize: 16 }}
           />
-        </div>
-      )}
-      {showColumn('estimate') && <div className="cell cell-estimate" />}
-      {showColumn('start') && (
-        <div className="cell cell-start">
-          <Popover
-            trigger="click"
-            placement="bottomLeft"
-            content={
-              <DateConfigPanel
-                initialField="start"
-                startDate={newTaskStart}
-                dueDate={newTaskDue}
-                onStartChange={setNewTaskStart}
-                onDueChange={setNewTaskDue}
-                onInteract={markInlineCreateInteracting}
-              />
-            }
-            onOpenChange={(open) => {
-              setInlineCreateFocusedField(open ? 'start' : null)
-            }}
+        }
+        onChange={setNewTaskAssigneeId}
+        onInteract={markInlineCreateInteracting}
+        onOpenChange={(open) => {
+          setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
+          setInlineCreateFocusedField(open ? 'assignee' : null)
+        }}
+      />
+    </div>
+  )
+
+  const renderInlineCreateDateCell = (sectionGuid: string, field: 'start' | 'due') => {
+    const date = field === 'start' ? newTaskStart : newTaskDue
+
+    return (
+      <div className={`inline-create-field-cell cell cell-${field}`}>
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          content={
+            <DateConfigPanel
+              initialField={field}
+              startDate={newTaskStart}
+              dueDate={newTaskDue}
+              onStartChange={setNewTaskStart}
+              onDueChange={setNewTaskDue}
+              onInteract={markInlineCreateInteracting}
+            />
+          }
+          onOpenChange={(open) => {
+            setInlineCreateFocusedField(open ? field : null)
+          }}
+        >
+          <div
+            className="date-trigger"
+            onMouseDown={markInlineCreateInteracting}
+            data-section-guid={sectionGuid}
           >
-            <div className="date-trigger" onMouseDown={markInlineCreateInteracting}>
-              <span className="date-text">
-                {newTaskStart ? newTaskStart.format('M月D日') : ''}
-              </span>
-              <CalendarOutlined className="empty-date-icon" />
-            </div>
-          </Popover>
-        </div>
-      )}
-      {showColumn('due') && (
-        <div className="cell cell-due">
-          <Popover
-            trigger="click"
-            placement="bottomLeft"
-            content={
-              <DateConfigPanel
-                initialField="due"
-                startDate={newTaskStart}
-                dueDate={newTaskDue}
-                onStartChange={setNewTaskStart}
-                onDueChange={setNewTaskDue}
-                onInteract={markInlineCreateInteracting}
-              />
-            }
-            onOpenChange={(open) => {
-              setInlineCreateFocusedField(open ? 'due' : null)
-            }}
-          >
-            <div className="date-trigger" onMouseDown={markInlineCreateInteracting}>
-              <span className="date-text">
-                {newTaskDue ? newTaskDue.format('M月D日') : ''}
-              </span>
-              <CalendarOutlined className="empty-date-icon" />
-            </div>
-          </Popover>
-        </div>
-      )}
-      {showColumn('creator') && (
-        <div className="cell cell-creator">
-          <Space size={4}>
-            <Avatar size={20} style={{ backgroundColor: '#7b67ee', fontSize: 11 }}>
-              {currentUser.name.slice(0, 1)}
-            </Avatar>
-            <span className="creator-name">{currentUser.name}</span>
-          </Space>
-        </div>
-      )}
-      {showColumn('created') && <div className="cell cell-created" />}
-      {isTasklistView && <div className="cell cell-more" />}
+            <span className="date-text">{date ? date.format('M月D日') : ''}</span>
+            <CalendarOutlined className="empty-date-icon" />
+          </div>
+        </Popover>
+      </div>
+    )
+  }
+
+  const renderInlineCreateCreatorCell = () => (
+    <div className="inline-create-field-cell cell cell-creator">
+      <Space size={4}>
+        <Avatar size={20} style={{ backgroundColor: '#7b67ee', fontSize: 11 }}>
+          {currentUser.name.slice(0, 1)}
+        </Avatar>
+        <span className="creator-name">{currentUser.name}</span>
+      </Space>
     </div>
   )
 
@@ -1913,9 +1913,9 @@ export default function TaskTable({
       try {
         // 这里统一走字段值补丁接口，避免新建字段后还要跳到别处才能录入值。
         await patchTaskCustomFields(task.guid, payload)
-      } catch {
+      } catch (err) {
         handleTaskUpdate(task)
-        message.error('更新自定义字段失败')
+        message.error(getActionErrorMessage(err, '更新自定义字段失败'))
       }
     },
     [handleTaskUpdate],
@@ -1933,10 +1933,10 @@ export default function TaskTable({
         const nextTask = apiTaskToTask(fresh, tasklist?.guid)
         handleTaskUpdate(nextTask)
         updateSubtaskInCache(nextTask)
-      } catch {
+      } catch (err) {
         handleTaskUpdate(task)
         updateSubtaskInCache(task)
-        message.error('更新状态失败')
+        message.error(getActionErrorMessage(err, '更新状态失败'))
       }
     },
     [handleTaskUpdate, tasklist?.guid],
@@ -2081,7 +2081,7 @@ export default function TaskTable({
           return renderSectionRow(record.section, record.sectionTasks)
         }
         if (record.rowKind === 'inlineCreate') {
-          return record.content
+          return renderInlineCreateTitleCell(record.section.guid)
         }
         if (record.rowKind === 'newTask') {
           return (
@@ -2119,7 +2119,9 @@ export default function TaskTable({
       title: <span>优先级</span>,
       width: 96,
       render: (_value, record) =>
-        isTaskTableTaskRow(record) ? (
+        isInlineCreateRow(record) ? (
+          renderInlineCreatePriorityCell(record.section.guid)
+        ) : isTaskTableTaskRow(record) ? (
           <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />
         ) : null,
     })
@@ -2137,7 +2139,9 @@ export default function TaskTable({
       ),
       width: 156,
       render: (_value, record) =>
-        isTaskTableTaskRow(record) ? (
+        isInlineCreateRow(record) ? (
+          renderInlineCreateAssigneeCell(record.section.guid)
+        ) : isTaskTableTaskRow(record) ? (
           <TaskAssigneeCell
             task={record}
             users={users}
@@ -2156,7 +2160,14 @@ export default function TaskTable({
       dataIndex: 'estimate',
       title: <span>预估工时</span>,
       width: 104,
-      render: () => <span className="custom-field-text">-</span>,
+      render: (_value, record) =>
+        isInlineCreateRow(record) ? (
+          <div className="inline-create-field-cell cell cell-estimate">
+            <span className="custom-field-text">-</span>
+          </div>
+        ) : (
+          <span className="custom-field-text">-</span>
+        ),
     })
   }
 
@@ -2172,7 +2183,9 @@ export default function TaskTable({
       ),
       width: 120,
       render: (_value, record) =>
-        isTaskTableTaskRow(record) ? (
+        isInlineCreateRow(record) ? (
+          renderInlineCreateDateCell(record.section.guid, 'start')
+        ) : isTaskTableTaskRow(record) ? (
           <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
         ) : null,
     })
@@ -2190,7 +2203,9 @@ export default function TaskTable({
       ),
       width: 120,
       render: (_value, record) =>
-        isTaskTableTaskRow(record) ? (
+        isInlineCreateRow(record) ? (
+          renderInlineCreateDateCell(record.section.guid, 'due')
+        ) : isTaskTableTaskRow(record) ? (
           <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
         ) : null,
     })
@@ -2208,6 +2223,9 @@ export default function TaskTable({
       ),
       width: 108,
       render: (_value, record) => {
+        if (isInlineCreateRow(record)) {
+          return renderInlineCreateCreatorCell()
+        }
         if (!isTaskTableTaskRow(record)) {
           return null
         }
@@ -2233,7 +2251,11 @@ export default function TaskTable({
       title: <span>创建时间</span>,
       width: 140,
       render: (value: string, record) =>
-        isTaskTableTaskRow(record) ? dayjs(Number(value)).format('M月D日 HH:mm') : null,
+        isInlineCreateRow(record) ? (
+          <div className="inline-create-field-cell cell cell-created" />
+        ) : isTaskTableTaskRow(record) ? (
+          dayjs(Number(value)).format('M月D日 HH:mm')
+        ) : null,
     })
   }
 
@@ -2373,19 +2395,6 @@ export default function TaskTable({
     })
   })
 
-  const taskColumnsWithInlineCreateSpan = taskColumns.map((column, index) => ({
-    ...column,
-    onCell: (record: TaskTableDisplayRow) => {
-      if (record.rowKind !== 'inlineCreate') {
-        return {}
-      }
-      // 行内新建是整行编辑态，需要合并表格单元格，避免所有字段都挤进标题列里。
-      return {
-        colSpan: index === 0 ? taskColumns.length : 0,
-      }
-    },
-  }))
-
   const buildTableRows = () => {
     const rows: TaskTableDisplayRow[] = []
     groupedTasks.forEach(({ section, tasks: sectionTasks }) => {
@@ -2431,7 +2440,7 @@ export default function TaskTable({
       size="small"
       pagination={false}
       showHeader={config.showColumnHeader !== false}
-      columns={taskColumnsWithInlineCreateSpan}
+      columns={taskColumns}
       dataSource={tableRows}
       scroll={{ x: 'max-content' }}
       expandable={{
@@ -2936,6 +2945,7 @@ function TaskTitleCell({
   onUpdate,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
+  const statusToggleTooltip = task.status === 'done' ? '标记未完成' : '标记已完成'
 
   const handleRenameSummary = async (rawName: string) => {
     setEditingName(false)
@@ -2962,10 +2972,17 @@ function TaskTitleCell({
           />
         )}
         <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={task.status === 'done'}
-            onClick={(e) => onToggleStatus(e, task)}
-          />
+          <Tooltip
+            title={statusToggleTooltip}
+            placement="top"
+            color="#000"
+            overlayInnerStyle={{ color: '#fff' }}
+          >
+            <Checkbox
+              checked={task.status === 'done'}
+              onClick={(e) => onToggleStatus(e, task)}
+            />
+          </Tooltip>
         </div>
         <div className="cell cell-title">
           {task.subtask_count > 0 ? (
