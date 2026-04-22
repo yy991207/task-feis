@@ -81,6 +81,22 @@ export function moveProjectToGroup(
   )
 }
 
+export function distributeProject(
+  projectId: string,
+  targetTeamIds: string[],
+): Promise<void> {
+  return request<void>(
+    `api/v1/task-center/projects/${projectId}/distribute`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: appConfig.user_id,
+        target_team_ids: targetTeamIds,
+      }),
+    },
+  )
+}
+
 export function getProjectSummary(projectId: string): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>(
     `api/v1/task-center/projects/${projectId}/summary?user_id=${encodeURIComponent(appConfig.user_id)}`,

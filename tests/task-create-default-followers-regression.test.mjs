@@ -40,8 +40,8 @@ async function testInlineCreateAddsCreatorAndAssigneeAsParticipants() {
   )
   assert.match(
     source,
-    /const defaultParticipantIds = Array\.from\(new Set\(\[currentUser\.id, assigneeId\]\.filter\(Boolean\)\)\)/,
-    '主表新建任务时应该把创建人和负责人整理成默认关注人集合，并自动去重',
+    /const defaultParticipantIds = Array\.from\(\s*new Set\(\[currentUser\.id, assigneeId\]\.filter\(\(id\): id is string => Boolean\(id\)\)\),\s*\)/,
+    '主表新建任务时应该把创建人和负责人整理成默认关注人集合，并用类型谓词过滤空值',
   )
   assert.match(
     source,
@@ -65,8 +65,8 @@ async function testSubtaskCreateAddsCreatorAndAssigneeAsParticipants() {
   )
   assert.match(
     source,
-    /const defaultParticipantIds = Array\.from\(new Set\(\[appConfig\.user_id, subtaskAssigneeId\]\.filter\(Boolean\)\)\)/,
-    '详情页新建子任务时应该把当前创建人和子任务负责人整理成默认关注人集合',
+    /const defaultParticipantIds = Array\.from\(\s*new Set\(\[appConfig\.user_id, subtaskAssigneeId\]\.filter\(\(id\): id is string => Boolean\(id\)\)\),\s*\)/,
+    '详情页新建子任务时应该把当前创建人和子任务负责人整理成默认关注人集合，并用类型谓词过滤空值',
   )
   assert.match(
     source,

@@ -9,6 +9,7 @@ import Tag from 'antd/es/tag'
 import Popover from 'antd/es/popover'
 import Select from 'antd/es/select'
 import Card from 'antd/es/card'
+import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
 import List from 'antd/es/list'
@@ -16,6 +17,7 @@ import Tooltip from 'antd/es/tooltip'
 import Breadcrumb from 'antd/es/breadcrumb'
 import {
   CloseOutlined,
+  MoreOutlined,
   UserOutlined,
   CalendarOutlined,
   PaperClipOutlined,
@@ -624,7 +626,9 @@ export default function TaskDetailPanel({
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
-      const defaultParticipantIds = Array.from(new Set([appConfig.user_id, subtaskAssigneeId].filter(Boolean)))
+      const defaultParticipantIds = Array.from(
+        new Set([appConfig.user_id, subtaskAssigneeId].filter((id): id is string => Boolean(id))),
+      )
       if (defaultParticipantIds.length > 0) {
         await addParticipants(apiTask.task_id, defaultParticipantIds)
       }
@@ -1036,16 +1040,19 @@ export default function TaskDetailPanel({
     onClose()
   }
 
-  const handleCancelTask = async () => {
-    try {
-      const { cancelTask } = await import('@/services/taskService')
-      await cancelTask(task.guid, { terminate: true })
-      message.success('已取消任务')
-      onRefresh?.()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '取消失败')
-    }
+  const moreMenu = {
+    items: [
+      { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
+    ],
+    onClick: ({ key }: { key: string }) => {
+      if (key === 'delete') {
+        void handleDeleteTask()
+      }
+    },
   }
+
+
+
 
   const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeStateRef.current = {
@@ -1065,6 +1072,13 @@ export default function TaskDetailPanel({
       {/* Header */}
       <div className="detail-top">
         <div className="detail-actions">
+          <Tooltip title="更多操作" placement="bottom">
+            <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
+              <span className="detail-action-icon">
+                <MoreOutlined />
+              </span>
+            </Dropdown>
+          </Tooltip>
           <span className="detail-action-icon" onClick={onClose}>
             <CloseOutlined />
           </span>

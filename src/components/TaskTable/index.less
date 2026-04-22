@@ -4,6 +4,7 @@
   height: 100%;
   overflow: hidden;
   background: #fff;
+  color: #1f2329;
 }
 
 .table-header-bar {
@@ -64,7 +65,7 @@
   }
 
   .tasklist-head-meta {
-    color: #646a73;
+    color: #1f2329;
   }
 
   .tasklist-member-pill {
@@ -76,13 +77,13 @@
     padding: 0 8px;
     border-radius: 999px;
     background: #f2f3f5;
-    color: #646a73;
+    color: #1f2329;
     font-size: 12px;
     line-height: 20px;
   }
 
   .share-btn.ant-btn-text {
-    color: #646a73 !important;
+    color: #1f2329 !important;
     border-radius: 6px !important;
 
     &:hover {
@@ -99,7 +100,7 @@
   padding-top: 6px;
 
   .ant-btn {
-    color: #646a73 !important;
+    color: #1f2329 !important;
     padding-inline: 10px !important;
     border-radius: 6px !important;
   }
@@ -127,7 +128,7 @@
   }
 
   .toolbar-trigger-btn {
-    color: #646a73 !important;
+    color: #1f2329 !important;
 
     &:hover {
       color: #1f2329 !important;
@@ -151,7 +152,7 @@
   }
 
   .ant-btn-text {
-    color: #646a73 !important;
+    color: #1f2329 !important;
   }
 }
 
@@ -179,6 +180,7 @@
 
   .ant-table {
     background: transparent;
+    color: #1f2329;
   }
 
   .ant-table-container {
@@ -195,7 +197,7 @@
     height: 38px;
     padding: 0 12px;
     background: #fff;
-    color: #8f959e;
+    color: #1f2329;
     font-size: 12px;
     font-weight: 400;
     border-bottom: 1px solid #eef1f6;
@@ -205,6 +207,7 @@
     padding: 0 12px;
     border-bottom: 1px solid #f2f3f5;
     background: #fff;
+    color: #1f2329;
     transition: background 0.15s ease;
   }
 
@@ -274,8 +277,19 @@
     transition: opacity 0.2s ease;
 
     .section-action-btn {
-      color: #8f959e !important;
+      width: 28px !important;
+      height: 28px !important;
+      min-width: 28px;
+      padding: 0 !important;
+      color: #1f2329 !important;
+      font-size: 16px !important;
+      font-weight: 700;
       border-radius: 6px !important;
+
+      .anticon svg {
+        stroke: currentColor;
+        stroke-width: 14;
+      }
       
       &:hover {
         background: #e4e6ea !important;
@@ -416,9 +430,11 @@
 
     .task-detail-btn.ant-btn {
       margin-left: 4px;
-      padding-inline: 6px !important;
-      height: 24px;
-      color: #8f959e !important;
+      padding-inline: 8px !important;
+      height: 28px;
+      color: #1f2329 !important;
+      font-size: 14px !important;
+      font-weight: 700;
       border-radius: 6px !important;
       flex-shrink: 0;
 
@@ -430,11 +446,18 @@
 
     .task-row-more-btn.ant-btn {
       padding-inline: 4px !important;
-      min-width: 24px;
-      height: 24px;
-      color: #8f959e !important;
+      min-width: 28px;
+      height: 28px;
+      color: #1f2329 !important;
+      font-size: 16px !important;
+      font-weight: 700;
       border-radius: 6px !important;
       flex-shrink: 0;
+
+      .anticon svg {
+        stroke: currentColor;
+        stroke-width: 14;
+      }
 
       &:hover {
         color: #1f2329 !important;
@@ -538,7 +561,7 @@
       display: inline-block;
       min-height: 20px;
       min-width: 20px;
-      color: #646a73;
+      color: #1f2329;
     }
 
     .empty-date-icon {
@@ -551,7 +574,7 @@
     width: 104px;
 
     .creator-name {
-      color: #646a73;
+      color: #1f2329;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -560,7 +583,7 @@
 
   .cell-created {
     width: 120px;
-    color: #646a73;
+    color: #1f2329;
     font-size: 12px;
   }
 
@@ -573,7 +596,7 @@
     transition: opacity 0.15s ease, color 0.15s ease;
 
     &:hover {
-      color: #646a73;
+      color: #1f2329;
     }
 
     .task-row-action-btn {
@@ -624,8 +647,8 @@
     display: flex;
     align-items: center;
     width: 100%;
-    min-height: 28px;
-    padding: 2px 6px;
+    min-height: 30px;
+    padding: 3px 8px;
     border-radius: 6px;
     cursor: pointer;
     transition: background 0.15s ease, box-shadow 0.15s ease;
@@ -644,7 +667,7 @@
   .custom-field-text {
     overflow: hidden;
     width: 100%;
-    color: #646a73;
+    color: #1f2329;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
@@ -687,8 +710,9 @@
   }
 
   .custom-field-placeholder {
-    color: #b8bcc5;
-    font-size: 12px;
+    color: #1f2329;
+    font-size: 13px;
+    font-weight: 600;
     line-height: 20px;
   }
 

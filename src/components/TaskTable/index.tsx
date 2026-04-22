@@ -57,11 +57,6 @@ import {
   EyeOutlined,
   EyeInvisibleOutlined,
   MoreOutlined,
-  CloseOutlined,
-  NodeIndexOutlined,
-  ForkOutlined,
-  HistoryOutlined,
-  FlagOutlined,
   DeleteOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -89,7 +84,6 @@ import {
   applyParticipantIdsToTask,
   toPriorityString,
   listSubtasks,
-  cancelTask,
 } from '@/services/taskService'
 import { updateProject } from '@/services/projectService'
 import { listMembers } from '@/services/teamService'
@@ -886,7 +880,9 @@ export default function TaskTable({
         start_date: newTaskStart ? newTaskStart.toISOString() : undefined,
         due_date: newTaskDue ? newTaskDue.toISOString() : undefined,
       })
-      const defaultParticipantIds = Array.from(new Set([currentUser.id, assigneeId].filter(Boolean)))
+      const defaultParticipantIds = Array.from(
+        new Set([currentUser.id, assigneeId].filter((id): id is string => Boolean(id))),
+      )
       if (defaultParticipantIds.length > 0) {
         await addParticipants(apiTask.task_id, defaultParticipantIds)
       }
@@ -1525,16 +1521,6 @@ export default function TaskTable({
     }
   }
 
-  const handleCancelTaskAction = async (taskGuid: string) => {
-    try {
-      await cancelTask(taskGuid, { terminate: true })
-      message.success('已取消任务')
-      onRefresh()
-    } catch (err: unknown) {
-      message.error(getActionErrorMessage(err, '取消任务失败'))
-    }
-  }
-
   const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
   const taskCreateMotionStyle = {
     ['--task-create-duration' as string]: token.motionDurationMid,
@@ -2147,7 +2133,6 @@ export default function TaskTable({
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
             onDeleteTask={handleDeleteTaskAction}
-            onCancelTask={handleCancelTaskAction}
           />
         )
       },
@@ -2737,7 +2722,6 @@ interface TaskTitleCellProps {
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
   onDeleteTask: (taskGuid: string) => Promise<void> | void
-  onCancelTask: (taskGuid: string) => Promise<void> | void
 }
 
 interface TaskPriorityCellProps {
@@ -2988,7 +2972,6 @@ function TaskTitleCell({
   onOpenDetail,
   onUpdate,
   onDeleteTask,
-  onCancelTask,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
@@ -3012,31 +2995,14 @@ function TaskTitleCell({
     await onDeleteTask(task.guid)
   }
 
-  const handleCancelTask = async () => {
-    await onCancelTask(task.guid)
-  }
-
   const moreMenu = {
     items: [
-      { key: 'setting', icon: <FlagOutlined />, label: '设置父任务' },
-      { key: 'prev', icon: <NodeIndexOutlined />, label: '设为里程碑' },
-      { key: 'before', icon: <ForkOutlined rotate={180} />, label: '添加前置任务' },
-      { key: 'after', icon: <ForkOutlined />, label: '添加后置任务' },
-      { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
-      { key: 'cancel', icon: <CloseOutlined />, label: '取消任务' },
-      { key: 'report', icon: <FlagOutlined />, label: '举报' },
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
       if (key === 'delete') {
         void handleDeleteTask()
-        return
       }
-      if (key === 'cancel') {
-        void handleCancelTask()
-        return
-      }
-      message.info('功能开发中')
     },
   }
 
