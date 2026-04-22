@@ -15,7 +15,7 @@ async function testExpandedRowKeysUseActualTableRowKeys() {
   )
   assert.match(
     source,
-    /const collectExpandedRowKeys = \(rows: TaskTableDisplayRow\[\], expandedTaskGuids: Set<string>\): string\[\] =>/,
+    /const collectExpandedRowKeys = \([\s\S]*rows: TaskTableDisplayRow\[\][\s\S]*expandedTaskGuids: Set<string>[\s\S]*\): string\[\] =>/,
     'TaskTable 需要把任务 guid 展开状态映射成当前表格里的实际 rowKey',
   )
   assert.match(
