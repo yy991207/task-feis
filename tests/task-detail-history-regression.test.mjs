@@ -88,10 +88,52 @@ async function testTaskHistoryViewMatchesRightPanelBehavior() {
   )
 }
 
+async function testTaskHistoryUsesFeishuLikeStructuredTimeline() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.tsx')
+  const styleSource = await readSource('../src/components/TaskDetailPanel/index.less')
+
+  assert.match(
+    source,
+    /renderTaskActivityMessage/,
+    '历史记录文案应该结构化渲染，不能只输出整句纯文本',
+  )
+  assert.match(
+    source,
+    /className="detail-history-person-highlight"/,
+    '历史记录里的操作人和涉及人员应该使用高亮样式',
+  )
+  assert.match(
+    source,
+    /className="detail-history-task-link"/,
+    '历史记录里的任务名应该按飞书样式做蓝色链接视觉',
+  )
+  assert.match(
+    source,
+    /className="detail-history-attachment-card"/,
+    '附件类历史记录应该渲染成独立附件卡片，而不是只拼文件名文本',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-history-item\s*\{[\s\S]*grid-template-columns: 46px 18px minmax\(0, 1fr\)/,
+    '历史记录每行应该固定时间列、头像列和内容列，贴近飞书时间线布局',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-history-person-highlight\s*\{[\s\S]*color: #3370ff/,
+    '历史记录人物高亮应该使用项目蓝色，避免默认黑字看不出重点',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-history-message\s*\{[\s\S]*line-height: 18px/,
+    '历史记录文案行高应该更贴近飞书紧凑列表',
+  )
+}
+
 async function main() {
   await testTaskServiceListsTaskActivities()
   await testTaskDetailMenuOpensHistoryMode()
   await testTaskHistoryViewMatchesRightPanelBehavior()
+  await testTaskHistoryUsesFeishuLikeStructuredTimeline()
   console.log('task detail history regressions ok')
 }
 

@@ -1790,22 +1790,6 @@ export default function TaskTable({
     onClick: ({ key }: { key: string }) => setSortMode(key as SortModeKey),
   }
 
-  const toggleVisibleSection = (sectionGuid: string, checked: boolean) => {
-    setVisibleSectionGuids((prev) => {
-      const next = new Set(prev)
-      if (checked) {
-        next.add(sectionGuid)
-      } else if (next.size > 1) {
-        next.delete(sectionGuid)
-      }
-      return next
-    })
-  }
-
-  const handleSelectAllSections = () => {
-    setVisibleSectionGuids(new Set(sortedSections.map((section) => section.guid)))
-  }
-
   const groupPanel = (
     <div className="toolbar-popover-panel">
       <Typography.Text strong className="popover-title">
@@ -1824,29 +1808,6 @@ export default function TaskTable({
           </button>
         ))}
       </div>
-      {isSectionGroupMode && sortedSections.length > 0 && (
-        <>
-          <div className="filter-panel-header">
-            <Typography.Text strong className="popover-title">
-              展示分组
-            </Typography.Text>
-            <Button size="small" type="link" onClick={handleSelectAllSections}>
-              全选
-            </Button>
-          </div>
-          <div className="filter-checkbox-list">
-            {sortedSections.map((section) => (
-              <Checkbox
-                key={section.guid}
-                checked={visibleSectionGuids.has(section.guid)}
-                onChange={(event) => toggleVisibleSection(section.guid, event.target.checked)}
-              >
-                {section.name}
-              </Checkbox>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 
@@ -2265,7 +2226,7 @@ export default function TaskTable({
       const children = subtasksByGuid[task.guid] ?? []
       return {
         ...task,
-        key: task.guid,
+        key: `${sectionGuid}::${task.guid}`,
         rowKind: 'task',
         tableDepth: depth,
         sectionGuid,

@@ -407,7 +407,6 @@ export default function TaskRichInput({
   const editorHtmlRef = useRef(normalizeRichContent(value))
   const currentMentionIdsRef = useRef<string[]>(mentionIds ?? [])
   const isDescriptionEditingRef = useRef(false)
-  const isDescriptionValueHydratedRef = useRef(false)
   const isComposingRef = useRef(false)
 
   useEffect(() => {
@@ -423,7 +422,7 @@ export default function TaskRichInput({
 
   useLayoutEffect(() => {
     const nextEditorHtml = normalizeRichContent(value)
-    if (mode === 'description' && isDescriptionEditingRef.current && isDescriptionValueHydratedRef.current) {
+    if (mode === 'description' && isDescriptionEditingRef.current) {
       return
     }
 
@@ -431,10 +430,6 @@ export default function TaskRichInput({
     editorHtmlRef.current = nextEditorHtml
     if (editor && editor.innerHTML !== nextEditorHtml) {
       editor.innerHTML = nextEditorHtml
-    }
-    if (mode === 'description') {
-      // 描述区首次打开要先把已有内容灌进编辑器，再允许后续聚焦进入编辑态。
-      isDescriptionValueHydratedRef.current = true
     }
   }, [mode, value])
 
@@ -450,6 +445,11 @@ export default function TaskRichInput({
     const nextHtml = normalizeRichContent(editor.innerHTML)
 
     editorHtmlRef.current = nextHtml
+
+    if (mode === 'description') {
+      // 描述区只有真正发生输入时才算进入编辑态，避免只聚焦就挡住后续内容回填。
+      isDescriptionEditingRef.current = true
+    }
 
     const extractedMentionIds = extractMentionIds(nextHtml)
     currentMentionIdsRef.current = extractedMentionIds
@@ -661,9 +661,6 @@ export default function TaskRichInput({
   }, [mode, disabled])
 
   const handleEditorFocus = () => {
-    if (mode === 'description') {
-      isDescriptionEditingRef.current = true
-    }
     saveSelection()
   }
 

@@ -53,10 +53,10 @@ async function testSectionGroupDropdownSupportsMultiSectionFiltering() {
     /const filteredSections = isSectionGroupMode\s*\?[\s\S]*visibleSectionGuids\.has\(section\.guid\)/,
     'TaskTable 在任务分组模式下应该先过滤分组，再生成 groupedTasks',
   )
-  assert.match(
+  assert.doesNotMatch(
     source,
-    /Checkbox[\s\S]*checked=\{visibleSectionGuids\.has\(section\.guid\)\}/,
-    '任务分组下拉里应该提供分组多选项，而不是只能切换“任务分组/无分组”',
+    /const handleSelectAllSections =|toggleVisibleSection\(/,
+    '分组下拉里不应该再保留重复的“展示分组”复选区，避免和上方分组分类重复',
   )
 }
 
@@ -80,11 +80,27 @@ async function testGroupDropdownUsesSerialMenuLayout() {
   )
 }
 
+async function testGroupedTaskRowsUseSectionScopedKeys() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /key: `\$\{sectionGuid\}::\$\{task\.guid\}`/,
+    'TaskTable 分组任务行 key 应该带上当前分组上下文，避免负责人分组切换时因为重复 key 叠加旧数据',
+  )
+  assert.doesNotMatch(
+    source,
+    /function buildTaskTreeRows[\s\S]*key: task\.guid,/,
+    'TaskTable 分组任务行不应该继续直接使用 task.guid 作为统一表格行 key',
+  )
+}
+
 async function main() {
   await testCreateButtonReferenceHasDefinition()
   await testSortMenuDoesNotExposeCustomDragOption()
   await testSectionGroupDropdownSupportsMultiSectionFiltering()
   await testGroupDropdownUsesSerialMenuLayout()
+  await testGroupedTaskRowsUseSectionScopedKeys()
   console.log('task table toolbar regressions ok')
 }
 
