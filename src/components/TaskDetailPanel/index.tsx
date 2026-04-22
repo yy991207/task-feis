@@ -9,7 +9,6 @@ import Tag from 'antd/es/tag'
 import Popover from 'antd/es/popover'
 import Select from 'antd/es/select'
 import Card from 'antd/es/card'
-import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
 import List from 'antd/es/list'
@@ -17,7 +16,6 @@ import Tooltip from 'antd/es/tooltip'
 import Breadcrumb from 'antd/es/breadcrumb'
 import {
   CloseOutlined,
-  MoreOutlined,
   UserOutlined,
   CalendarOutlined,
   PaperClipOutlined,
@@ -25,10 +23,6 @@ import {
   PlusOutlined,
   CheckOutlined,
   DeleteOutlined,
-  FlagOutlined,
-  HistoryOutlined,
-  NodeIndexOutlined,
-  ForkOutlined,
   AlignLeftOutlined,
   UsergroupAddOutlined,
   EyeOutlined,
@@ -71,6 +65,7 @@ import {
   listSubtasks,
   getTask,
   apiTaskToTask,
+  applyParticipantIdsToTask,
 } from '@/services/taskService'
 import {
   updateProject as apiUpdateProject,
@@ -629,7 +624,12 @@ export default function TaskDetailPanel({
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
-      const createdTask = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+      const defaultParticipantIds = Array.from(new Set([appConfig.user_id, subtaskAssigneeId].filter(Boolean)))
+      if (defaultParticipantIds.length > 0) {
+        await addParticipants(apiTask.task_id, defaultParticipantIds)
+      }
+      let createdTask = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+      createdTask = applyParticipantIdsToTask(createdTask, defaultParticipantIds)
       setSubtaskDrafts((prev) => [...prev, createdTask])
       resetSubtaskCreateDraft()
       setSubtaskCreating(true)
@@ -1047,33 +1047,6 @@ export default function TaskDetailPanel({
     }
   }
 
-  const moreMenu = {
-    items: [
-      { key: 'setting', icon: <FlagOutlined />, label: '设置父任务' },
-      { key: 'prev', icon: <NodeIndexOutlined />, label: '设为里程碑' },
-      { key: 'before', icon: <ForkOutlined rotate={180} />, label: '添加前置任务' },
-      { key: 'after', icon: <ForkOutlined />, label: '添加后置任务' },
-      { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
-      { key: 'cancel', icon: <CloseOutlined />, label: '取消任务' },
-      { key: 'report', icon: <FlagOutlined />, label: '举报' },
-      { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
-    ],
-    onClick: ({ key }: { key: string }) => {
-      if (key === 'delete') {
-        void handleDeleteTask()
-        return
-      }
-      if (key === 'cancel') {
-        void handleCancelTask()
-        return
-      }
-      message.info('功能开发中')
-    },
-  }
-
-
-
-
   const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeStateRef.current = {
       dragging: true,
@@ -1092,18 +1065,9 @@ export default function TaskDetailPanel({
       {/* Header */}
       <div className="detail-top">
         <div className="detail-actions">
-          <Tooltip title="更多操作" placement="bottom">
-            <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
-              <span className="detail-action-icon">
-                <MoreOutlined />
-              </span>
-            </Dropdown>
-          </Tooltip>
-          <Tooltip title="关闭详情" placement="bottom">
-            <span className="detail-action-icon" onClick={onClose}>
-              <CloseOutlined />
-            </span>
-          </Tooltip>
+          <span className="detail-action-icon" onClick={onClose}>
+            <CloseOutlined />
+          </span>
         </div>
       </div>
 
@@ -1221,25 +1185,18 @@ export default function TaskDetailPanel({
               <CalendarOutlined className="field-icon" />
             </Tooltip>
             <div className="field-content">
-              <Space size={8}>
-                {isSubtask ? (
-                  <Button
-                    size="small"
-                    disabled
-                    className="date-tag-btn date-tag-readonly"
-                    icon={<CalendarOutlined />}
-                    title="子任务开始时间跟随父任务，不能单独修改"
-                  >
-                    {task.start
-                      ? `开始 ${dayjs(Number(task.start.timestamp)).format('M月D日')}`
-                      : '开始时间'}
-                  </Button>
-                ) : (
-                  <Popover
-                    trigger="click"
-                    placement="bottomLeft"
-                    content={
-                      <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+              <Popover
+                trigger="click"
+                placement="bottomLeft"
+                content={
+                  <div style={{ width: 280 }} onMouseDown={(e) => e.preventDefault()}>
+                    <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 13 }}>开始时间</div>
+                    {isSubtask ? (
+                      <div style={{ color: '#8f959e', fontSize: 13, marginBottom: 8 }}>
+                        子任务开始时间跟随父任务，不能单独修改
+                      </div>
+                    ) : (
+                      <>
                         <Calendar
                           fullscreen={false}
                           value={
@@ -1260,54 +1217,45 @@ export default function TaskDetailPanel({
                             </Button>
                           </div>
                         )}
+                      </>
+                    )}
+                    <div style={{ marginTop: 12, marginBottom: 8, fontWeight: 500, fontSize: 13 }}>截止时间</div>
+                    <Calendar
+                      fullscreen={false}
+                      value={
+                        task.due
+                          ? dayjs(Number(task.due.timestamp))
+                          : undefined
+                      }
+                      onSelect={(value) => void handleDateChange('due', value)}
+                      disabledDate={(current) =>
+                        current && current < dayjs().startOf('day')
+                      }
+                    />
+                    {task.due && (
+                      <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => void handleDateChange('due', null)}
+                        >
+                          清除
+                        </Button>
                       </div>
-                    }
-                  >
-                    <Button size="small" className="date-tag-btn" icon={<CalendarOutlined />}>
-                      {task.start
-                        ? `开始 ${dayjs(Number(task.start.timestamp)).format('M月D日')}`
-                        : '开始时间'}
-                    </Button>
-                  </Popover>
-                )}
-                <Popover
-                  trigger="click"
-                  placement="bottomLeft"
-                  content={
-                    <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-                      <Calendar
-                        fullscreen={false}
-                        value={
-                          task.due
-                            ? dayjs(Number(task.due.timestamp))
-                            : undefined
-                        }
-                        onSelect={(value) => void handleDateChange('due', value)}
-                        disabledDate={(current) =>
-                          current && current < dayjs().startOf('day')
-                        }
-                      />
-                      {task.due && (
-                        <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                          <Button
-                            type="link"
-                            size="small"
-                            onClick={() => void handleDateChange('due', null)}
-                          >
-                            清除
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  }
-                >
-                  <Button size="small" className="date-tag-btn" icon={<CalendarOutlined />}>
-                    {task.due
-                      ? `截止 ${dayjs(Number(task.due.timestamp)).format('M月D日')}`
-                      : '截止时间'}
-                  </Button>
-                </Popover>
-              </Space>
+                    )}
+                  </div>
+                }
+              >
+                <span className="date-range-text">
+                  {task.start && task.due
+                    ? `${dayjs(Number(task.start.timestamp)).format('M月D日')} – ${dayjs(Number(task.due.timestamp)).format('M月D日')}`
+                    : task.start
+                      ? dayjs(Number(task.start.timestamp)).format('M月D日')
+                      : task.due
+                        ? dayjs(Number(task.due.timestamp)).format('M月D日')
+                        : '设置日期'}
+                </span>
+              </Popover>
             </div>
           </div>
 

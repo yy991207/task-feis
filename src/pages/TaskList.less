@@ -19,6 +19,40 @@
   }
 }
 
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 3px;
+    width: 2px;
+    height: 100%;
+    background: transparent;
+    transition: background-color 0.2s ease;
+  }
+
+  &:hover::before {
+    background: #3370ff;
+  }
+}
+
+body.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
+
+  .app-sider {
+    transition: none !important;
+  }
+}
+
 .app-main-layout {
   flex: 1;
   min-width: 0;

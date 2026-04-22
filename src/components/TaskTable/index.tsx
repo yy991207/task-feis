@@ -56,6 +56,13 @@ import {
   HolderOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  MoreOutlined,
+  CloseOutlined,
+  NodeIndexOutlined,
+  ForkOutlined,
+  HistoryOutlined,
+  FlagOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -75,10 +82,14 @@ import {
   updateTaskApi,
   patchTaskStatus,
   patchTaskAssignee,
+  addParticipants,
+  deleteTaskApi,
   getTask,
   apiTaskToTask,
+  applyParticipantIdsToTask,
   toPriorityString,
   listSubtasks,
+  cancelTask,
 } from '@/services/taskService'
 import { updateProject } from '@/services/projectService'
 import { listMembers } from '@/services/teamService'
@@ -530,6 +541,7 @@ export default function TaskTable({
   onTaskUpdated,
   onTasklistUpdated,
   onTaskCreatedDetailOpen,
+  onTaskDeleted,
 }: TaskTableProps) {
   const { token } = theme.useToken()
   const currentUser: User = { id: appConfig.user_id, name: appConfig.user_id }
@@ -874,7 +886,12 @@ export default function TaskTable({
         start_date: newTaskStart ? newTaskStart.toISOString() : undefined,
         due_date: newTaskDue ? newTaskDue.toISOString() : undefined,
       })
-      const createdTask = apiTaskToTask(apiTask, tasklist?.guid)
+      const defaultParticipantIds = Array.from(new Set([currentUser.id, assigneeId].filter(Boolean)))
+      if (defaultParticipantIds.length > 0) {
+        await addParticipants(apiTask.task_id, defaultParticipantIds)
+      }
+      let createdTask = apiTaskToTask(apiTask, tasklist?.guid)
+      createdTask = applyParticipantIdsToTask(createdTask, defaultParticipantIds)
       const targetSection = sections?.find((section) => section.guid === sectionGuid)
       if (sectionGuid) {
         setCollapsedSections((prev) => {
@@ -1495,6 +1512,29 @@ export default function TaskTable({
     }
   }
 
+  const handleDeleteTaskAction = async (taskGuid: string) => {
+    try {
+      await deleteTaskApi(taskGuid)
+      onTaskDeleted?.(taskGuid)
+      if (!onTaskDeleted) {
+        onRefresh()
+      }
+      message.success('已删除任务')
+    } catch (err: unknown) {
+      message.error(getActionErrorMessage(err, '删除任务失败'))
+    }
+  }
+
+  const handleCancelTaskAction = async (taskGuid: string) => {
+    try {
+      await cancelTask(taskGuid, { terminate: true })
+      message.success('已取消任务')
+      onRefresh()
+    } catch (err: unknown) {
+      message.error(getActionErrorMessage(err, '取消任务失败'))
+    }
+  }
+
   const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
   const taskCreateMotionStyle = {
     ['--task-create-duration' as string]: token.motionDurationMid,
@@ -2106,6 +2146,8 @@ export default function TaskTable({
             onToggleStatus={handleToggleStatus}
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
+            onDeleteTask={handleDeleteTaskAction}
+            onCancelTask={handleCancelTaskAction}
           />
         )
       },
@@ -2694,6 +2736,8 @@ interface TaskTitleCellProps {
   onToggleStatus: (e: React.MouseEvent, task: Task) => void
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
+  onDeleteTask: (taskGuid: string) => Promise<void> | void
+  onCancelTask: (taskGuid: string) => Promise<void> | void
 }
 
 interface TaskPriorityCellProps {
@@ -2943,8 +2987,11 @@ function TaskTitleCell({
   onToggleStatus,
   onOpenDetail,
   onUpdate,
+  onDeleteTask,
+  onCancelTask,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const statusToggleTooltip = task.status === 'done' ? '标记未完成' : '标记已完成'
 
   const handleRenameSummary = async (rawName: string) => {
@@ -2959,6 +3006,38 @@ function TaskTitleCell({
       onUpdate(task)
       message.error('重命名任务失败')
     }
+  }
+
+  const handleDeleteTask = async () => {
+    await onDeleteTask(task.guid)
+  }
+
+  const handleCancelTask = async () => {
+    await onCancelTask(task.guid)
+  }
+
+  const moreMenu = {
+    items: [
+      { key: 'setting', icon: <FlagOutlined />, label: '设置父任务' },
+      { key: 'prev', icon: <NodeIndexOutlined />, label: '设为里程碑' },
+      { key: 'before', icon: <ForkOutlined rotate={180} />, label: '添加前置任务' },
+      { key: 'after', icon: <ForkOutlined />, label: '添加后置任务' },
+      { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
+      { key: 'cancel', icon: <CloseOutlined />, label: '取消任务' },
+      { key: 'report', icon: <FlagOutlined />, label: '举报' },
+      { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
+    ],
+    onClick: ({ key }: { key: string }) => {
+      if (key === 'delete') {
+        void handleDeleteTask()
+        return
+      }
+      if (key === 'cancel') {
+        void handleCancelTask()
+        return
+      }
+      message.info('功能开发中')
+    },
   }
 
   return (
@@ -3040,6 +3119,21 @@ function TaskTitleCell({
           >
             详情
           </Button>
+          <Dropdown
+            menu={moreMenu}
+            trigger={['click']}
+            open={moreMenuOpen}
+            onOpenChange={setMoreMenuOpen}
+            placement="bottomLeft"
+          >
+            <Button
+              type="text"
+              size="small"
+              className="task-row-more-btn"
+              icon={<MoreOutlined />}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
         </div>
       </div>
     </div>

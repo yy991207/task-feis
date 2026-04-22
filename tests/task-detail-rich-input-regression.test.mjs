@@ -148,7 +148,7 @@ async function testRichInputSupportsMentionLinkAndPasteImage() {
   )
 }
 
-async function testRichInputDoesNotSendOnEnter() {
+async function testRichInputSubmitsCommentOnEnter() {
   const source = await readRichInputSource()
   const keydownStart = source.indexOf('const handleEditorKeyDown')
   const keydownEnd = source.indexOf('const handleRootBlur', keydownStart)
@@ -158,20 +158,40 @@ async function testRichInputDoesNotSendOnEnter() {
     keydownStart !== -1 && keydownEnd !== -1,
     '统一输入框应该保留键盘处理入口，方便处理 @ 和 Escape 等快捷操作',
   )
-  assert.doesNotMatch(
+  assert.match(
     keydownSource,
     /event\.key === 'Enter'/,
-    '评论输入框不应该再拦截 Enter 发送，Enter 应该留给富文本编辑区正常换行',
+    '评论输入框应该拦截 Enter，支持直接发送评论或保存评论编辑',
   )
-  assert.doesNotMatch(
+  assert.match(
     keydownSource,
-    /onSubmit\?\./,
-    '键盘事件里不应该再调用 onSubmit，避免回车换行和发送冲突',
+    /mode === 'comment' \|\| mode === 'comment-edit'/,
+    '只有评论输入和评论编辑模式才应该把 Enter 当成提交动作，不能影响描述区换行编辑',
   )
-  assert.doesNotMatch(
+  assert.match(
+    keydownSource,
+    /event\.shiftKey/,
+    '评论输入框应该允许 Shift+Enter 继续换行，不能把所有回车都拦成发送',
+  )
+  assert.match(
+    keydownSource,
+    /event\.nativeEvent\.isComposing/,
+    '评论输入框需要跳过中文输入法组合态，避免用户上屏候选词时误发送',
+  )
+  assert.match(
+    keydownSource,
+    /isRichContentEmpty\(editorHtmlRef\.current, attachments\.length\)/,
+    '评论输入框按 Enter 发送前应该复用现有空内容校验，避免发出空评论',
+  )
+  assert.match(
+    keydownSource,
+    /void onSubmit\?\.\(editorHtmlRef\.current, currentMentionIds\)/,
+    '评论输入框按 Enter 时应该直接复用现有 onSubmit 提交流程',
+  )
+  assert.match(
     source,
-    /也可以按 Enter 发送/,
-    '发送按钮浮窗不能再提示按 Enter 发送',
+    /Shift\+Enter 用于换行/,
+    '发送按钮浮窗应该同步提示新的快捷键规则，避免用户误解',
   )
   assert.match(
     source,
@@ -489,7 +509,7 @@ async function main() {
   await testTaskDetailUsesSharedRichInput()
   await testTaskDescriptionUsesReadOnlyViewUntilEditing()
   await testRichInputSupportsMentionLinkAndPasteImage()
-  await testRichInputDoesNotSendOnEnter()
+  await testRichInputSubmitsCommentOnEnter()
   await testDescriptionEditorBlursOnOutsideClick()
   await testRichInputProvidesToolbarTooltips()
   await testLinkPopoverInputsCanReceiveMouseDown()

@@ -33,7 +33,21 @@ if (storedUserId) {
   appConfig.user_id = storedUserId
 }
 
+// 允许在运行时切换当前团队，并在刷新后继续沿用上次选中的团队。
+const storedTeamId =
+  typeof localStorage !== 'undefined'
+    ? localStorage.getItem('current_team_id')
+    : null
+if (storedTeamId) {
+  appConfig.team_id = storedTeamId
+}
+
 export function switchCurrentUser(userId: string): void {
   localStorage.setItem('current_user_id', userId)
+  window.location.reload()
+}
+
+export function switchCurrentTeam(teamId: string): void {
+  localStorage.setItem('current_team_id', teamId)
   window.location.reload()
 }

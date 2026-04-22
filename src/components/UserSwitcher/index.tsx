@@ -8,8 +8,8 @@ import Empty from 'antd/es/empty'
 import message from 'antd/es/message'
 import { UserSwitchOutlined, CheckOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd/es/menu'
-import { listMembers, type TeamMember } from '@/services/teamService'
-import { appConfig, switchCurrentUser } from '@/config/appConfig'
+import { listMembers, listTeams, type Team, type TeamMember } from '@/services/teamService'
+import { appConfig, switchCurrentTeam, switchCurrentUser } from '@/config/appConfig'
 
 const roleColor: Record<TeamMember['role'], string> = {
   owner: 'gold',
@@ -25,23 +25,29 @@ const roleLabel: Record<TeamMember['role'], string> = {
 
 export default function UserSwitcher() {
   const [members, setMembers] = useState<TeamMember[] | null>(null)
+  const [teams, setTeams] = useState<Team[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (!open || members !== null) return
+    if (!open || (members !== null && teams !== null)) return
     setLoading(true)
-    listMembers()
-      .then((list) => setMembers(list))
+    Promise.all([members === null ? listMembers() : Promise.resolve(members), teams === null ? listTeams() : Promise.resolve(teams)])
+      .then(([memberList, teamList]) => {
+        setMembers(memberList)
+        setTeams(teamList)
+      })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : '加载成员失败'
+        const msg = err instanceof Error ? err.message : '加载切换列表失败'
         message.error(msg)
         setMembers([])
+        setTeams([])
       })
       .finally(() => setLoading(false))
-  }, [open, members])
+  }, [open, members, teams])
 
   const currentUserId = appConfig.user_id
+  const currentTeamId = appConfig.team_id
 
   const handleSwitch = (userId: string) => {
     if (userId === currentUserId) {
@@ -52,8 +58,17 @@ export default function UserSwitcher() {
     setTimeout(() => switchCurrentUser(userId), 300)
   }
 
+  const handleSwitchTeam = (teamId: string) => {
+    if (teamId === currentTeamId) {
+      setOpen(false)
+      return
+    }
+    message.success('已切换团队，正在刷新...')
+    setTimeout(() => switchCurrentTeam(teamId), 300)
+  }
+
   const items: MenuProps['items'] =
-    loading || members === null
+    loading || members === null || teams === null
       ? [
           {
             key: 'loading',
@@ -65,7 +80,7 @@ export default function UserSwitcher() {
             disabled: true,
           },
         ]
-      : members.length === 0
+      : members.length === 0 && teams.length === 0
         ? [
             {
               key: 'empty',
@@ -80,6 +95,40 @@ export default function UserSwitcher() {
             },
           ]
         : [
+            {
+              key: 'team-header',
+              type: 'group',
+              label: '切换团队',
+            },
+            ...teams.map((team) => {
+              const isCurrent = team.team_id === currentTeamId
+              return {
+                key: `team:${team.team_id}`,
+                label: (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      minWidth: 220,
+                    }}
+                  >
+                    <span style={{ width: 16, display: 'inline-flex' }}>
+                      {isCurrent ? (
+                        <CheckOutlined style={{ color: '#3370ff' }} />
+                      ) : null}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{team.name}</span>
+                    {isCurrent ? (
+                      <Tag color="blue" style={{ marginInlineEnd: 0 }}>
+                        当前
+                      </Tag>
+                    ) : null}
+                  </div>
+                ),
+                onClick: () => handleSwitchTeam(team.team_id),
+              }
+            }),
             {
               key: 'header',
               type: 'group',

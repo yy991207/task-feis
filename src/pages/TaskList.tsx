@@ -49,6 +49,7 @@ export default function TaskListPage() {
   const [tasklists, setTasklists] = useState<Tasklist[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(240)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [reloadVersion, setReloadVersion] = useState(0)
   const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
@@ -58,11 +59,44 @@ export default function TaskListPage() {
   const [mineOnly, setMineOnly] = useState(false)
   const [pendingExpandTaskGuid, setPendingExpandTaskGuid] = useState<string | null>(null)
   const latestRequestIdRef = useRef(0)
+  const sidebarResizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
+    dragging: false,
+    startX: 0,
+    startWidth: 240,
+  })
 
   const currentUserId = appConfig.user_id
 
   const refreshData = useCallback(() => {
     setReloadVersion((prev) => prev + 1)
+  }, [])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!sidebarResizeStateRef.current.dragging) {
+        return
+      }
+
+      // 左侧拖拽手柄在右边缘，向右拖时宽度应该随之增大。
+      const delta = event.clientX - sidebarResizeStateRef.current.startX
+      const nextWidth = sidebarResizeStateRef.current.startWidth + delta
+      const boundedWidth = Math.min(360, Math.max(180, nextWidth))
+      setSidebarWidth(boundedWidth)
+    }
+
+    const handlePointerUp = () => {
+      sidebarResizeStateRef.current.dragging = false
+      document.body.classList.remove('sidebar-resizing')
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      document.body.classList.remove('sidebar-resizing')
+    }
   }, [])
 
   useEffect(() => {
@@ -301,6 +335,15 @@ export default function TaskListPage() {
 
   const toggleSidebar = () => setSidebarCollapsed((v) => !v)
 
+  const handleSidebarResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    sidebarResizeStateRef.current = {
+      dragging: true,
+      startX: event.clientX,
+      startWidth: sidebarWidth,
+    }
+    document.body.classList.add('sidebar-resizing')
+  }
+
   const renderMainView = () => {
     if (loading) {
       return (
@@ -364,7 +407,7 @@ export default function TaskListPage() {
     <Layout className="app-layout">
       {!sidebarCollapsed && (
         <Sider
-          width={240}
+          width={sidebarWidth}
           collapsedWidth={0}
           collapsible
           collapsed={false}
@@ -372,6 +415,10 @@ export default function TaskListPage() {
           theme="light"
           className="app-sider"
         >
+          <div
+            className="sidebar-resize-handle"
+            onPointerDown={handleSidebarResizeStart}
+          />
           <Sidebar
             activeKey={activeNav}
             tasklists={tasklists}

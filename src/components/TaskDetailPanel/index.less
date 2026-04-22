@@ -126,7 +126,7 @@ body.detail-panel-resizing {
 
     &.is-done {
       .detail-title {
-        color: #86909c;
+        color: #1f2329;
         text-decoration: line-through;
       }
     }
@@ -208,63 +208,17 @@ body.detail-panel-resizing {
 }
 
 /* ── Date tags ── */
-.date-tags {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.date-tag-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  font-size: 13px !important;
-  border-radius: 6px !important;
-  padding: 2px 10px !important;
-  height: 28px !important;
-  border-color: #e5e6eb !important;
-  color: #1f2329 !important;
-
-  .anticon {
-    font-size: 13px !important;
-  }
-
-  &.date-tag-tomorrow {
-    background: #e8f7e8 !important;
-    border-color: #b7eb8f !important;
-    color: #389e0d !important;
-
-    .anticon {
-      color: #389e0d !important;
-    }
-  }
-
-  &.date-tag-active {
-    background: #e6f4ff !important;
-    border-color: #3370ff !important;
-    color: #3370ff !important;
-  }
+.date-range-text {
+  font-size: 14px;
+  color: #1f2329;
+  line-height: 24px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  margin: -2px -4px;
 
   &:hover {
-    border-color: #3370ff !important;
-    color: #3370ff !important;
-  }
-
-  &.date-tag-readonly {
-    cursor: not-allowed !important;
-    color: #646a73 !important;
-    background: #f7f8fa !important;
-    border-color: #e5e6eb !important;
-
-    .anticon {
-      color: #8f959e !important;
-    }
-
-    &:hover {
-      color: #646a73 !important;
-      border-color: #e5e6eb !important;
-    }
+    background: #f5f6f7;
   }
 }
 
@@ -428,6 +382,7 @@ body.detail-panel-resizing {
 .tasklist-section-chip-name {
   font-size: 13px;
   line-height: 20px;
+  color: #1f2329;
 }
 
 .tasklist-section-chip-remove {
@@ -964,7 +919,7 @@ body.detail-panel-resizing {
   }
 
   &.is-done .subtask-title {
-    color: #86909c;
+    color: #1f2329;
     text-decoration: line-through;
   }
 
@@ -998,6 +953,7 @@ body.detail-panel-resizing {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: #1f2329;
   }
 
   .subtask-title-btn {

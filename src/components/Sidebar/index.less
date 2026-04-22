@@ -2,6 +2,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   user-select: none;
 
@@ -56,7 +57,7 @@
   .ant-menu-item-group-title {
     padding: 8px 16px 4px !important;
     font-size: 12px;
-    color: #8f959e;
+    color: #1f2329;
     font-weight: 500;
   }
 
@@ -148,13 +149,13 @@
 
   .ant-tree .tree-section {
     > .ant-tree-node-content-wrapper {
-      color: #8f959e;
+      color: #1f2329;
       font-size: 12px;
       font-weight: 500;
 
       &:hover {
         background: transparent;
-        color: #646a73;
+        color: #1f2329;
 
         .group-action-btn {
           opacity: 1;
@@ -170,7 +171,7 @@
     .group-name {
       flex: 1;
       min-width: 0;
-      color: inherit;
+      color: #1f2329;
     }
 
     .group-actions {
@@ -180,12 +181,18 @@
     .group-action-btn {
       opacity: 0;
       transition: opacity 0.15s;
-      width: 20px !important;
-      height: 20px !important;
-      min-width: 20px;
+      width: 26px !important;
+      height: 26px !important;
+      min-width: 26px;
       padding: 0 !important;
-      font-size: 11px !important;
-      color: #8f959e !important;
+      font-size: 15px !important;
+      font-weight: 700;
+      color: #1f2329 !important;
+
+      .anticon svg {
+        stroke: currentColor;
+        stroke-width: 14;
+      }
 
       &.always-visible {
         opacity: 1;
@@ -225,13 +232,19 @@
     .tasklist-action-btn {
       opacity: 0;
       transition: opacity 0.15s;
-      width: 20px !important;
-      height: 20px !important;
-      min-width: 20px;
+      width: 26px !important;
+      height: 26px !important;
+      min-width: 26px;
       padding: 0 !important;
-      font-size: 12px !important;
-      color: #8f959e !important;
+      font-size: 15px !important;
+      font-weight: 700;
+      color: #1f2329 !important;
       flex-shrink: 0;
+
+      .anticon svg {
+        stroke: currentColor;
+        stroke-width: 14;
+      }
 
       &.always-visible {
         opacity: 1;
@@ -267,11 +280,11 @@
   }
 }
 
-.create-group-wrap {
+  .create-group-wrap {
   padding: 4px 16px;
 
   .create-group-btn {
-    color: #8f959e !important;
+    color: #1f2329 !important;
     font-size: 13px !important;
     text-align: left !important;
     justify-content: flex-start !important;

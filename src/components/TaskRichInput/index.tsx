@@ -368,6 +368,7 @@ export default function TaskRichInput({
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const selectionRef = useRef<Range | null>(null)
   const editorHtmlRef = useRef(editorHtml)
+  const isComposingRef = useRef(false)
 
   useEffect(() => {
     if (autoFocus) {
@@ -534,6 +535,23 @@ export default function TaskRichInput({
 
   const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return
+
+    if (
+      event.key === 'Enter' &&
+      !event.shiftKey &&
+      (mode === 'comment' || mode === 'comment-edit')
+    ) {
+      if (event.nativeEvent.isComposing || isComposingRef.current) {
+        return
+      }
+
+      event.preventDefault()
+      if (isRichContentEmpty(editorHtmlRef.current, attachments.length)) {
+        return
+      }
+      void onSubmit?.(editorHtmlRef.current, currentMentionIds)
+      return
+    }
 
     if (event.key === '@') {
       event.preventDefault()
@@ -1005,7 +1023,7 @@ export default function TaskRichInput({
             >
               {submitLabel}
             </Button>,
-            '点击按钮发送，Enter 用于换行',
+            '按 Enter 发送，Shift+Enter 用于换行',
           )}
         </>
       )}
@@ -1030,6 +1048,12 @@ export default function TaskRichInput({
           onFocus={saveSelection}
           onMouseUp={saveSelection}
           onKeyUp={saveSelection}
+          onCompositionStart={() => {
+            isComposingRef.current = true
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false
+          }}
           onInput={syncFromEditor}
           onClick={handleEditorClick}
           onPaste={handlePaste}

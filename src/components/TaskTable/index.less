@@ -251,6 +251,7 @@
 
   .section-name {
     white-space: nowrap;
+    color: #1f2329;
   }
 
   .section-count-tag {
@@ -426,6 +427,20 @@
         background: #f2f3f5 !important;
       }
     }
+
+    .task-row-more-btn.ant-btn {
+      padding-inline: 4px !important;
+      min-width: 24px;
+      height: 24px;
+      color: #8f959e !important;
+      border-radius: 6px !important;
+      flex-shrink: 0;
+
+      &:hover {
+        color: #1f2329 !important;
+        background: #f2f3f5 !important;
+      }
+    }
   }
 
   .inline-create-content {
@@ -582,7 +597,7 @@
 
 .task-title-cell.done {
   .done-text {
-    color: #8f959e;
+    color: #1f2329;
     text-decoration: line-through;
   }
 }
