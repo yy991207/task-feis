@@ -5,12 +5,18 @@ import Empty from 'antd/es/empty'
 import Button from 'antd/es/button'
 import Avatar from 'antd/es/avatar'
 import Spin from 'antd/es/spin'
-import { FilterOutlined, UserOutlined } from '@ant-design/icons'
+import message from 'antd/es/message'
+import { FilterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Task, User } from '@/types/task'
+import { appConfig } from '@/config/appConfig'
 import { listMembers } from '@/services/teamService'
-import { apiTaskToTask, listMyActivities, type ApiTaskActivity } from '@/services/taskService'
-import { getTask } from '@/services/taskService'
+import {
+  apiTaskToTask,
+  getTask,
+  listMyActivities,
+  type ApiTaskActivity,
+} from '@/services/taskService'
 import type { ReactNode } from 'react'
 import './index.less'
 
@@ -59,13 +65,13 @@ function groupActivitiesByDate(activities: ApiTaskActivity[]): ActivityGroup[] {
   })
 }
 
-function buildActivitySummary(activity: ApiTaskActivity): string {
+function buildActivitySummary(activity: ApiTaskActivity, actorLabel: string): string {
   const payload = activity.payload as Record<string, unknown>
   const taskTitle =
     typeof payload.task_title === 'string' && payload.task_title.trim().length > 0
       ? payload.task_title.trim()
       : '该任务'
-  const actor = activity.actor_id || '有人'
+  const actor = actorLabel || '有人'
 
   switch (activity.event_type) {
     case 'task.created':
@@ -85,7 +91,7 @@ function buildActivitySummary(activity: ApiTaskActivity): string {
   }
 }
 
-function formatActivityText(activity: ApiTaskActivity): ReactNode {
+function formatActivityText(activity: ApiTaskActivity, actorLabel: string): ReactNode {
   const payload = activity.payload as Record<string, unknown>
   const fieldLabel =
     typeof payload.field_name === 'string' && payload.field_name.trim().length > 0
@@ -104,7 +110,7 @@ function formatActivityText(activity: ApiTaskActivity): ReactNode {
     case 'task.created':
       return (
         <>
-          <span className="activity-person">{activity.actor_id}</span>
+          <span className="activity-person">{actorLabel}</span>
           <span> 创建了任务 </span>
           <span className="activity-task-title">{String(payload.task_title ?? '该任务')}</span>
         </>
@@ -112,7 +118,7 @@ function formatActivityText(activity: ApiTaskActivity): ReactNode {
     case 'task.description_changed':
       return (
         <>
-          <span className="activity-person">{activity.actor_id}</span>
+          <span className="activity-person">{actorLabel}</span>
           <span> 将“{fieldLabel}”修改为：</span>
           <span className="activity-value">{String(value)}</span>
         </>
@@ -120,7 +126,7 @@ function formatActivityText(activity: ApiTaskActivity): ReactNode {
     case 'comment.created':
       return (
         <>
-          <span className="activity-person">{activity.actor_id}</span>
+          <span className="activity-person">{actorLabel}</span>
           <span> 发表了评论：</span>
           <span className="activity-value">{String(value)}</span>
         </>
@@ -128,7 +134,7 @@ function formatActivityText(activity: ApiTaskActivity): ReactNode {
     case 'attachment.uploaded':
       return (
         <>
-          <span className="activity-person">{activity.actor_id}</span>
+          <span className="activity-person">{actorLabel}</span>
           <span> 上传了附件：</span>
           <span className="activity-value">{String(value)}</span>
         </>
@@ -136,7 +142,7 @@ function formatActivityText(activity: ApiTaskActivity): ReactNode {
     default:
       return (
         <>
-          <span className="activity-person">{activity.actor_id}</span>
+          <span className="activity-person">{actorLabel}</span>
           <span> 更新了任务</span>
         </>
       )
@@ -156,10 +162,7 @@ export default function ActivityView({
     let cancelled = false
     setLoading(true)
 
-    Promise.all([
-      listMyActivities(1, 100),
-      listMembers().catch(() => []),
-    ])
+    Promise.all([listMyActivities(1, 100), listMembers().catch(() => [])])
       .then(([activityList, members]) => {
         if (cancelled) return
         setActivities(activityList)
@@ -167,6 +170,7 @@ export default function ActivityView({
       })
       .catch(() => {
         if (!cancelled) {
+          message.error('加载动态失败')
           setActivities([])
         }
       })
@@ -184,6 +188,9 @@ export default function ActivityView({
   const groupedActivities = useMemo(() => groupActivitiesByDate(activities), [activities])
 
   const resolveUserLabel = (userId: string): string => {
+    if (userId === appConfig.user_id) {
+      return '我'
+    }
     const user = users.find((item) => item.id === userId)
     return user?.name ?? userId
   }
@@ -193,10 +200,14 @@ export default function ActivityView({
     if (!taskId) {
       return
     }
-    const apiTask = await getTask(taskId)
-    const task = apiTaskToTask(apiTask)
-    onTaskClick(task)
-    onTaskOpen(task)
+    try {
+      const apiTask = await getTask(taskId)
+      const task = apiTaskToTask(apiTask)
+      onTaskClick(task)
+      onTaskOpen(task)
+    } catch {
+      message.error('加载任务详情失败')
+    }
   }
 
   return (
@@ -236,7 +247,8 @@ export default function ActivityView({
 
               <div className="activity-items">
                 {group.items.map((activity) => {
-                  const summary = buildActivitySummary(activity)
+                  const actorLabel = resolveUserLabel(activity.actor_id)
+                  const summary = buildActivitySummary(activity, actorLabel)
                   return (
                     <div
                       key={activity.activity_id}
@@ -247,12 +259,12 @@ export default function ActivityView({
                         {dayjs(activity.created_at).format('HH:mm')}
                       </div>
                       <Avatar size={20} className="activity-avatar">
-                        {resolveUserLabel(activity.actor_id).slice(0, 1).toUpperCase()}
+                        {actorLabel.slice(0, 1).toUpperCase()}
                       </Avatar>
                       <div className="activity-content">
                         <div className="activity-summary">{summary}</div>
                         <div className="activity-detail">
-                          {formatActivityText(activity)}
+                          {formatActivityText(activity, actorLabel)}
                         </div>
                       </div>
                     </div>

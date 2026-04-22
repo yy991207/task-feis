@@ -2027,7 +2027,7 @@ export default function TaskDetailPanel({
           </div>
 
           {/* Tasklist row */}
-          {currentTasklist && (
+          {currentTasklist && !isSubtask && (
             <>
               <div className="detail-field-row">
                 <Tooltip title="任务清单和分组" placement="top">

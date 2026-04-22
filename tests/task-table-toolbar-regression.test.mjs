@@ -80,6 +80,21 @@ async function testGroupDropdownUsesSerialMenuLayout() {
   )
 }
 
+async function testFilterPanelNoLongerUsesLegacyCheckboxes() {
+  const source = await readTaskTableSource()
+
+  assert.doesNotMatch(
+    source,
+    /<Checkbox[\s\S]*仅看我负责的[\s\S]*<\/Checkbox>[\s\S]*<Checkbox[\s\S]*仅看有截止时间/,
+    '筛选面板不应该继续停留在两个 Checkbox 的旧实现，需要升级成条件行模式',
+  )
+  assert.match(
+    source,
+    /添加条件/,
+    '筛选面板应该提供“添加条件”入口，支持连续追加多个筛选条件',
+  )
+}
+
 async function testGroupedTaskRowsUseSectionScopedKeys() {
   const source = await readTaskTableSource()
 
@@ -100,6 +115,7 @@ async function main() {
   await testSortMenuDoesNotExposeCustomDragOption()
   await testSectionGroupDropdownSupportsMultiSectionFiltering()
   await testGroupDropdownUsesSerialMenuLayout()
+  await testFilterPanelNoLongerUsesLegacyCheckboxes()
   await testGroupedTaskRowsUseSectionScopedKeys()
   console.log('task table toolbar regressions ok')
 }

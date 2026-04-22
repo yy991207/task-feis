@@ -18,6 +18,7 @@ import type { MenuProps } from 'antd/es/menu'
 import {
   UserOutlined,
   EyeOutlined,
+  HistoryOutlined,
   StarOutlined,
   FileTextOutlined,
   OrderedListOutlined,
@@ -174,6 +175,7 @@ export default function Sidebar({
       label: '我负责的',
     },
     { key: 'my-followed', icon: <EyeOutlined />, label: '我关注的' },
+    { key: 'activity', icon: <HistoryOutlined />, label: '动态' },
   ]
 
   // 快速访问 Menu

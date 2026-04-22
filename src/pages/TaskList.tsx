@@ -354,8 +354,8 @@ export default function TaskListPage() {
     if (activeNav === 'activity') {
       return (
         <ActivityView
-          tasks={tasks}
           onTaskClick={(task) => setSelectedTask(task)}
+          onTaskOpen={(task) => setSelectedTask(task)}
           onRefresh={refreshData}
         />
       )

@@ -43,6 +43,11 @@ async function testActivityViewIsRealDataDriven() {
     /task\.task_id/,
     '动态记录需要带 task_id，方便点击后定位到具体任务',
   )
+  assert.doesNotMatch(
+    source,
+    /mock\/api/,
+    '动态页面不应该再依赖 mock 数据源',
+  )
 }
 
 async function testTaskListWiresActivityNavAndDrawer() {
@@ -60,7 +65,7 @@ async function testTaskListWiresActivityNavAndDrawer() {
   )
   assert.match(
     source,
-    /selectedTask/,
+    /onTaskOpen=\{\(task\) => setSelectedTask\(task\)\}/,
     '动态记录点击后应该复用现有任务详情抽屉',
   )
 }
