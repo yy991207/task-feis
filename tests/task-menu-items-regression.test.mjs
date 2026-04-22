@@ -41,7 +41,7 @@ async function testTaskTableSupportsParentTaskPatchFlow() {
   }
 }
 
-async function testTaskDetailMenuKeepsDetachAndDeleteItems() {
+async function testTaskDetailMenuKeepsOnlyHistoryAndDeleteItems() {
   const source = await readSource('../src/components/TaskDetailPanel/index.tsx')
   const menuStart = source.indexOf('const moreMenu = {')
   const menuEnd = source.indexOf('const handleResizeStart', menuStart)
@@ -57,10 +57,10 @@ async function testTaskDetailMenuKeepsDetachAndDeleteItems() {
     /label: '删除'/,
     '任务详情页菜单应该保留删除入口',
   )
-  assert.match(
+  assert.doesNotMatch(
     menuSource,
-    /task\.parent_task_guid[\s\S]*label: '设为独立任务'/,
-    '任务详情页菜单应该只在子任务场景下提供“设为独立任务”',
+    /label: '设为独立任务'/,
+    '任务详情页菜单不应该再出现“设为独立任务”入口',
   )
   assert.doesNotMatch(
     source,
@@ -94,7 +94,7 @@ async function testUpdateTaskApiSupportsParentTaskPatch() {
 
 async function main() {
   await testTaskTableSupportsParentTaskPatchFlow()
-  await testTaskDetailMenuKeepsDetachAndDeleteItems()
+  await testTaskDetailMenuKeepsOnlyHistoryAndDeleteItems()
   await testUpdateTaskApiSupportsParentTaskPatch()
   console.log('task menu items regressions ok')
 }

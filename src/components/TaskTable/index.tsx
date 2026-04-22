@@ -2238,6 +2238,31 @@ export default function TaskTable({
     })
   }
 
+  // 表格的展开状态按任务 guid 维护，但 antd Table 识别的是实际行 key。
+  // 这里把当前可见行里的任务 guid 递归展开成 rowKey，避免分组场景下展开状态和行 key 对不上。
+  const collectExpandedRowKeys = (
+    rows: TaskTableDisplayRow[],
+    expandedGuids: Set<string>,
+  ): string[] => {
+    const result: string[] = []
+    const visitRows = (items: TaskTableDisplayRow[]) => {
+      for (const item of items) {
+        if (!isTaskTableTaskRow(item)) {
+          continue
+        }
+        if (expandedGuids.has(item.guid)) {
+          result.push(item.key)
+        }
+        if (item.children?.length) {
+          visitRows(item.children)
+        }
+      }
+    }
+
+    visitRows(rows)
+    return result
+  }
+
   const renderSectionRow = (section: Section, sectionTasks: Task[]) => (
     <div
       className={`section-row-content ${animatedSectionGuid === section.guid ? 'section-row-new' : ''} ${
@@ -2715,7 +2740,7 @@ export default function TaskTable({
       dataSource={tableRows}
       scroll={{ x: 'max-content' }}
       expandable={{
-        expandedRowKeys: Array.from(expandedTaskGuids),
+        expandedRowKeys: collectExpandedRowKeys(tableRows, expandedTaskGuids),
         showExpandColumn: false,
         indentSize: 20,
         rowExpandable: (record) =>

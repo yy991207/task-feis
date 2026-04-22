@@ -1662,40 +1662,14 @@ export default function TaskDetailPanel({
     onClose()
   }
 
-  const handleDetachTask = async () => {
-    if (!task.parent_task_guid) {
-      return
-    }
-
-    try {
-      const apiTask = await updateTaskApi(task.guid, { parent_task_id: null })
-      const nextTask = apiTaskToTask(apiTask, primaryTasklistRef?.tasklist_guid)
-      onTaskUpdated?.(nextTask)
-      if (!onTaskUpdated) {
-        onRefresh?.()
-      }
-      onRefresh?.()
-      message.success('已设为独立任务')
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '设为独立任务失败')
-    }
-  }
-
   const moreMenu = {
     items: [
       { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
-      ...(task.parent_task_guid
-        ? [{ key: 'detach', icon: <BranchesOutlined />, label: '设为独立任务' }]
-        : []),
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
       if (key === 'history') {
         setHistoryOpen(true)
-        return
-      }
-      if (key === 'detach') {
-        void handleDetachTask()
         return
       }
       if (key === 'delete') {
