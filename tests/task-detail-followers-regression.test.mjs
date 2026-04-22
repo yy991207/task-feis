@@ -24,6 +24,9 @@ async function testTaskKeepsParticipantIds() {
 async function testDetailFollowersSupportAddAndRemove() {
   const detailSource = await readSource('../src/components/TaskDetailPanel/index.tsx')
   const taskTableSource = await readSource('../src/components/TaskTable/index.tsx')
+  const followersPopoverStart = detailSource.indexOf('const followerPopoverContent = (')
+  const followersPopoverEnd = detailSource.indexOf('const followersEntry = (', followersPopoverStart)
+  const followersPopoverSource = detailSource.slice(followersPopoverStart, followersPopoverEnd)
 
   assert.match(
     detailSource,
@@ -106,12 +109,12 @@ async function testDetailFollowersSupportAddAndRemove() {
     '添加关注人的搜索框和添加按钮应该在同一行显示',
   )
   assert.doesNotMatch(
-    detailSource,
+    followersPopoverSource,
     /followers-count/,
     '关注人弹层工具栏不应该再显示人数，避免右侧多余信息占位',
   )
   assert.doesNotMatch(
-    detailSource,
+    followersPopoverSource,
     /mode="multiple"|followers-picker-actions|followers-picker-row|followers-list-title|followers-section-label/,
     '添加关注人不应该再用多选 Select、独立按钮行或上下分块标题，避免布局上下堆叠',
   )
@@ -168,7 +171,6 @@ async function testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips() {
     '详情页图标浮窗应该统一使用 antd Tooltip',
   )
   ;[
-    '更多操作',
     '关闭详情',
     '负责人',
     '关注人',

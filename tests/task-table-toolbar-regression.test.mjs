@@ -25,8 +25,24 @@ async function testCreateButtonReferenceHasDefinition() {
   )
 }
 
+async function testSortMenuDoesNotExposeCustomDragOption() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /const visibleSortModes:\s*VisibleSortModeKey\[\]\s*=\s*\['due', 'start', 'created'\]/,
+    'TaskTable 排序菜单应该只保留截止时间、开始时间、创建时间，避免再出现拖拽自定义选项',
+  )
+  assert.doesNotMatch(
+    source,
+    /const sortLabelMap: Record<SortModeKey, string> = \{\s*custom: '拖拽自定义'/m,
+    'TaskTable 排序文案里不应该再保留拖拽自定义',
+  )
+}
+
 async function main() {
   await testCreateButtonReferenceHasDefinition()
+  await testSortMenuDoesNotExposeCustomDragOption()
   console.log('task table toolbar regressions ok')
 }
 

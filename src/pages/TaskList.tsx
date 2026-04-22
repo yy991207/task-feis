@@ -53,9 +53,7 @@ export default function TaskListPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [reloadVersion, setReloadVersion] = useState(0)
   const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
-  const [sortMode, setSortMode] = useState<'custom' | 'due' | 'start' | 'created'>(
-    'custom',
-  )
+  const [sortMode, setSortMode] = useState<'custom' | 'due' | 'start' | 'created'>('due')
   const [mineOnly, setMineOnly] = useState(false)
   const [pendingExpandTaskGuid, setPendingExpandTaskGuid] = useState<string | null>(null)
   const latestRequestIdRef = useRef(0)
@@ -148,15 +146,14 @@ export default function TaskListPage() {
       if (statusFilter !== 'all') {
         commonParams.status = statusFilter === 'done' ? 'done' : 'todo'
       }
-      if (sortMode !== 'custom') {
-        const sortMap: Record<string, string> = {
-          due: 'due_date',
-          start: 'start_date',
-          created: 'created_at',
-        }
-        commonParams.sort_by = sortMap[sortMode] ?? 'created_at'
-        commonParams.order = 'desc'
+      const effectiveSortMode = sortMode === 'custom' ? 'due' : sortMode
+      const sortMap: Record<string, string> = {
+        due: 'due_date',
+        start: 'start_date',
+        created: 'created_at',
       }
+      commonParams.sort_by = sortMap[effectiveSortMode] ?? 'due_date'
+      commonParams.order = 'desc'
       if (typeof activeNav === 'string') {
         const params: Parameters<typeof listTasks>[0] = { ...commonParams }
         switch (activeNav) {
@@ -452,7 +449,6 @@ export default function TaskListPage() {
         <TaskDetailPanel
           key={selectedTask.guid}
           task={selectedTask}
-          allTasks={tasks}
           tasklists={tasklists}
           onRefresh={refreshData}
           onTaskUpdated={updateTaskInState}

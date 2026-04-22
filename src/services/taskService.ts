@@ -176,19 +176,12 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
 
 export function applyParticipantIdsToTask(task: Task, participantIds: string[]): Task {
   const nextParticipantIds = Array.from(new Set(participantIds.filter(Boolean)))
-  const assigneeIds = new Set(
-    task.members
-      .filter((member) => member.role === 'assignee')
-      .map((member) => member.id),
-  )
   const followerMembers = task.members.filter((member) => member.role === 'follower')
   const followerById = new Map(followerMembers.map((member) => [member.id, member]))
-  const nextFollowerMembers = nextParticipantIds
-    .filter((id) => !assigneeIds.has(id))
-    .map((id) => {
-      const matched = followerById.get(id)
-      return matched ?? { id, role: 'follower' as const, type: 'user' as const }
-    })
+  const nextFollowerMembers = nextParticipantIds.map((id) => {
+    const matched = followerById.get(id)
+    return matched ?? { id, role: 'follower' as const, type: 'user' as const }
+  })
 
   return {
     ...task,
@@ -198,6 +191,15 @@ export function applyParticipantIdsToTask(task: Task, participantIds: string[]):
       ...nextFollowerMembers,
     ],
   }
+}
+
+export function buildDefaultParticipantIds(
+  creatorId: string | undefined,
+  assigneeIds: string[],
+): string[] {
+  return Array.from(
+    new Set([creatorId, ...assigneeIds].filter((id): id is string => Boolean(id))),
+  )
 }
 
 // ---- List / Get ----

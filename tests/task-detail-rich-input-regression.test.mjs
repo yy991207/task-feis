@@ -508,6 +508,7 @@ async function testCommentComposerLayoutFitsPanelAndGrowsWithContent() {
   const source = await readRichInputSource()
   const richInputStyleSource = await readRichInputStyleSource()
   const detailStyleSource = await readTaskDetailStyleSource()
+  const detailSource = await readTaskDetailSource()
 
   assert.doesNotMatch(
     source,
@@ -528,6 +529,26 @@ async function testCommentComposerLayoutFitsPanelAndGrowsWithContent() {
     detailStyleSource,
     /\.comment-input-wrapper \{[\s\S]*width: 100%;[\s\S]*min-width: 0;/,
     '评论输入框外层应该限制在底部容器内，避免和侧边栏边界重合',
+  )
+  assert.match(
+    detailSource,
+    /const DETAIL_PANEL_DEFAULT_WIDTH = 460/,
+    '任务详情面板默认宽度应该加大到 460，避免底部发送按钮被挤出可视区域',
+  )
+  assert.match(
+    detailSource,
+    /const DETAIL_PANEL_MIN_WIDTH = 440/,
+    '任务详情面板最小宽度应该不小于 440，拖拽后也不能挤掉发送按钮',
+  )
+  assert.match(
+    detailSource,
+    /useState\(DETAIL_PANEL_DEFAULT_WIDTH\)/,
+    '任务详情面板初始宽度应该使用统一默认宽度常量',
+  )
+  assert.match(
+    detailSource,
+    /Math\.min\(\s*DETAIL_PANEL_MAX_WIDTH,\s*Math\.max\(DETAIL_PANEL_MIN_WIDTH, nextWidth\),\s*\)/,
+    '任务详情面板拖拽宽度应该用统一最小和最大宽度限制',
   )
   assert.match(
     richInputStyleSource,

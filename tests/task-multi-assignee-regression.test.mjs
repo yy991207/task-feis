@@ -80,7 +80,7 @@ async function testDetailPanelUsesMultiAssigneePicker() {
   )
   assert.match(
     source,
-    /await patchTaskAssignee\(task\.guid, values\)/,
+    /await patchTaskAssignee\(task\.guid, nextAssigneeIds\)/,
     '详情页负责人更新应该发送完整 assignee_ids 数组',
   )
   assert.match(

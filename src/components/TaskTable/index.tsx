@@ -79,6 +79,7 @@ import {
   getTask,
   apiTaskToTask,
   applyParticipantIdsToTask,
+  buildDefaultParticipantIds,
   toPriorityString,
   listSubtasks,
 } from '@/services/taskService'
@@ -233,12 +234,15 @@ const taskStatusLabelMap: Record<Task['status'], string> = {
   cancelled: '已取消',
 }
 
-const sortLabelMap: Record<SortModeKey, string> = {
-  custom: '拖拽自定义',
+const sortLabelMap: Record<Exclude<SortModeKey, 'custom'>, string> = {
   due: '截止时间',
   start: '开始时间',
   created: '创建时间',
 }
+
+type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
+
+const visibleSortModes: VisibleSortModeKey[] = ['due', 'start', 'created']
 
 const groupLabelMap: Record<GroupModeKey, string> = {
   section: '任务分组',
@@ -579,11 +583,18 @@ export default function TaskTable({
   const [internalStatusFilter, setInternalStatusFilter] = useState<StatusFilterKey>(
     config.toolbar.statusFilterLabel === '未完成' ? 'todo' : 'all',
   )
-  const [internalSortMode, setInternalSortMode] = useState<SortModeKey>(
-    config.toolbar.sortLabel === '截止时间' ? 'due' : 'custom',
-  )
+  const [internalSortMode, setInternalSortMode] = useState<SortModeKey>(() => {
+    if (config.toolbar.sortLabel === '开始时间') {
+      return 'start'
+    }
+    if (config.toolbar.sortLabel === '创建时间' || config.toolbar.sortLabel === '完成时间') {
+      return 'created'
+    }
+    return 'due'
+  })
   const statusFilter = controlledStatusFilter ?? internalStatusFilter
-  const sortMode = controlledSortMode ?? internalSortMode
+  const effectiveSortMode = controlledSortMode ?? internalSortMode
+  const sortMode: VisibleSortModeKey = effectiveSortMode === 'custom' ? 'due' : effectiveSortMode
   const setStatusFilter = (v: StatusFilterKey) => {
     setInternalStatusFilter(v)
     onStatusFilterChange?.(v)
@@ -897,14 +908,15 @@ export default function TaskTable({
         start_date: newTaskStart ? newTaskStart.toISOString() : undefined,
         due_date: newTaskDue ? newTaskDue.toISOString() : undefined,
       })
-      const defaultParticipantIds = Array.from(
-        new Set([currentUser.id, ...assigneeIds].filter((id): id is string => Boolean(id))),
-      )
+      const defaultParticipantIds = buildDefaultParticipantIds(currentUser.id, assigneeIds)
       if (defaultParticipantIds.length > 0) {
         await addParticipants(apiTask.task_id, defaultParticipantIds)
       }
       let createdTask = apiTaskToTask(apiTask, tasklist?.guid)
-      createdTask = applyParticipantIdsToTask(createdTask, defaultParticipantIds)
+      createdTask = applyParticipantIdsToTask(createdTask, [
+        ...(createdTask.participant_ids ?? []),
+        ...defaultParticipantIds,
+      ])
       const targetSection = sections?.find((section) => section.guid === sectionGuid)
       if (sectionGuid) {
         setCollapsedSections((prev) => {
@@ -1073,29 +1085,26 @@ export default function TaskTable({
     return true
   })
 
-  const tasksAfterSort =
-    sortMode === 'custom'
-      ? tasksAfterFilter
-      : [...tasksAfterFilter].sort((left, right) => {
-          if (sortMode === 'created') {
-            return Number(right.created_at) - Number(left.created_at)
-          }
+  const tasksAfterSort = [...tasksAfterFilter].sort((left, right) => {
+    if (sortMode === 'created') {
+      return Number(right.created_at) - Number(left.created_at)
+    }
 
-          const field = sortMode === 'due' ? 'due' : 'start'
-          const leftValue = left[field]?.timestamp
-          const rightValue = right[field]?.timestamp
+    const field = sortMode === 'due' ? 'due' : 'start'
+    const leftValue = left[field]?.timestamp
+    const rightValue = right[field]?.timestamp
 
-          if (!leftValue && !rightValue) {
-            return 0
-          }
-          if (!leftValue) {
-            return 1
-          }
-          if (!rightValue) {
-            return -1
-          }
-          return Number(leftValue) - Number(rightValue)
-        })
+    if (!leftValue && !rightValue) {
+      return 0
+    }
+    if (!leftValue) {
+      return 1
+    }
+    if (!rightValue) {
+      return -1
+    }
+    return Number(leftValue) - Number(rightValue)
+  })
 
   const shouldGroupBySection = groupMode === 'section'
   const sortedSections = [...sectionSource].sort(
@@ -1579,7 +1588,7 @@ export default function TaskTable({
   }
 
   const sortMenu = {
-    items: (Object.keys(sortLabelMap) as SortModeKey[]).map((key) => ({
+    items: visibleSortModes.map((key) => ({
       key,
       label: sortLabelMap[key],
     })),
@@ -2367,7 +2376,15 @@ export default function TaskTable({
         if (!isTaskTableTaskRow(record)) {
           return null
         }
+        // 创建者和负责人默认也算关注人，主表人数要和详情页关注人列表保持一致。
+        const defaultFollowerIds = buildDefaultParticipantIds(
+          record.creator.id,
+          record.members
+            .filter((member) => member.role === 'assignee')
+            .map((member) => member.id),
+        )
         const followerCount = new Set([
+          ...defaultFollowerIds,
           ...(record.participant_ids ?? []),
           ...record.members
             .filter((member) => member.role === 'follower')
@@ -3215,6 +3232,7 @@ function TaskAssigneeCell({
     const isSameSelection =
       nextAssigneeIds.length === currentAssigneeIds.length &&
       nextAssigneeIds.every((id) => currentAssigneeIds.includes(id))
+    const defaultParticipantIds = buildDefaultParticipantIds(task.creator.id, nextAssigneeIds)
     const newMembers = [
       ...nextAssigneeIds.map((id) => ({
         id,
@@ -3224,10 +3242,16 @@ function TaskAssigneeCell({
       })),
       ...task.members.filter((m) => m.role === 'follower'),
     ]
-    onUpdate({ ...task, members: newMembers })
+    onUpdate(applyParticipantIdsToTask({ ...task, members: newMembers }, [
+      ...(task.participant_ids ?? []),
+      ...defaultParticipantIds,
+    ]))
     try {
       if (!isSameSelection) {
         await patchTaskAssignee(task.guid, nextAssigneeIds)
+        if (defaultParticipantIds.length > 0) {
+          await addParticipants(task.guid, defaultParticipantIds)
+        }
       }
       const fresh = await getTask(task.guid)
       onUpdate(apiTaskToTask(fresh))

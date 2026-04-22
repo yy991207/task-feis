@@ -20,7 +20,6 @@ import {
   CalendarOutlined,
   PaperClipOutlined,
   BranchesOutlined,
-  SubnodeOutlined,
   PlusOutlined,
   CheckOutlined,
   DeleteOutlined,
@@ -67,6 +66,7 @@ import {
   getTask,
   apiTaskToTask,
   applyParticipantIdsToTask,
+  buildDefaultParticipantIds,
 } from '@/services/taskService'
 import {
   updateProject as apiUpdateProject,
@@ -78,12 +78,14 @@ import TaskRichInput, {
   type TaskRichAttachmentSource,
 } from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
-import TaskParentPickerModal from '@/components/TaskParentPickerModal'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import './index.less'
 
 const { Text } = Typography
 const PARENT_TASK_CHAIN_MAX_DEPTH = 5
+const DETAIL_PANEL_DEFAULT_WIDTH = 460
+const DETAIL_PANEL_MIN_WIDTH = 440
+const DETAIL_PANEL_MAX_WIDTH = 720
 
 const SUBTASK_CREATE_FLOATING_SELECTOR = [
   '.ant-popover',
@@ -101,7 +103,6 @@ function getActionErrorMessage(error: unknown, fallback: string): string {
 
 interface TaskDetailPanelProps {
   task: Task
-  allTasks: Task[]
   tasklists: Tasklist[]
   onRefresh?: () => void
   onTaskUpdated?: (task: Task) => void
@@ -113,7 +114,6 @@ interface TaskDetailPanelProps {
 
 export default function TaskDetailPanel({
   task,
-  allTasks,
   tasklists,
   onRefresh,
   onTaskUpdated,
@@ -122,7 +122,7 @@ export default function TaskDetailPanel({
   onOpenTask,
   onClose,
 }: TaskDetailPanelProps) {
-  const [panelWidth, setPanelWidth] = useState(360)
+  const [panelWidth, setPanelWidth] = useState(DETAIL_PANEL_DEFAULT_WIDTH)
   const [sectionPopoverOpen, setSectionPopoverOpen] = useState(false)
   const [sectionSearchValue, setSectionSearchValue] = useState('')
   const [commentValue, setCommentValue] = useState('')
@@ -166,12 +166,10 @@ export default function TaskDetailPanel({
   const [previewImageUrl, setPreviewImageUrl] = useState<string>()
   const [tasklistRenaming, setTasklistRenaming] = useState(false)
   const [tasklistRenameValue, setTasklistRenameValue] = useState('')
-  const [parentPickerOpen, setParentPickerOpen] = useState(false)
-  const [parentPickerSubmitting, setParentPickerSubmitting] = useState(false)
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
-    startWidth: 360,
+    startWidth: DETAIL_PANEL_DEFAULT_WIDTH,
   })
   const assignees = task.members.filter((m) => m.role === 'assignee')
   const isSubtask = Boolean(task.parent_task_guid)
@@ -336,7 +334,10 @@ export default function TaskDetailPanel({
       }
       const delta = resizeStateRef.current.startX - event.clientX
       const nextWidth = resizeStateRef.current.startWidth + delta
-      const boundedWidth = Math.min(720, Math.max(320, nextWidth))
+      const boundedWidth = Math.min(
+        DETAIL_PANEL_MAX_WIDTH,
+        Math.max(DETAIL_PANEL_MIN_WIDTH, nextWidth),
+      )
       setPanelWidth(boundedWidth)
     }
 
@@ -366,7 +367,13 @@ export default function TaskDetailPanel({
       .catch(() => {})
   }, [])
 
+  // 创建者和负责人是任务的默认关注人，这里先本地兜底，避免旧任务没有 participant 回写时漏展示。
+  const defaultFollowerIds = buildDefaultParticipantIds(
+    task.creator.id,
+    assignees.map((member) => member.id),
+  )
   const followedUserIds = Array.from(new Set([
+    ...defaultFollowerIds,
     ...(task.participant_ids ?? []),
     ...task.members
       .filter((member) => member.role === 'follower')
@@ -417,8 +424,13 @@ export default function TaskDetailPanel({
   }
 
   const handleAssigneeChange = async (values: string[]) => {
+    const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
+    const defaultParticipantIds = buildDefaultParticipantIds(task.creator.id, nextAssigneeIds)
     try {
-      await patchTaskAssignee(task.guid, values)
+      await patchTaskAssignee(task.guid, nextAssigneeIds)
+      if (defaultParticipantIds.length > 0) {
+        await addParticipants(task.guid, defaultParticipantIds)
+      }
       const fresh = await getTask(task.guid)
       const nextTask = apiTaskToTask(fresh)
       onTaskUpdated?.(nextTask)
@@ -628,14 +640,15 @@ export default function TaskDetailPanel({
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
-      const defaultParticipantIds = Array.from(
-        new Set([appConfig.user_id, ...subtaskAssigneeIds].filter((id): id is string => Boolean(id))),
-      )
+      const defaultParticipantIds = buildDefaultParticipantIds(appConfig.user_id, subtaskAssigneeIds)
       if (defaultParticipantIds.length > 0) {
         await addParticipants(apiTask.task_id, defaultParticipantIds)
       }
       let createdTask = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
-      createdTask = applyParticipantIdsToTask(createdTask, defaultParticipantIds)
+      createdTask = applyParticipantIdsToTask(createdTask, [
+        ...(createdTask.participant_ids ?? []),
+        ...defaultParticipantIds,
+      ])
       setSubtaskDrafts((prev) => [...prev, createdTask])
       resetSubtaskCreateDraft()
       setSubtaskCreating(true)
@@ -740,13 +753,18 @@ export default function TaskDetailPanel({
   }
 
   const handleSubtaskAssigneeChange = async (subtask: Task, values: string[]) => {
+    const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
+    const defaultParticipantIds = buildDefaultParticipantIds(subtask.creator.id, nextAssigneeIds)
     try {
-      const apiTask = await patchTaskAssignee(subtask.guid, values)
+      const apiTask = await patchTaskAssignee(subtask.guid, nextAssigneeIds)
+      if (defaultParticipantIds.length > 0) {
+        await addParticipants(subtask.guid, defaultParticipantIds)
+      }
       const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
       onTaskUpdated?.(next)
       setActiveSubtaskAssigneeGuid(null)
-      message.success(values.length > 0 ? '已更新子任务负责人' : '已清空子任务负责人')
+      message.success(nextAssigneeIds.length > 0 ? '已更新子任务负责人' : '已清空子任务负责人')
     } catch (err) {
       message.error(getActionErrorMessage(err, '更新子任务负责人失败'))
     }
@@ -1042,41 +1060,6 @@ export default function TaskDetailPanel({
     onClose()
   }
 
-  const handleOpenParentPicker = () => {
-    setParentPickerOpen(true)
-  }
-
-  const handleCloseParentPicker = () => {
-    if (parentPickerSubmitting) {
-      return
-    }
-    setParentPickerOpen(false)
-  }
-
-  const handleSetParentTask = async (parentTaskId: string) => {
-    if (task.parent_task_guid === parentTaskId) {
-      setParentPickerOpen(false)
-      return
-    }
-
-    setParentPickerSubmitting(true)
-    try {
-      const apiTask = await updateTaskApi(task.guid, { parent_task_id: parentTaskId })
-      const nextTask = apiTaskToTask(apiTask, primaryTasklistRef?.tasklist_guid)
-      onTaskUpdated?.(nextTask)
-      if (!onTaskUpdated) {
-        onRefresh?.()
-      }
-      setParentPickerOpen(false)
-      onRefresh?.()
-      message.success('已设置父任务')
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '设置父任务失败')
-    } finally {
-      setParentPickerSubmitting(false)
-    }
-  }
-
   const handleDetachTask = async () => {
     if (!task.parent_task_guid) {
       return
@@ -1098,17 +1081,12 @@ export default function TaskDetailPanel({
 
   const moreMenu = {
     items: [
-      { key: 'set-parent', icon: <SubnodeOutlined />, label: '设置父任务' },
       ...(task.parent_task_guid
         ? [{ key: 'detach', icon: <BranchesOutlined />, label: '设为独立任务' }]
         : []),
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
-      if (key === 'set-parent') {
-        handleOpenParentPicker()
-        return
-      }
       if (key === 'detach') {
         void handleDetachTask()
         return
@@ -1140,26 +1118,18 @@ export default function TaskDetailPanel({
       {/* Header */}
       <div className="detail-top">
         <div className="detail-actions">
-          <Tooltip title="更多操作" placement="bottom">
-            <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
-              <span className="detail-action-icon">
-                <MoreOutlined />
-              </span>
-            </Dropdown>
+          <Dropdown menu={moreMenu} trigger={['click']} placement="bottomLeft">
+            <span className="detail-action-icon">
+              <MoreOutlined />
+            </span>
+          </Dropdown>
+          <Tooltip title="关闭详情" placement="bottom">
+            <span className="detail-action-icon" onClick={onClose}>
+              <CloseOutlined />
+            </span>
           </Tooltip>
-          <span className="detail-action-icon" onClick={onClose}>
-            <CloseOutlined />
-          </span>
         </div>
       </div>
-      <TaskParentPickerModal
-        open={parentPickerOpen}
-        task={task}
-        tasks={allTasks}
-        submitting={parentPickerSubmitting}
-        onClose={handleCloseParentPicker}
-        onSubmit={handleSetParentTask}
-      />
 
       {/* Scrollable body + comments */}
       <div className="detail-scroll" ref={detailScrollRef}>
