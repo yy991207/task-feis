@@ -2242,7 +2242,7 @@ export default function TaskTable({
   // 这里把当前可见行里的任务 guid 递归展开成 rowKey，避免分组场景下展开状态和行 key 对不上。
   const collectExpandedRowKeys = (
     rows: TaskTableDisplayRow[],
-    expandedGuids: Set<string>,
+    expandedTaskGuids: Set<string>,
   ): string[] => {
     const result: string[] = []
     const visitRows = (items: TaskTableDisplayRow[]) => {
@@ -2250,7 +2250,7 @@ export default function TaskTable({
         if (!isTaskTableTaskRow(item)) {
           continue
         }
-        if (expandedGuids.has(item.guid)) {
+        if (expandedTaskGuids.has(item.guid)) {
           result.push(item.key)
         }
         if (item.children?.length) {
