@@ -45,10 +45,41 @@ async function testTaskDetailPanelResetsTaskScopedState() {
   )
 }
 
+async function testTaskDetailPanelClosesOnOutsidePointerDown() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.tsx')
+
+  assert.match(
+    source,
+    /const detailPanelRef = useRef<HTMLDivElement \| null>\(null\)/,
+    '任务详情抽屉应该记录自身根节点，用来判断点击是否发生在抽屉外',
+  )
+  assert.match(
+    source,
+    /document\.addEventListener\('pointerdown', handleDocumentPointerDown\)/,
+    '任务详情抽屉应该监听全局 pointerdown，支持点击外部空白处关闭',
+  )
+  assert.match(
+    source,
+    /detailPanelRef\.current\.contains\(target\)/,
+    '点到抽屉内部时不能关闭详情页，避免编辑和滚动被打断',
+  )
+  assert.match(
+    source,
+    /isTaskDetailFloatingTarget\(target\)/,
+    '点到 Popover、Dropdown、Modal 等 portal 浮层时不能误关抽屉',
+  )
+  assert.match(
+    source,
+    /onClose\(\)/,
+    '确认点到抽屉外部后，应该复用现有 onClose 关闭详情页',
+  )
+}
+
 async function main() {
   await testTaskDetailPanelIsNotRemountedOnTaskSwitch()
   await testTaskDetailPanelUsesFixedDrawerShell()
   await testTaskDetailPanelResetsTaskScopedState()
+  await testTaskDetailPanelClosesOnOutsidePointerDown()
   console.log('task detail drawer regressions ok')
 }
 

@@ -101,8 +101,21 @@ const SUBTASK_CREATE_FLOATING_SELECTOR = [
   '.ant-picker-dropdown',
 ].join(',')
 
+const TASK_DETAIL_FLOATING_SELECTOR = [
+  '.ant-popover',
+  '.ant-dropdown',
+  '.ant-select-dropdown',
+  '.ant-picker-dropdown',
+  '.ant-modal-root',
+  '.task-rich-input-overlay',
+].join(',')
+
 function isSubtaskCreateFloatingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(SUBTASK_CREATE_FLOATING_SELECTOR))
+}
+
+function isTaskDetailFloatingTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(TASK_DETAIL_FLOATING_SELECTOR))
 }
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
@@ -628,6 +641,7 @@ export default function TaskDetailPanel({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyActivities, setHistoryActivities] = useState<ApiTaskActivity[]>([])
+  const detailPanelRef = useRef<HTMLDivElement | null>(null)
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
@@ -698,7 +712,8 @@ export default function TaskDetailPanel({
     setSubtaskDue(null)
     setParentTaskChain([])
     setDetailTasklistSections([])
-    setDetailTasklistSectionsLoading(false)
+    // 切换到新任务时，当前清单分组要重新拉取；这里先进入加载态，避免同清单切换时闪出“选择分组”。
+    setDetailTasklistSectionsLoading(Boolean(task.tasklists[0]?.tasklist_guid))
     setActiveSubtaskDueGuid(null)
     setActiveSubtaskAssigneeGuid(null)
     setSelectedFollowerId(undefined)
@@ -716,6 +731,27 @@ export default function TaskDetailPanel({
       detailScrollRef.current.scrollTo({ top: 0 })
     }
   }, [task.guid])
+
+  useEffect(() => {
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+      const isInsideDetailPanel = detailPanelRef.current
+        ? detailPanelRef.current.contains(target)
+        : false
+      if (isInsideDetailPanel || isTaskDetailFloatingTarget(target)) {
+        return
+      }
+
+      // 详情抽屉没有遮罩，点击抽屉外的主页面空白区时复用统一关闭入口。
+      onClose()
+    }
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    return () => document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  }, [onClose])
 
   useEffect(() => {
     if (!currentTasklist) {
@@ -760,7 +796,7 @@ export default function TaskDetailPanel({
     return () => {
       cancelled = true
     }
-  }, [currentTasklist])
+  }, [currentTasklist, task.guid])
 
   useEffect(() => {
     if (!sectionPopoverOpen && sectionSearchValue) {
@@ -1694,6 +1730,7 @@ export default function TaskDetailPanel({
     return (
       <div
         className="detail-panel detail-panel--drawer"
+        ref={detailPanelRef}
         style={{ width: panelWidth, minWidth: panelWidth }}
       >
         <div
@@ -1783,6 +1820,7 @@ export default function TaskDetailPanel({
   return (
     <div
       className="detail-panel detail-panel--drawer"
+      ref={detailPanelRef}
       style={{ width: panelWidth, minWidth: panelWidth }}
     >
       <div

@@ -55,9 +55,26 @@ async function testTaskDetailUsesSameSectionApiSource() {
   )
 }
 
+async function testTaskDetailReloadsSectionsAfterTaskSwitch() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.tsx')
+
+  assert.match(
+    source,
+    /setDetailTasklistSections\(\[\]\)[\s\S]*setDetailTasklistSectionsLoading\(Boolean\(task\.tasklists\[0\]\?\.tasklist_guid\)\)/,
+    '详情抽屉切换任务时会清空当前分组缓存，应该同步进入加载态，避免同清单切任务时短暂显示“选择分组”',
+  )
+
+  assert.match(
+    source,
+    /void listSections\(currentTasklist\.guid\)[\s\S]*\}, \[currentTasklist, task\.guid\]\)/,
+    '详情抽屉在同一个任务清单内切换任务时，也应该重新加载分组，否则被清空的分组缓存不会恢复',
+  )
+}
+
 async function main() {
   await testTaskListLoadsSectionsFromApiForTasklistView()
   await testTaskDetailUsesSameSectionApiSource()
+  await testTaskDetailReloadsSectionsAfterTaskSwitch()
   console.log('task detail section source regressions ok')
 }
 
