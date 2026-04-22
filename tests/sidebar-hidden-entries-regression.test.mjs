@@ -10,13 +10,13 @@ async function testSidebarTopMenuHidesSpecifiedEntries() {
 
   assert.match(
     source,
-    /const topMenuItems: MenuProps\['items'\] = \[[\s\S]*key: 'my-assigned'[\s\S]*key: 'my-followed'[\s\S]*\]/,
-    'Sidebar 顶部主菜单应该保留我负责的和我关注的入口',
+    /const topMenuItems: MenuProps\['items'\] = \[[\s\S]*key: 'my-assigned'[\s\S]*key: 'my-followed'[\s\S]*key: 'activity'[\s\S]*label: '动态'[\s\S]*\]/,
+    'Sidebar 顶部主菜单应该新增动态入口，并保留我负责的和我关注的入口',
   )
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /const topMenuItems: MenuProps\['items'\] = \[[\s\S]*key: 'activity'/,
-    'Sidebar 顶部主菜单不应该再显示动态入口',
+    /HistoryOutlined/,
+    '动态入口应该使用历史记录风格图标，和右侧动态页面保持一致',
   )
   assert.doesNotMatch(
     source,

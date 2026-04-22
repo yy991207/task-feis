@@ -267,6 +267,28 @@ export async function listTaskActivities(
   qs.set('page_size', String(pageSize))
   const resp = await request<PaginatedResponse<ApiTaskActivity> | ApiTaskActivity[]>(
     `api/v1/task-center/tasks/${taskId}/activities?${qs}`,
+  ) 
+  return Array.isArray(resp) ? resp : resp.items
+}
+
+export async function listMyActivities(
+  page = 1,
+  pageSize = 20,
+  eventTypes?: string[],
+  since?: string,
+): Promise<ApiTaskActivity[]> {
+  const qs = new URLSearchParams()
+  qs.set('user_id', appConfig.user_id)
+  qs.set('page', String(page))
+  qs.set('page_size', String(pageSize))
+  if (eventTypes && eventTypes.length > 0) {
+    qs.set('event_types', eventTypes.join(','))
+  }
+  if (since) {
+    qs.set('since', since)
+  }
+  const resp = await request<PaginatedResponse<ApiTaskActivity> | ApiTaskActivity[]>(
+    `api/v1/task-center/activities/me?${qs}`,
   )
   return Array.isArray(resp) ? resp : resp.items
 }

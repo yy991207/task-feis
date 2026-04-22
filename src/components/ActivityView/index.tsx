@@ -1,78 +1,202 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
-import Segmented from 'antd/es/segmented'
-import Tag from 'antd/es/tag'
-import Checkbox from 'antd/es/checkbox'
 import Empty from 'antd/es/empty'
 import Button from 'antd/es/button'
 import Avatar from 'antd/es/avatar'
-import { FilterOutlined, CaretRightOutlined, UserOutlined } from '@ant-design/icons'
+import Spin from 'antd/es/spin'
+import { FilterOutlined, UserOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Task, User } from '@/types/task'
-import { fetchUsers, getCurrentUser, toggleTaskStatus } from '@/mock/api'
+import { listMembers } from '@/services/teamService'
+import { apiTaskToTask, listMyActivities, type ApiTaskActivity } from '@/services/taskService'
+import { getTask } from '@/services/taskService'
+import type { ReactNode } from 'react'
 import './index.less'
 
 const { Title, Text } = Typography
 
 interface ActivityViewProps {
-  tasks: Task[]
   onTaskClick: (task: Task) => void
+  onTaskOpen: (task: Task) => void
   onRefresh: () => void
 }
 
-type ActivitySegment = 'created' | 'updated' | 'mentioned'
+type ActivityGroup = {
+  label: string
+  day: string
+  items: ApiTaskActivity[]
+}
 
-export default function ActivityView({ tasks, onTaskClick, onRefresh }: ActivityViewProps) {
-  const [users, setUsers] = useState<User[]>([])
-  const [segment, setSegment] = useState<ActivitySegment>('created')
-  const currentUser = getCurrentUser()
+function formatActivityDateLabel(date: dayjs.Dayjs): string {
+  const now = dayjs()
+  if (date.isSame(now, 'day')) {
+    return '今天'
+  }
+  if (date.isSame(now.subtract(1, 'day'), 'day')) {
+    return '昨天'
+  }
+  return date.format('M月D日')
+}
 
-  useEffect(() => {
-    fetchUsers().then(setUsers)
-  }, [])
+function groupActivitiesByDate(activities: ApiTaskActivity[]): ActivityGroup[] {
+  const grouped = new Map<string, ApiTaskActivity[]>()
+  for (const activity of activities) {
+    const date = dayjs(activity.created_at)
+    const key = date.format('YYYY-MM-DD')
+    const current = grouped.get(key) ?? []
+    current.push(activity)
+    grouped.set(key, current)
+  }
 
-  const filteredTasks = tasks.filter((task) => {
-    switch (segment) {
-      case 'created':
-        return task.creator.id === currentUser.id
-      case 'updated':
-        return task.creator.id === currentUser.id && task.updated_at !== task.created_at
-      case 'mentioned':
-        return task.members.some(
-          (member) => member.role === 'follower' && member.id === currentUser.id,
-        )
-      default:
-        return true
+  return Array.from(grouped.entries()).map(([key, items]) => {
+    const date = dayjs(key)
+    return {
+      label: formatActivityDateLabel(date),
+      day: date.format('D'),
+      items,
     }
   })
+}
 
-  const getActivityTimestamp = (task: Task): string => {
-    if (segment === 'created') {
-      return task.created_at
+function buildActivitySummary(activity: ApiTaskActivity): string {
+  const payload = activity.payload as Record<string, unknown>
+  const taskTitle =
+    typeof payload.task_title === 'string' && payload.task_title.trim().length > 0
+      ? payload.task_title.trim()
+      : '该任务'
+  const actor = activity.actor_id || '有人'
+
+  switch (activity.event_type) {
+    case 'task.created':
+      return `${actor} 创建了 ${taskTitle}`
+    case 'task.completed':
+      return `${actor} 完成了 ${taskTitle}`
+    case 'task.status_changed':
+      return `${actor} 更新了 ${taskTitle} 的状态`
+    case 'task.description_changed':
+      return `${actor} 修改了 ${taskTitle} 的描述`
+    case 'task.assignee_changed':
+      return `${actor} 更新了 ${taskTitle} 的负责人`
+    case 'comment.created':
+      return `${actor} 在 ${taskTitle} 发了评论`
+    default:
+      return `${actor} 更新了 ${taskTitle}`
+  }
+}
+
+function formatActivityText(activity: ApiTaskActivity): ReactNode {
+  const payload = activity.payload as Record<string, unknown>
+  const fieldLabel =
+    typeof payload.field_name === 'string' && payload.field_name.trim().length > 0
+      ? payload.field_name.trim()
+      : '字段'
+  const value =
+    typeof payload.new_value === 'string'
+      ? payload.new_value
+      : typeof payload.comment_excerpt === 'string'
+        ? payload.comment_excerpt
+        : typeof payload.file_name === 'string'
+          ? payload.file_name
+          : '空'
+
+  switch (activity.event_type) {
+    case 'task.created':
+      return (
+        <>
+          <span className="activity-person">{activity.actor_id}</span>
+          <span> 创建了任务 </span>
+          <span className="activity-task-title">{String(payload.task_title ?? '该任务')}</span>
+        </>
+      )
+    case 'task.description_changed':
+      return (
+        <>
+          <span className="activity-person">{activity.actor_id}</span>
+          <span> 将“{fieldLabel}”修改为：</span>
+          <span className="activity-value">{String(value)}</span>
+        </>
+      )
+    case 'comment.created':
+      return (
+        <>
+          <span className="activity-person">{activity.actor_id}</span>
+          <span> 发表了评论：</span>
+          <span className="activity-value">{String(value)}</span>
+        </>
+      )
+    case 'attachment.uploaded':
+      return (
+        <>
+          <span className="activity-person">{activity.actor_id}</span>
+          <span> 上传了附件：</span>
+          <span className="activity-value">{String(value)}</span>
+        </>
+      )
+    default:
+      return (
+        <>
+          <span className="activity-person">{activity.actor_id}</span>
+          <span> 更新了任务</span>
+        </>
+      )
+  }
+}
+
+export default function ActivityView({
+  onTaskClick,
+  onTaskOpen,
+  onRefresh,
+}: ActivityViewProps) {
+  const [activities, setActivities] = useState<ApiTaskActivity[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    Promise.all([
+      listMyActivities(1, 100),
+      listMembers().catch(() => []),
+    ])
+      .then(([activityList, members]) => {
+        if (cancelled) return
+        setActivities(activityList)
+        setUsers(members.map((member) => ({ id: member.user_id, name: member.user_id })))
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActivities([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
     }
-    return task.updated_at
+  }, [onRefresh])
+
+  const groupedActivities = useMemo(() => groupActivitiesByDate(activities), [activities])
+
+  const resolveUserLabel = (userId: string): string => {
+    const user = users.find((item) => item.id === userId)
+    return user?.name ?? userId
   }
 
-  // 按日期分组（今天 / 昨天 / 更早按日期）
-  const now = dayjs()
-  const grouped = new Map<string, Task[]>()
-  for (const task of filteredTasks) {
-    const d = dayjs(Number(getActivityTimestamp(task)))
-    let label: string
-    if (d.isSame(now, 'day')) label = '今天'
-    else if (d.isSame(now.subtract(1, 'day'), 'day')) label = '昨天'
-    else label = d.format('M月D日')
-    if (!grouped.has(label)) grouped.set(label, [])
-    grouped.get(label)!.push(task)
-  }
-
-  const groupEntries = Array.from(grouped.entries())
-
-  const handleToggleStatus = async (e: React.MouseEvent, task: Task) => {
-    e.stopPropagation()
-    await toggleTaskStatus(task.guid)
-    onRefresh()
+  const handleTaskClick = async (activity: ApiTaskActivity) => {
+    const taskId = activity.task_id
+    if (!taskId) {
+      return
+    }
+    const apiTask = await getTask(taskId)
+    const task = apiTaskToTask(apiTask)
+    onTaskClick(task)
+    onTaskOpen(task)
   }
 
   return (
@@ -84,16 +208,6 @@ export default function ActivityView({ tasks, onTaskClick, onRefresh }: Activity
       </div>
 
       <div className="activity-toolbar">
-        <Segmented
-          size="small"
-          value={segment}
-          onChange={(v) => setSegment(v as ActivitySegment)}
-          options={[
-            { label: '我创建的任务', value: 'created' },
-            { label: '我更新的任务', value: 'updated' },
-            { label: '@我的任务', value: 'mentioned' },
-          ]}
-        />
         <Space className="activity-toolbar-right">
           <Button size="small" type="text" icon={<FilterOutlined />}>
             筛选
@@ -101,81 +215,50 @@ export default function ActivityView({ tasks, onTaskClick, onRefresh }: Activity
         </Space>
       </div>
 
-      {filteredTasks.length === 0 ? (
+      {loading ? (
+        <div className="activity-empty">
+          <Spin size="small" />
+        </div>
+      ) : activities.length === 0 ? (
         <div className="activity-empty">
           <Empty description="暂无动态" />
         </div>
       ) : (
         <div className="activity-list">
-          {groupEntries.map(([label, items]) => (
-            <div key={label} className="activity-group">
+          {groupedActivities.map((group) => (
+            <div key={`${group.label}-${group.day}`} className="activity-group">
               <div className="activity-date">
                 <Text type="secondary" className="activity-date-label">
-                  {label}
+                  {group.label}
                 </Text>
-                <Tag className="activity-date-count">{items.length}</Tag>
+                <div className="activity-date-day">{group.day}</div>
               </div>
-              {items.map((task) => {
-                const assignees = task.members.filter(
-                  (m) => m.role === 'assignee',
-                )
-                const operator = users.find((u) => u.id === task.creator.id)
-                return (
-                  <div
-                    key={task.guid}
-                    className="activity-item"
-                    onClick={() => onTaskClick(task)}
-                  >
-                    <div className="activity-time">
-                      {dayjs(Number(getActivityTimestamp(task))).format('HH:mm')}
-                    </div>
-                    <div className="activity-meta">
-                      <Avatar
-                        size={18}
-                        style={{ backgroundColor: '#7b67ee', fontSize: 10 }}
-                      >
-                        {(operator?.name ?? 'U').slice(0, 1)}
+
+              <div className="activity-items">
+                {group.items.map((activity) => {
+                  const summary = buildActivitySummary(activity)
+                  return (
+                    <div
+                      key={activity.activity_id}
+                      className="activity-item"
+                      onClick={() => void handleTaskClick(activity)}
+                    >
+                      <div className="activity-time">
+                        {dayjs(activity.created_at).format('HH:mm')}
+                      </div>
+                      <Avatar size={20} className="activity-avatar">
+                        {resolveUserLabel(activity.actor_id).slice(0, 1).toUpperCase()}
                       </Avatar>
-                      <Text type="secondary" className="activity-operator">
-                        {operator?.name ?? '未知用户'}
-                      </Text>
-                      <Text type="secondary">创建了该任务</Text>
-                    </div>
-                    <div className="activity-task">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onClick={(e) => void handleToggleStatus(e, task)}
-                      />
-                      {task.subtask_count > 0 && (
-                        <CaretRightOutlined className="subtask-icon" />
-                      )}
-                      <span
-                        className={
-                          task.status === 'done' ? 'task-summary done' : 'task-summary'
-                        }
-                      >
-                        {task.summary}
-                      </span>
-                      {assignees.length > 0 && (
-                        <div className="assignee-chip">
-                          <Avatar
-                            size={18}
-                            style={{ backgroundColor: '#7b67ee', fontSize: 10 }}
-                          >
-                            {(assignees[0].name ?? 'U').slice(0, 1)}
-                          </Avatar>
-                          <Text style={{ fontSize: 12 }}>
-                            {assignees[0].name ?? assignees[0].id}
-                          </Text>
+                      <div className="activity-content">
+                        <div className="activity-summary">{summary}</div>
+                        <div className="activity-detail">
+                          {formatActivityText(activity)}
                         </div>
-                      )}
-                      {assignees.length === 0 && (
-                        <UserOutlined className="assignee-empty" />
-                      )}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           ))}
         </div>
