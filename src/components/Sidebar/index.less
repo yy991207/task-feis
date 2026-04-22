@@ -168,6 +168,13 @@
     width: 100%;
     min-height: 22px;
 
+    .group-title-main {
+      flex: 1;
+      min-width: 0;
+      align-items: center;
+      overflow: hidden;
+    }
+
     .group-name {
       flex: 1;
       min-width: 0;
@@ -269,6 +276,25 @@
     }
   }
 
+  .sidebar-drop-hint-tag {
+    margin-inline-start: 2px;
+    border-radius: 999px;
+    padding-inline: 8px;
+    height: 22px;
+    line-height: 22px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #1456f0;
+    background: #e8f0ff;
+    flex-shrink: 0;
+  }
+
+  .tasklist-drag-handle {
+    width: 16px;
+    font-size: 13px;
+    color: #b0b7c3;
+  }
+
   .ant-tree .ant-tree-node-content-wrapper:has(.tasklist-title.active) {
     background: #e1eaff;
   }
@@ -327,11 +353,15 @@
   }
 }
 
-// Drag & drop visual indicators — rely on antd's native drop-indicator,
-// just tweak the drag handle icon + dragging opacity.
 .tasklist-tree-wrap {
   .ant-tree-treenode.dragging {
-    opacity: 0.4;
+    opacity: 0.58;
+
+    > .ant-tree-node-content-wrapper {
+      background: linear-gradient(135deg, #eef4ff 0%, #e6efff 100%) !important;
+      box-shadow: 0 10px 24px rgba(20, 86, 240, 0.12);
+      border: 1px solid rgba(51, 112, 255, 0.18);
+    }
   }
 
   .ant-tree .ant-tree-draggable-icon {
@@ -340,22 +370,78 @@
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transition: opacity 0.15s;
-    color: #bfbfbf;
+    transition: opacity 0.15s, color 0.15s, transform 0.15s;
+    color: #b0b7c3;
     cursor: grab;
   }
 
   .ant-tree .ant-tree-treenode:hover .ant-tree-draggable-icon {
     opacity: 1;
+    color: #6b778c;
   }
 
   .ant-tree .ant-tree-treenode .ant-tree-draggable-icon:active {
     cursor: grabbing;
   }
 
-  // antd's native drop indicator is `.ant-tree-drop-indicator`; keep it visible
+  .ant-tree .ant-tree-treenode.drop-target {
+    > .ant-tree-node-content-wrapper {
+      background: #f3f7ff !important;
+      box-shadow: inset 0 0 0 1px rgba(51, 112, 255, 0.18);
+    }
+  }
+
+  .ant-tree .ant-tree-treenode.drop-target::after {
+    content: '';
+    position: absolute;
+    left: 18px;
+    right: 10px;
+    border-radius: 999px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .ant-tree .ant-tree-treenode.drop-target-gap-top::after {
+    top: -3px;
+    opacity: 1;
+    border-top: 2px solid #3370ff;
+  }
+
+  .ant-tree .ant-tree-treenode.drop-target-gap-bottom::after {
+    bottom: -3px;
+    opacity: 1;
+    border-bottom: 2px solid #3370ff;
+  }
+
+  .ant-tree .ant-tree-treenode.drop-target-inner::after {
+    top: 4px;
+    bottom: 4px;
+    opacity: 1;
+    border: 1px dashed rgba(51, 112, 255, 0.5);
+    background: rgba(51, 112, 255, 0.05);
+  }
+
+  .drag-drop-indicator {
+    position: absolute;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #3370ff 0%, #69a1ff 100%);
+    box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.14);
+    pointer-events: none;
+    z-index: 2;
+
+    &.gap-top {
+      top: -4px;
+    }
+
+    &.gap-bottom,
+    &.inner {
+      bottom: -4px;
+    }
+  }
+
   .ant-tree .ant-tree-drop-indicator {
-    background-color: #3370ff;
-    height: 2px;
+    background-color: transparent;
   }
 }

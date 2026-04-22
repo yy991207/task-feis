@@ -11,6 +11,7 @@ import Badge from 'antd/es/badge'
 import Tooltip from 'antd/es/tooltip'
 import Flex from 'antd/es/flex'
 import Space from 'antd/es/space'
+import Tag from 'antd/es/tag'
 import Select from 'antd/es/select'
 import Spin from 'antd/es/spin'
 import type { DataNode, TreeProps } from 'antd/es/tree'
@@ -35,6 +36,7 @@ import {
   ShareAltOutlined,
   InboxOutlined,
   StopOutlined,
+  DragOutlined,
 } from '@ant-design/icons'
 import type { Tasklist } from '@/types/task'
 import NotificationBell from '@/components/NotificationBell'
@@ -92,9 +94,59 @@ interface SidebarProps {
 }
 
 type CreatingTarget = 'root' | string
+type SidebarDragPlacement = 'gap-top' | 'gap-bottom' | 'inner'
 
 const encodeTasklistKey = (guid: string) => `tl:${guid}`
 const encodeGroupKey = (id: string) => `grp:${id}`
+
+function getSidebarDropHintText(nodeKey: string, placement: SidebarDragPlacement): string {
+  if (nodeKey === 'root') {
+    return placement === 'inner' ? '放入默认分组' : placement === 'gap-top' ? '插到上方' : '插到下方'
+  }
+  if (nodeKey.startsWith('grp:')) {
+    return placement === 'inner' ? '放入此分组' : placement === 'gap-top' ? '插到上方' : '插到下方'
+  }
+  return placement === 'gap-top' ? '插到前面' : placement === 'gap-bottom' ? '插到后面' : '拖到这里'
+}
+
+function buildSidebarDragNodeClassName(
+  nodeKey: string,
+  draggingTasklistKey: string | null,
+  dropIndicatorState: {
+    key: string
+    dropPosition: -1 | 0 | 1 | null
+  } | null,
+  baseClassName?: string,
+): string {
+  const classNames = [baseClassName]
+  if (draggingTasklistKey === nodeKey) {
+    classNames.push('dragging')
+  }
+  if (dropIndicatorState?.key === nodeKey) {
+    classNames.push('drop-target')
+    if (dropIndicatorState.dropPosition === -1) {
+      classNames.push('drop-target-gap-top')
+    } else if (dropIndicatorState.dropPosition === 1) {
+      classNames.push('drop-target-gap-bottom')
+    } else {
+      classNames.push('drop-target-inner')
+    }
+  }
+  return classNames.filter(Boolean).join(' ')
+}
+
+function getSidebarDropPlacement(dropPosition: -1 | 0 | 1 | null): SidebarDragPlacement | null {
+  if (dropPosition === -1) {
+    return 'gap-top'
+  }
+  if (dropPosition === 1) {
+    return 'gap-bottom'
+  }
+  if (dropPosition === 0) {
+    return 'inner'
+  }
+  return null
+}
 
 // 刷新后默认展示完整清单树：根清单区和所有清单分组都展开。
 const buildDefaultExpandedKeys = (groups: ProjectGroup[]): React.Key[] => [
@@ -140,6 +192,11 @@ export default function Sidebar({
   const [shareTeamLoading, setShareTeamLoading] = useState(false)
   const [shareSubmitting, setShareSubmitting] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
+  const [draggingTasklistKey, setDraggingTasklistKey] = useState<string | null>(null)
+  const [dropIndicatorState, setDropIndicatorState] = useState<{
+    key: string
+    dropPosition: -1 | 0 | 1 | null
+  } | null>(null)
   const shareRequestIdRef = useRef(0)
 
   useEffect(() => {
@@ -574,9 +631,20 @@ export default function Sidebar({
     }
     return (
       <Flex align="center" justify="space-between" className="group-title-row">
-        <Text ellipsis className="group-name">
-          {group.name}
-        </Text>
+        <Space size={8} className="group-title-main">
+          <Text ellipsis className="group-name">
+            {group.name}
+          </Text>
+          {dropIndicatorState?.key === encodeGroupKey(group.group_id) &&
+            getSidebarDropPlacement(dropIndicatorState.dropPosition) && (
+              <Tag bordered={false} className="sidebar-drop-hint-tag">
+                {getSidebarDropHintText(
+                  encodeGroupKey(group.group_id),
+                  getSidebarDropPlacement(dropIndicatorState.dropPosition)!,
+                )}
+              </Tag>
+            )}
+        </Space>
         <Space size={2} className="group-actions">
           <Dropdown
             menu={buildGroupActionMenu(group)}
@@ -613,9 +681,20 @@ export default function Sidebar({
 
   const renderRootTitle = () => (
     <Flex align="center" justify="space-between" className="group-title-row">
-      <Text ellipsis className="group-name">
-        任务清单
-      </Text>
+      <Space size={8} className="group-title-main">
+        <Text ellipsis className="group-name">
+          任务清单
+        </Text>
+        {dropIndicatorState?.key === 'root' &&
+          getSidebarDropPlacement(dropIndicatorState.dropPosition) && (
+            <Tag bordered={false} className="sidebar-drop-hint-tag">
+              {getSidebarDropHintText(
+                'root',
+                getSidebarDropPlacement(dropIndicatorState.dropPosition)!,
+              )}
+            </Tag>
+          )}
+      </Space>
       <Space size={2} className="group-actions">
         <Button
           type="text"
@@ -665,6 +744,15 @@ export default function Sidebar({
       >
         <Badge color="#3370ff" />
         <span className="tasklist-name">{proj.name}</span>
+        {dropIndicatorState?.key === encodeTasklistKey(proj.project_id) &&
+          getSidebarDropPlacement(dropIndicatorState.dropPosition) && (
+            <Tag bordered={false} className="sidebar-drop-hint-tag">
+              {getSidebarDropHintText(
+                encodeTasklistKey(proj.project_id),
+                getSidebarDropPlacement(dropIndicatorState.dropPosition)!,
+              )}
+            </Tag>
+          )}
         <Dropdown
           menu={buildTasklistActionMenu(proj)}
           trigger={['click']}
@@ -691,6 +779,11 @@ export default function Sidebar({
       key: encodeTasklistKey(proj.project_id),
       title: renderProjectTitle(proj),
       isLeaf: true,
+      className: buildSidebarDragNodeClassName(
+        encodeTasklistKey(proj.project_id),
+        draggingTasklistKey,
+        dropIndicatorState,
+      ),
     }))
 
     const rootNode: DataNode = {
@@ -698,7 +791,12 @@ export default function Sidebar({
       title: renderRootTitle(),
       children: rootChildren,
       selectable: false,
-      className: 'tree-section',
+      className: buildSidebarDragNodeClassName(
+        'root',
+        draggingTasklistKey,
+        dropIndicatorState,
+        'tree-section',
+      ),
     }
 
     const nonDefaultGroups = [...groups]
@@ -710,6 +808,11 @@ export default function Sidebar({
         key: encodeTasklistKey(proj.project_id),
         title: renderProjectTitle(proj),
         isLeaf: true,
+        className: buildSidebarDragNodeClassName(
+          encodeTasklistKey(proj.project_id),
+          draggingTasklistKey,
+          dropIndicatorState,
+        ),
       }))
 
       return {
@@ -717,7 +820,12 @@ export default function Sidebar({
         title: renderGroupTitle(group),
         children,
         selectable: false,
-        className: 'tree-section',
+        className: buildSidebarDragNodeClassName(
+          encodeGroupKey(group.group_id),
+          draggingTasklistKey,
+          dropIndicatorState,
+          'tree-section',
+        ),
         icon: ({ expanded }: { expanded?: boolean }) =>
           expanded ? <FolderOpenOutlined /> : <FolderOutlined />,
       }
@@ -738,7 +846,12 @@ export default function Sidebar({
             ),
             children: [],
             selectable: false,
-            className: 'tree-section',
+            className: buildSidebarDragNodeClassName(
+              encodeGroupKey(draftGroupUid),
+              draggingTasklistKey,
+              dropIndicatorState,
+              'tree-section',
+            ),
           },
         ]
       : []
@@ -756,6 +869,8 @@ export default function Sidebar({
     openedGroupMenuId,
     openedProjectMenuId,
     activeKey,
+    draggingTasklistKey,
+    dropIndicatorState,
   ])
 
   const selectableTreeKeySet = useMemo(() => {
@@ -972,10 +1087,13 @@ export default function Sidebar({
           onExpand={handleExpand}
           blockNode
           showLine={false}
-          draggable={{ icon: true, nodeDraggable: (node) => {
-            const k = String(node.key)
-            return k.startsWith('tl:') || k.startsWith('grp:')
-          } }}
+          draggable={{
+            icon: <DragOutlined className="tasklist-drag-handle" />,
+            nodeDraggable: (node) => {
+              const k = String(node.key)
+              return k.startsWith('tl:') || k.startsWith('grp:')
+            },
+          }}
           allowDrop={({ dragNode, dropNode, dropPosition }) => {
             const dragKey = String(dragNode.key)
             const dropKey = String(dropNode.key)
@@ -994,6 +1112,53 @@ export default function Sidebar({
               return false
             }
             return false
+          }}
+          dropIndicatorRender={(props) => {
+            if (!dropIndicatorState) {
+              return null
+            }
+            const placement =
+              props.dropPosition === -1
+                ? 'drag-drop-indicator gap-top'
+                : props.dropPosition === 1
+                  ? 'drag-drop-indicator gap-bottom'
+                  : 'drag-drop-indicator inner'
+            return (
+              <div
+                style={{
+                  left:
+                    props.dropPosition === 0
+                      ? props.indent + 8
+                      : -props.dropLevelOffset * props.indent + 8,
+                  right: 10,
+                }}
+                className={placement}
+              />
+            )
+          }}
+          onDragStart={(info) => {
+            setDraggingTasklistKey(String(info.node.key))
+            setDropIndicatorState(null)
+          }}
+          onDragOver={(info) => {
+            const nodeKey = String(info.node.key)
+            const nativeEvent = info.event.nativeEvent as DragEvent
+            const dropPosition =
+              typeof nativeEvent.offsetY === 'number'
+                ? nativeEvent.offsetY < 10
+                  ? -1
+                  : nativeEvent.offsetY > 24
+                    ? 1
+                    : 0
+                : 0
+            setDropIndicatorState({
+              key: nodeKey,
+              dropPosition,
+            })
+          }}
+          onDragEnd={() => {
+            setDraggingTasklistKey(null)
+            setDropIndicatorState(null)
           }}
           onDrop={handleDrop}
           switcherIcon={({ expanded }) =>

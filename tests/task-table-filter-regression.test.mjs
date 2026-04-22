@@ -139,7 +139,12 @@ async function testFilterRowsUseAndLogicByDefault() {
   assert.match(
     source,
     /const activeFilterCount = activeFilterConditions\.length/,
-    '工具栏筛选角标应该显示当前有效筛选条件数量',
+    '任务过滤逻辑应该继续维护当前有效筛选条件数量，避免把空值条件算进真实过滤',
+  )
+  assert.match(
+    source,
+    /const displayFilterCount = filterConditions\.length === 1 && isFilterConditionPristine\(filterConditions\[0\], defaultFilterField\)\s*\?\s*0\s*:\s*filterConditions\.length/,
+    '工具栏筛选按钮应该按当前条件行数显示数量，同时忽略单个默认空白条件',
   )
 }
 

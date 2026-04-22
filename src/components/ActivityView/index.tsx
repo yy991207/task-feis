@@ -6,7 +6,6 @@ import Spin from 'antd/es/spin'
 import message from 'antd/es/message'
 import dayjs from 'dayjs'
 import type { Task, User } from '@/types/task'
-import { appConfig } from '@/config/appConfig'
 import { listMembers } from '@/services/teamService'
 import { normalizeRichContent } from '@/components/TaskRichInput'
 import {
@@ -29,6 +28,11 @@ interface ActivityViewProps {
 type ActivityGroup = {
   label: string
   day: string
+  timeGroups: ActivityTimeGroup[]
+}
+
+type ActivityTimeGroup = {
+  time: string
   items: ApiTaskActivity[]
 }
 
@@ -41,6 +45,21 @@ function formatActivityDateLabel(date: dayjs.Dayjs): string {
     return '昨天'
   }
   return date.format('M月D日')
+}
+
+function groupActivitiesByTime(activities: ApiTaskActivity[]): ActivityTimeGroup[] {
+  const grouped = new Map<string, ApiTaskActivity[]>()
+  for (const activity of activities) {
+    const time = dayjs(activity.created_at).format('HH:mm')
+    const current = grouped.get(time) ?? []
+    current.push(activity)
+    grouped.set(time, current)
+  }
+
+  return Array.from(grouped.entries()).map(([time, items]) => ({
+    time,
+    items,
+  }))
 }
 
 function groupActivitiesByDate(activities: ApiTaskActivity[]): ActivityGroup[] {
@@ -58,7 +77,7 @@ function groupActivitiesByDate(activities: ApiTaskActivity[]): ActivityGroup[] {
     return {
       label: formatActivityDateLabel(date),
       day: date.format('D'),
-      items,
+      timeGroups: groupActivitiesByTime(items),
     }
   })
 }
@@ -237,7 +256,12 @@ export default function ActivityView({
       .then(([activityList, members]) => {
         if (cancelled) return
         setActivities(activityList)
-        setUsers(members.map((member) => ({ id: member.user_id, name: member.user_id })))
+        setUsers(
+          members.map((member) => ({
+            id: member.user_id,
+            name: member.user_name ?? member.user_id,
+          })),
+        )
       })
       .catch(() => {
         if (!cancelled) {
@@ -259,9 +283,6 @@ export default function ActivityView({
   const groupedActivities = useMemo(() => groupActivitiesByDate(activities), [activities])
 
   const resolveUserLabel = (userId: string): string => {
-    if (userId === appConfig.user_id) {
-      return '我'
-    }
     const user = users.find((item) => item.id === userId)
     return user?.name ?? userId
   }
@@ -309,31 +330,38 @@ export default function ActivityView({
               </div>
 
               <div className="activity-items">
-                {group.items.map((activity) => {
-                  const actorLabel = resolveUserLabel(activity.actor_id)
-                  return (
-                    <div
-                      key={activity.activity_id}
-                      className="activity-item"
-                      onClick={() => void handleTaskClick(activity)}
-                    >
-                      <div className="activity-time">
-                        {dayjs(activity.created_at).format('HH:mm')}
-                      </div>
-                      <Avatar size={24} className="activity-avatar">
-                        {actorLabel.slice(0, 1).toUpperCase()}
-                      </Avatar>
-                      <div className="activity-content">
-                        <div className="activity-message" title={normalizeActivityValue(activity.payload)}>
-                          {buildActivityMessage(activity, actorLabel)}
-                        </div>
-                        <div className="activity-detail">
-                          {formatActivityDetail(activity, actorLabel)}
-                        </div>
-                      </div>
+                {group.timeGroups.map((timeGroup) => (
+                  <div
+                    key={`${group.label}-${group.day}-${timeGroup.time}`}
+                    className="activity-time-group"
+                  >
+                    <div className="activity-time">{timeGroup.time}</div>
+                    <div className="activity-time-group-items">
+                      {timeGroup.items.map((activity) => {
+                        const actorLabel = resolveUserLabel(activity.actor_id)
+                        return (
+                          <div
+                            key={activity.activity_id}
+                            className="activity-item"
+                            onClick={() => void handleTaskClick(activity)}
+                          >
+                            <Avatar size={24} className="activity-avatar">
+                              {actorLabel.slice(0, 1).toUpperCase()}
+                            </Avatar>
+                            <div className="activity-content">
+                              <div className="activity-message" title={normalizeActivityValue(activity.payload)}>
+                                {buildActivityMessage(activity, actorLabel)}
+                              </div>
+                              <div className="activity-detail">
+                                {formatActivityDetail(activity, actorLabel)}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           ))}

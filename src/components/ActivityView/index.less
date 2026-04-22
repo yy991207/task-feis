@@ -54,31 +54,49 @@
 .activity-items {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  min-width: 0;
+}
+
+.activity-time-group {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.activity-time-group + .activity-time-group {
+  margin-top: 18px;
+}
+
+.activity-time {
+  color: #8f959e;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-time-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-width: 0;
 }
 
 .activity-item {
   display: grid;
-  grid-template-columns: 52px 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: 12px;
   align-items: flex-start;
   min-width: 0;
-  padding: 0;
+  padding: 2px 0;
   cursor: pointer;
   transition: background 0.1s;
   border-radius: 8px;
 
   &:hover {
     background: #f7f8fa;
-  }
-
-  .activity-time {
-    color: #8f959e;
-    font-size: 14px;
-    line-height: 22px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
   }
 
   .activity-avatar {

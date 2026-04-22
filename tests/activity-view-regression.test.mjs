@@ -35,6 +35,31 @@ async function testActivityViewIsRealDataDriven() {
   )
   assert.match(
     source,
+    /name: member\.user_name \?\? member\.user_id/,
+    '动态页成员名应该优先显示真实 user_name，不能再只回落到 user_id',
+  )
+  assert.match(
+    source,
+    /function groupActivitiesByTime\(activities: ApiTaskActivity\[\]\)/,
+    '动态页应该先把同一分钟的动态合并成时间组，再做渲染',
+  )
+  assert.match(
+    source,
+    /timeGroups: groupActivitiesByTime\(items\)/,
+    '日期分组下应该继续按分钟生成时间组，方便同一时间的记录合并显示',
+  )
+  assert.match(
+    source,
+    /className="activity-time-group"/,
+    '动态页应该渲染分钟级分组容器，做出同时间记录共用一个时间栏的布局',
+  )
+  assert.match(
+    source,
+    /className="activity-time-group-items"/,
+    '动态页应该把同一分钟的多条记录放进同一个内容栏里',
+  )
+  assert.match(
+    source,
     /onTaskOpen/,
     '动态记录点击后应该能把对应 task 交给详情抽屉打开',
   )
@@ -60,6 +85,11 @@ async function testActivityViewIsRealDataDriven() {
   )
   assert.doesNotMatch(
     source,
+    /return '我'/,
+    '动态页当前用户应该显示真实 user_name，不应该再特殊显示“我”',
+  )
+  assert.doesNotMatch(
+    source,
     /FilterOutlined/,
     '动态页顶部不应该再显示筛选按钮',
   )
@@ -80,8 +110,23 @@ async function testActivityViewMatchesReferenceDensity() {
   )
   assert.match(
     styleSource,
-    /\.activity-item \{[\s\S]*grid-template-columns: 52px 24px minmax\(0, 1fr\)/,
-    '每条动态应该保留时间列、头像列和正文列三栏布局',
+    /\.activity-time-group \{[\s\S]*grid-template-columns: 52px minmax\(0, 1fr\)/,
+    '同一分钟的动态应该共用一个时间栏，外层先按时间和内容两栏布局',
+  )
+  assert.match(
+    styleSource,
+    /\.activity-time-group \+ \.activity-time-group \{[\s\S]*margin-top: 18px;/,
+    '不同时间栏之间应该拉开层级间距，避免整页挤成一片',
+  )
+  assert.match(
+    styleSource,
+    /\.activity-item \{[\s\S]*grid-template-columns: 24px minmax\(0, 1fr\)/,
+    '时间组内部的单条动态应该保留头像列和正文列两栏布局',
+  )
+  assert.match(
+    styleSource,
+    /\.activity-time-group-items \{[\s\S]*gap: 12px;/,
+    '同一分钟内的多条动态应该更紧凑地堆叠在一个组里',
   )
   assert.match(
     styleSource,

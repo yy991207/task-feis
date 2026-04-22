@@ -111,6 +111,11 @@ async function testTaskDetailUsesProfileDisplay() {
     /setAvailableUsers\(members\.map\(mapTeamMemberToUser\)\)/,
     '详情页团队成员列表应该用 user_name 和 avatar_url 转成前端 User',
   )
+  assert.doesNotMatch(
+    source,
+    /const resolveHistoryUserLabel = \(userId: string\): string => \{[\s\S]*return '我'/,
+    '详情页历史记录里的当前用户应该显示真实 user_name，不应该再特殊显示“我”',
+  )
   assert.match(
     source,
     /const authorUser = resolveCommentAuthorUser\(comment\)/,
@@ -133,10 +138,31 @@ async function testTaskDetailUsesProfileDisplay() {
   )
 }
 
+async function testTaskTableUsesProfileDisplay() {
+  const source = await readSource('../src/components/TaskTable/index.tsx')
+
+  assert.match(
+    source,
+    /setUsers\(\s*members\.map\(\(m\) => \(\{[\s\S]*name: m\.user_name \?\? m\.user_id,[\s\S]*avatar: m\.avatar_url \?\? undefined/,
+    '主页面团队成员列表应该把 user_name 和 avatar_url 映射到前端 User，不能把 name 写成 user_id',
+  )
+  assert.match(
+    source,
+    /const selectedUsers = \(value \?\? \[\]\)[\s\S]*const matchedMember = membersById\.get\(id\)[\s\S]*matchedMember \?\? matchedUser/,
+    '主页面负责人浮窗应该优先使用任务成员里的 user_name，再兜底团队成员列表',
+  )
+  assert.match(
+    source,
+    /const creatorUser = \{[\s\S]*name: record\.creator\.name \?\? users\.find\(\(u\) => u\.id === record\.creator\.id\)\?\.name \?\? record\.creator\.id,[\s\S]*avatar: record\.creator\.avatar \?\? users\.find\(\(u\) => u\.id === record\.creator\.id\)\?\.avatar/,
+    '主页面创建人 Tooltip 应该优先使用任务里的 creator_name，再兜底团队成员列表',
+  )
+}
+
 async function main() {
   await testApiTypesAcceptUserProfileFields()
   await testTaskServiceMapsProfileFields()
   await testTaskDetailUsesProfileDisplay()
+  await testTaskTableUsesProfileDisplay()
   console.log('task detail user profile regressions ok')
 }
 

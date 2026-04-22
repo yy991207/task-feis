@@ -95,7 +95,7 @@ async function testFilterPanelNoLongerUsesLegacyCheckboxes() {
   )
 }
 
-async function testFilterBadgeUsesInlineCountLabel() {
+async function testFilterCountUsesInlinePillLabel() {
   const source = await readTaskTableSource()
 
   assert.doesNotMatch(
@@ -105,8 +105,23 @@ async function testFilterBadgeUsesInlineCountLabel() {
   )
   assert.match(
     source,
-    /筛选\s*\{activeFilterCount\}/,
-    '筛选按钮应该把条件数量直接显示在按钮文字里',
+    /<span>筛选<\/span>[\s\S]*<span className="toolbar-filter-count">\{displayFilterCount\}<\/span>/,
+    '筛选按钮应该把当前条件行数作为独立数量块显示出来',
+  )
+  assert.match(
+    source,
+    /const displayFilterCount = filterConditions\.length === 1 && isFilterConditionPristine\(filterConditions\[0\], defaultFilterField\)\s*\?\s*0\s*:\s*filterConditions\.length/,
+    '筛选按钮数量应该按条件行数展示，但单个默认空白条件不计数',
+  )
+}
+
+async function testFilterPopoverUsesTransparentOuterShell() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /<Popover trigger="click" placement="bottomLeft" overlayClassName="task-filter-popover" content=\{filterPanel\}>/,
+    '筛选浮层应该单独挂类名，方便去掉外层默认边框和阴影',
   )
 }
 
@@ -131,7 +146,8 @@ async function main() {
   await testSectionGroupDropdownSupportsMultiSectionFiltering()
   await testGroupDropdownUsesSerialMenuLayout()
   await testFilterPanelNoLongerUsesLegacyCheckboxes()
-  await testFilterBadgeUsesInlineCountLabel()
+  await testFilterCountUsesInlinePillLabel()
+  await testFilterPopoverUsesTransparentOuterShell()
   await testGroupedTaskRowsUseSectionScopedKeys()
   console.log('task table toolbar regressions ok')
 }

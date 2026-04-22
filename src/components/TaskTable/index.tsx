@@ -67,6 +67,7 @@ import {
   PriorityColor,
   type Task,
   type User,
+  type Member,
   type Tasklist,
   type Section,
   type CustomFieldDef,
@@ -450,6 +451,15 @@ function createDefaultFilterCondition(field: FilterFieldConfig): FilterCondition
   }
 }
 
+function isFilterConditionPristine(condition: FilterCondition, field: FilterFieldConfig): boolean {
+  const defaultOperator = getFilterOperatorsByFieldType(field.type)[0]?.key ?? 'contains'
+  return condition.fieldKey === field.key
+    && condition.operator === defaultOperator
+    && condition.dateMode === (field.type === 'date' ? 'custom' : undefined)
+    && !normalizeFilterTextValue(condition.value)
+    && !normalizeFilterTextValue(condition.endValue)
+}
+
 function normalizeFilterTextValue(value: string | string[] | undefined): string {
   if (Array.isArray(value)) {
     return value[0] ?? ''
@@ -766,6 +776,7 @@ interface AssigneePickerProps {
   open: boolean
   value?: string[]
   users: User[]
+  taskMembers?: Member[]
   placeholderIcon: React.ReactNode
   isTasklistView: boolean
   triggerClassName?: string
@@ -778,6 +789,7 @@ function AssigneePicker({
   open,
   value,
   users,
+  taskMembers,
   placeholderIcon,
   isTasklistView,
   triggerClassName,
@@ -787,8 +799,26 @@ function AssigneePicker({
 }: AssigneePickerProps) {
   const popupContainerRef = useRef<HTMLDivElement | null>(null)
   const [selectOpen, setSelectOpen] = useState(open)
+  const membersById = useMemo(
+    () =>
+      new Map(
+        (taskMembers ?? []).map((member) => [
+          member.id,
+          {
+            id: member.id,
+            name: member.name ?? member.id,
+            avatar: member.avatar,
+          },
+        ]),
+      ),
+    [taskMembers],
+  )
   const selectedUsers = (value ?? [])
-    .map((id) => users.find((user) => user.id === id) ?? { id, name: id })
+    .map((id) => {
+      const matchedMember = membersById.get(id)
+      const matchedUser = users.find((user) => user.id === id)
+      return matchedMember ?? matchedUser ?? { id, name: id }
+    })
 
   const handlePopoverOpenChange = (open: boolean) => {
     setSelectOpen(open)
@@ -1309,6 +1339,7 @@ export default function TaskTable({
     () => new Map(filterFieldConfigs.map((field) => [field.key, field])),
     [filterFieldConfigs],
   )
+  const defaultFilterField = filterFieldConfigs[0] ?? systemFilterFieldConfigs[0]
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>(() => [
     createDefaultFilterCondition(systemFilterFieldConfigs[0]),
   ])
@@ -1316,7 +1347,13 @@ export default function TaskTable({
   useEffect(() => {
     listMembers()
       .then((members) =>
-        setUsers(members.map((m) => ({ id: m.user_id, name: m.user_id }))),
+        setUsers(
+          members.map((m) => ({
+            id: m.user_id,
+            name: m.user_name ?? m.user_id,
+            avatar: m.avatar_url ?? undefined,
+          })),
+        ),
       )
       .catch(() => {})
   }, [])
@@ -2237,7 +2274,10 @@ export default function TaskTable({
     }
   }
 
-  const activeFilterCount = activeFilterConditions.length
+  // 工具栏数量展示“已添加的条件行数”，但保留单个初始空白行不计数。
+  const displayFilterCount = filterConditions.length === 1 && isFilterConditionPristine(filterConditions[0], defaultFilterField)
+    ? 0
+    : filterConditions.length
   const taskCreateMotionStyle = {
     ['--task-create-duration' as string]: token.motionDurationMid,
     ['--task-create-ease' as string]: token.motionEaseOutBack,
@@ -2316,22 +2356,22 @@ export default function TaskTable({
   const handleAddFilterCondition = useCallback(() => {
     setFilterConditions((prev) => [
       ...prev,
-      createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0]),
+      createDefaultFilterCondition(defaultFilterField),
     ])
-  }, [filterFieldConfigs])
+  }, [defaultFilterField])
 
   const handleRemoveFilterCondition = useCallback((conditionId: string) => {
     setFilterConditions((prev) => {
       if (prev.length === 1) {
-        return [createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0])]
+        return [createDefaultFilterCondition(defaultFilterField)]
       }
       return prev.filter((condition) => condition.id !== conditionId)
     })
-  }, [filterFieldConfigs])
+  }, [defaultFilterField])
 
   const handleResetFilterConditions = useCallback(() => {
-    setFilterConditions([createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0])])
-  }, [filterFieldConfigs])
+    setFilterConditions([createDefaultFilterCondition(defaultFilterField)])
+  }, [defaultFilterField])
 
   function renderFilterValueControl(condition: FilterCondition) {
     const field = filterFieldConfigMap.get(condition.fieldKey)
@@ -3192,10 +3232,15 @@ export default function TaskTable({
         if (!isTaskTableTaskRow(record)) {
           return null
         }
-        const creatorUser = users.find((u) => u.id === record.creator.id)
+        const creatorUser = {
+          id: record.creator.id,
+          name: record.creator.name ?? users.find((u) => u.id === record.creator.id)?.name ?? record.creator.id,
+          avatar: record.creator.avatar ?? users.find((u) => u.id === record.creator.id)?.avatar,
+        }
         return creatorUser ? (
           <Tooltip title={creatorUser.name}>
             <Avatar
+              src={creatorUser.avatar}
               size={20}
               style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
             >
@@ -3519,16 +3564,16 @@ export default function TaskTable({
                   {statusFilterLabelMap[statusFilter]}
                 </Button>
               </Dropdown>
-              <Popover trigger="click" placement="bottomLeft" content={filterPanel}>
+              <Popover trigger="click" placement="bottomLeft" overlayClassName="task-filter-popover" content={filterPanel}>
                 <Button
                   size="small"
                   type="text"
-                  className={`toolbar-trigger-btn toolbar-filter-btn ${activeFilterCount > 0 ? 'toolbar-filter-btn-active' : ''}`}
+                  className={`toolbar-trigger-btn toolbar-filter-btn ${displayFilterCount > 0 ? 'toolbar-filter-btn-active' : ''}`}
                   icon={<FilterOutlined />}
                 >
                   <span>筛选</span>
-                  {activeFilterCount > 0 && (
-                    <span className="toolbar-filter-count">{activeFilterCount}</span>
+                  {displayFilterCount > 0 && (
+                    <span className="toolbar-filter-count">{displayFilterCount}</span>
                   )}
                 </Button>
               </Popover>
@@ -3567,16 +3612,16 @@ export default function TaskTable({
                   </Badge>
                 </Dropdown>
               )}
-              <Popover trigger="click" placement="bottomLeft" content={filterPanel}>
+              <Popover trigger="click" placement="bottomLeft" overlayClassName="task-filter-popover" content={filterPanel}>
                 <Button
                   size="small"
                   type="text"
-                  className={`toolbar-trigger-btn toolbar-filter-btn ${activeFilterCount > 0 ? 'toolbar-filter-btn-active' : ''}`}
+                  className={`toolbar-trigger-btn toolbar-filter-btn ${displayFilterCount > 0 ? 'toolbar-filter-btn-active' : ''}`}
                   icon={<FilterOutlined />}
                 >
                   <span>筛选</span>
-                  {activeFilterCount > 0 && (
-                    <span className="toolbar-filter-count">{activeFilterCount}</span>
+                  {displayFilterCount > 0 && (
+                    <span className="toolbar-filter-count">{displayFilterCount}</span>
                   )}
                 </Button>
               </Popover>
@@ -4137,6 +4182,7 @@ function TaskAssigneeCell({
         role: 'assignee' as const,
         type: 'user' as const,
         name: users.find((u) => u.id === id)?.name,
+        avatar: users.find((u) => u.id === id)?.avatar,
       })),
       ...task.members.filter((m) => m.role === 'follower'),
     ]
@@ -4166,6 +4212,7 @@ function TaskAssigneeCell({
         open={activeAssigneePickerKey === assigneePickerKey}
         value={assigneeIds}
         users={users}
+        taskMembers={assignees}
         isTasklistView={isTasklistView}
         triggerClassName="assignee-trigger"
         placeholderIcon={<UserOutlined className="empty-assignee" />}
