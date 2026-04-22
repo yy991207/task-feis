@@ -22,6 +22,7 @@ import {
   CalendarOutlined,
   PaperClipOutlined,
   BranchesOutlined,
+  SubnodeOutlined,
   PlusOutlined,
   CheckOutlined,
   DeleteOutlined,
@@ -79,6 +80,7 @@ import TaskRichInput, {
   type TaskRichAttachmentSource,
 } from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
+import TaskParentPickerModal from '@/components/TaskParentPickerModal'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import './index.less'
 
@@ -101,6 +103,7 @@ function getActionErrorMessage(error: unknown, fallback: string): string {
 
 interface TaskDetailPanelProps {
   task: Task
+  allTasks: Task[]
   tasklists: Tasklist[]
   onRefresh?: () => void
   onTaskUpdated?: (task: Task) => void
@@ -112,6 +115,7 @@ interface TaskDetailPanelProps {
 
 export default function TaskDetailPanel({
   task,
+  allTasks,
   tasklists,
   onRefresh,
   onTaskUpdated,
@@ -164,6 +168,8 @@ export default function TaskDetailPanel({
   const [previewImageUrl, setPreviewImageUrl] = useState<string>()
   const [tasklistRenaming, setTasklistRenaming] = useState(false)
   const [tasklistRenameValue, setTasklistRenameValue] = useState('')
+  const [parentPickerOpen, setParentPickerOpen] = useState(false)
+  const [parentPickerSubmitting, setParentPickerSubmitting] = useState(false)
   const resizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
@@ -1040,11 +1046,77 @@ export default function TaskDetailPanel({
     onClose()
   }
 
+  const handleOpenParentPicker = () => {
+    setParentPickerOpen(true)
+  }
+
+  const handleCloseParentPicker = () => {
+    if (parentPickerSubmitting) {
+      return
+    }
+    setParentPickerOpen(false)
+  }
+
+  const handleSetParentTask = async (parentTaskId: string) => {
+    if (task.parent_task_guid === parentTaskId) {
+      setParentPickerOpen(false)
+      return
+    }
+
+    setParentPickerSubmitting(true)
+    try {
+      const apiTask = await updateTaskApi(task.guid, { parent_task_id: parentTaskId })
+      const nextTask = apiTaskToTask(apiTask, primaryTasklistRef?.tasklist_guid)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) {
+        onRefresh?.()
+      }
+      setParentPickerOpen(false)
+      onRefresh?.()
+      message.success('已设置父任务')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '设置父任务失败')
+    } finally {
+      setParentPickerSubmitting(false)
+    }
+  }
+
+  const handleDetachTask = async () => {
+    if (!task.parent_task_guid) {
+      return
+    }
+
+    try {
+      const apiTask = await updateTaskApi(task.guid, { parent_task_id: null })
+      const nextTask = apiTaskToTask(apiTask, primaryTasklistRef?.tasklist_guid)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) {
+        onRefresh?.()
+      }
+      onRefresh?.()
+      message.success('已设为独立任务')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '设为独立任务失败')
+    }
+  }
+
   const moreMenu = {
     items: [
+      { key: 'set-parent', icon: <SubnodeOutlined />, label: '设置父任务' },
+      ...(task.parent_task_guid
+        ? [{ key: 'detach', icon: <BranchesOutlined />, label: '设为独立任务' }]
+        : []),
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
+      if (key === 'set-parent') {
+        handleOpenParentPicker()
+        return
+      }
+      if (key === 'detach') {
+        void handleDetachTask()
+        return
+      }
       if (key === 'delete') {
         void handleDeleteTask()
       }
@@ -1084,6 +1156,14 @@ export default function TaskDetailPanel({
           </span>
         </div>
       </div>
+      <TaskParentPickerModal
+        open={parentPickerOpen}
+        task={task}
+        tasks={allTasks}
+        submitting={parentPickerSubmitting}
+        onClose={handleCloseParentPicker}
+        onSubmit={handleSetParentTask}
+      />
 
       {/* Scrollable body + comments */}
       <div className="detail-scroll" ref={detailScrollRef}>
@@ -1099,7 +1179,7 @@ export default function TaskDetailPanel({
                     className="detail-parent-chain-link"
                     onClick={() => handleOpenParentTask(parentTask)}
                   >
-                    {parentTask.summary}
+                    {`/${parentTask.summary}`}
                   </button>
                 ),
               }))}

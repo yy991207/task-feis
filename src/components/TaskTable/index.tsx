@@ -101,6 +101,7 @@ import EditableInput from '@/components/EditableInput'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
 import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
 import UserSearchSelect from '@/components/UserSearchSelect'
+import TaskParentPickerModal from '@/components/TaskParentPickerModal'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
   listCustomFields,
@@ -556,6 +557,8 @@ export default function TaskTable({
   const [submittingSectionGuid, setSubmittingSectionGuid] = useState<string | null>(null)
   const [animatedTaskGuid, setAnimatedTaskGuid] = useState<string | null>(null)
   const [animatedSectionGuid, setAnimatedSectionGuid] = useState<string | null>(null)
+  const [parentPickerTask, setParentPickerTask] = useState<Task | null>(null)
+  const [parentPickerSubmitting, setParentPickerSubmitting] = useState(false)
   const inlineCreateRowRef = useRef<HTMLDivElement | null>(null)
   const inlineCreateSubmittingRef = useRef<string | null>(null)
   const [inlineCreateFocusedField, setInlineCreateFocusedField] = useState<
@@ -1521,6 +1524,54 @@ export default function TaskTable({
     }
   }
 
+  const handleOpenParentPicker = (task: Task) => {
+    setParentPickerTask(task)
+  }
+
+  const handleCloseParentPicker = () => {
+    if (parentPickerSubmitting) {
+      return
+    }
+    setParentPickerTask(null)
+  }
+
+  const handleSetParentTaskAction = async (task: Task, parentTaskId: string) => {
+    if (task.parent_task_guid === parentTaskId) {
+      setParentPickerTask(null)
+      return
+    }
+
+    setParentPickerSubmitting(true)
+    try {
+      const apiTask = await updateTaskApi(task.guid, { parent_task_id: parentTaskId })
+      const nextTask = apiTaskToTask(apiTask, tasklist?.guid)
+      handleTaskUpdate(nextTask)
+      setParentPickerTask(null)
+      onRefresh()
+      message.success('已设置父任务')
+    } catch (err: unknown) {
+      message.error(getActionErrorMessage(err, '设置父任务失败'))
+    } finally {
+      setParentPickerSubmitting(false)
+    }
+  }
+
+  const handleDetachTaskAction = async (task: Task) => {
+    if (!task.parent_task_guid) {
+      return
+    }
+
+    try {
+      const apiTask = await updateTaskApi(task.guid, { parent_task_id: null })
+      const nextTask = apiTaskToTask(apiTask, tasklist?.guid)
+      handleTaskUpdate(nextTask)
+      onRefresh()
+      message.success('已设为独立任务')
+    } catch (err: unknown) {
+      message.error(getActionErrorMessage(err, '设为独立任务失败'))
+    }
+  }
+
   const activeFilterCount = Number(mineOnlyFilter) + Number(hasDueFilter)
   const taskCreateMotionStyle = {
     ['--task-create-duration' as string]: token.motionDurationMid,
@@ -2133,6 +2184,8 @@ export default function TaskTable({
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
             onDeleteTask={handleDeleteTaskAction}
+            onSetParentTask={handleOpenParentPicker}
+            onDetachTask={handleDetachTaskAction}
           />
         )
       },
@@ -2677,6 +2730,21 @@ export default function TaskTable({
         </>
       </div>
       {tasklist && (
+        <TaskParentPickerModal
+          open={Boolean(parentPickerTask)}
+          task={parentPickerTask}
+          tasks={tasks}
+          submitting={parentPickerSubmitting}
+          onClose={handleCloseParentPicker}
+          onSubmit={(parentTaskId) => {
+            if (!parentPickerTask) {
+              return
+            }
+            return handleSetParentTaskAction(parentPickerTask, parentTaskId)
+          }}
+        />
+      )}
+      {tasklist && (
         <CustomFieldsModal
           open={customFieldsModalOpen}
           projectId={tasklist.guid}
@@ -2722,6 +2790,8 @@ interface TaskTitleCellProps {
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
   onDeleteTask: (taskGuid: string) => Promise<void> | void
+  onSetParentTask: (task: Task) => void
+  onDetachTask: (task: Task) => Promise<void> | void
 }
 
 interface TaskPriorityCellProps {
@@ -2972,6 +3042,8 @@ function TaskTitleCell({
   onOpenDetail,
   onUpdate,
   onDeleteTask,
+  onSetParentTask,
+  onDetachTask,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
@@ -2997,9 +3069,21 @@ function TaskTitleCell({
 
   const moreMenu = {
     items: [
+      { key: 'set-parent', icon: <SubnodeOutlined />, label: '设置父任务' },
+      ...(task.parent_task_guid
+        ? [{ key: 'detach', icon: <BranchesOutlined />, label: '设为独立任务' }]
+        : []),
       { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
+      if (key === 'set-parent') {
+        onSetParentTask(task)
+        return
+      }
+      if (key === 'detach') {
+        void onDetachTask(task)
+        return
+      }
       if (key === 'delete') {
         void handleDeleteTask()
       }

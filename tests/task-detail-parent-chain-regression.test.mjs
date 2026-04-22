@@ -65,6 +65,12 @@ async function testSubtaskDetailRendersClickableParentChain() {
     /className="detail-parent-chain-link"[\s\S]*onClick=\{\(\) => handleOpenParentTask\(parentTask\)\}/,
     '父任务链路里的每个父任务都应该可以点击跳转详情页',
   )
+
+  assert.match(
+    source,
+    /className="detail-parent-chain-link"[\s\S]*>\s*\{`\/\$\{parentTask\.summary\}`\}\s*<\/button>/,
+    '直接父任务前面应该补一个“/”，避免一级子任务只显示父任务名字',
+  )
 }
 
 async function testParentChainHasDedicatedStyle() {

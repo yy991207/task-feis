@@ -5,7 +5,7 @@ async function readSource(relativePath) {
   return readFile(new URL(relativePath, import.meta.url), 'utf8')
 }
 
-async function testMainPageTextUsesDeepBlackAndDetailButtonDeepBlack() {
+async function testMainPageTextUsesDeepBlackAndDetailButtonBlue() {
   const styleSource = await readSource('../src/components/TaskTable/index.less')
 
   assert.match(
@@ -25,13 +25,13 @@ async function testMainPageTextUsesDeepBlackAndDetailButtonDeepBlack() {
   )
   assert.match(
     styleSource,
-    /\.task-detail-btn\.ant-btn \{[\s\S]*color: #1f2329 !important;/,
-    '主页面任务行里的“详情”按钮应该跟随这轮要求改成深黑色',
+    /\.task-detail-btn\.ant-btn \{[\s\S]*color: #3370ff !important;/,
+    '主页面任务行里的“详情”按钮应该改成蓝色',
   )
   assert.match(
     styleSource,
-    /\.task-detail-btn\.ant-btn \{[\s\S]*&:hover \{[\s\S]*color: #1f2329 !important;/,
-    '主页面任务行里的“详情”按钮 hover 时也应该保持深黑色',
+    /\.task-detail-btn\.ant-btn \{[\s\S]*&:hover \{[\s\S]*color: #1456d9 !important;/,
+    '主页面任务行里的“详情”按钮 hover 时也应该保持蓝色强调',
   )
 }
 
@@ -72,7 +72,7 @@ async function testDetailPageTextUsesDeepBlackAndSubtaskDetailCopy() {
 }
 
 async function main() {
-  await testMainPageTextUsesDeepBlackAndDetailButtonDeepBlack()
+  await testMainPageTextUsesDeepBlackAndDetailButtonBlue()
   await testDetailPageTextUsesDeepBlackAndSubtaskDetailCopy()
   console.log('main detail font color regressions ok')
 }

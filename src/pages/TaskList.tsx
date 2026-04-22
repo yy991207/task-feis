@@ -452,6 +452,7 @@ export default function TaskListPage() {
         <TaskDetailPanel
           key={selectedTask.guid}
           task={selectedTask}
+          allTasks={tasks}
           tasklists={tasklists}
           onRefresh={refreshData}
           onTaskUpdated={updateTaskInState}

@@ -15,8 +15,13 @@ async function testSectionActionButtonsAreProminent() {
   )
   assert.match(
     source,
-    /\.section-action-btn \{[\s\S]*font-size: 16px !important;[\s\S]*font-weight: 700;[\s\S]*color: #1f2329 !important;/,
-    '任务分组行右侧加号和三点按钮需要深黑加粗',
+    /\.section-action-btn \{[\s\S]*font-size: 16px !important;[\s\S]*color: #1f2329 !important;/,
+    '任务分组行右侧加号和三点按钮需要深黑并放大，但不需要加粗',
+  )
+  assert.doesNotMatch(
+    source,
+    /\.section-action-btn \{[\s\S]*font-weight: 700;/,
+    '任务分组行右侧加号和三点按钮不需要加粗显示',
   )
   assert.match(
     source,
@@ -30,13 +35,23 @@ async function testTaskRowActionButtonsAreProminent() {
 
   assert.match(
     source,
-    /\.task-detail-btn\.ant-btn \{[\s\S]*height: 28px;[\s\S]*font-size: 14px !important;[\s\S]*font-weight: 700;[\s\S]*color: #1f2329 !important;/,
-    '任务行里的“详情”按钮需要变大、深黑、加粗',
+    /\.task-detail-btn\.ant-btn \{[\s\S]*height: 28px;[\s\S]*font-size: 14px !important;[\s\S]*color: #1f2329 !important;/,
+    '任务行里的“详情”按钮需要变大、深黑，但不需要加粗',
+  )
+  assert.doesNotMatch(
+    source,
+    /\.task-detail-btn\.ant-btn \{[\s\S]*font-weight: 700;/,
+    '任务行里的“详情”按钮不需要加粗显示',
   )
   assert.match(
     source,
-    /\.task-row-more-btn\.ant-btn \{[\s\S]*min-width: 28px;[\s\S]*height: 28px;[\s\S]*font-size: 16px !important;[\s\S]*font-weight: 700;[\s\S]*color: #1f2329 !important;/,
-    '任务行里的三点按钮需要变大、深黑、加粗',
+    /\.task-row-more-btn\.ant-btn \{[\s\S]*min-width: 28px;[\s\S]*height: 28px;[\s\S]*font-size: 16px !important;[\s\S]*color: #1f2329 !important;/,
+    '任务行里的三点按钮需要变大、深黑，但不需要加粗',
+  )
+  assert.doesNotMatch(
+    source,
+    /\.task-row-more-btn\.ant-btn \{[\s\S]*font-weight: 700;/,
+    '任务行里的三点按钮不需要加粗显示',
   )
   assert.match(
     source,
@@ -50,8 +65,13 @@ async function testCustomFieldPlaceholderIsProminent() {
 
   assert.match(
     source,
-    /\.custom-field-placeholder \{[\s\S]*color: #1f2329;[\s\S]*font-size: 13px;[\s\S]*font-weight: 600;/,
-    '自定义字段里的“点击填写”入口需要改成深黑并放大加粗',
+    /\.custom-field-placeholder \{[\s\S]*color: #1f2329;[\s\S]*font-size: 13px;/,
+    '自定义字段里的“点击填写”入口需要改成深黑并放大，但不需要加粗',
+  )
+  assert.doesNotMatch(
+    source,
+    /\.custom-field-placeholder \{[\s\S]*font-weight: 600;/,
+    '自定义字段里的“点击填写”入口不需要加粗显示',
   )
   assert.match(
     source,

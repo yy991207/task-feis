@@ -265,6 +265,7 @@ export function updateTaskApi(
     title?: string
     description?: string
     description_mentions?: string[]
+    parent_task_id?: string | null
     status?: string
     priority?: string
     assignee_id?: string | null
