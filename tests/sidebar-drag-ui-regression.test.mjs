@@ -29,7 +29,7 @@ async function testSidebarDragUiShowsDropIndicatorAndState() {
   )
   assert.match(
     source,
-    /dropIndicatorRender=\{\(props\) => \{[\s\S]*if \(!dropIndicatorState\) \{/,
+    /dropIndicatorRender=\{\(props\) => \{[\s\S]*if \(!dropIndicatorState \|\| props\.dropPosition === 0\) \{/,
     'Tree 应该使用自定义 dropIndicatorRender，把拖拽目标位置画得更清楚',
   )
   assert.match(
@@ -59,18 +59,23 @@ async function testSidebarDragUiStylesExist() {
   )
   assert.match(
     source,
-    /\.tasklist-tree-wrap \{[\s\S]*\.ant-tree \.ant-tree-treenode\.drop-target \{/,
-    '拖拽目标节点应该有独立的高亮样式',
-  )
-  assert.match(
-    source,
-    /\.tasklist-tree-wrap \{[\s\S]*\.ant-tree \.ant-tree-treenode\.drop-target::after \{/,
-    '拖拽目标节点应该额外画出落点边框或底线，帮助判断会落到哪',
+    /\.tasklist-tree-wrap \{[\s\S]*\.ant-tree \.ant-tree-treenode\.drop-target-inner > \.ant-tree-node-content-wrapper \{/,
+    '拖进分组容器时应该只保留分组容器高亮，不要再叠加额外落点边框',
   )
   assert.match(
     source,
     /\.tasklist-tree-wrap \{[\s\S]*\.drag-drop-indicator \{/,
-    '拖拽目标位置应该使用更醒目的自定义指示线',
+    '插入前后位置时应该保留一条明确的自定义落点线',
+  )
+  assert.match(
+    source,
+    /\.tasklist-tree-wrap \{[\s\S]*\.drag-drop-indicator \{[\s\S]*&\.gap-top \{[\s\S]*&\.gap-bottom,\s*&\.inner \{/,
+    '拖拽目标位置应该区分上方和下方两种插入线位置',
+  )
+  assert.doesNotMatch(
+    source,
+    /\.drop-target-gap-top::after|\.drop-target-gap-bottom::after/,
+    '插入前后位置不应该再额外叠一层节点伪元素边框，避免和落点线重复渲染',
   )
 }
 

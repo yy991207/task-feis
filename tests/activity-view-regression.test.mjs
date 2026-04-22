@@ -60,6 +60,16 @@ async function testActivityViewIsRealDataDriven() {
   )
   assert.match(
     source,
+    /const detail = formatActivityDetail\(activity, actorLabel\)/,
+    '动态页应该先判断详情文案是否存在，再决定是否渲染第二行，避免无意义重复',
+  )
+  assert.match(
+    source,
+    /detail && <div className="activity-detail">/,
+    '动态页只有在真的有补充信息时才渲染第二行详情',
+  )
+  assert.match(
+    source,
     /onTaskOpen/,
     '动态记录点击后应该能把对应 task 交给详情抽屉打开',
   )
@@ -115,8 +125,13 @@ async function testActivityViewMatchesReferenceDensity() {
   )
   assert.match(
     styleSource,
-    /\.activity-time-group \+ \.activity-time-group \{[\s\S]*margin-top: 18px;/,
+    /\.activity-time-group \+ \.activity-time-group \{[\s\S]*margin-top: 20px;[\s\S]*padding-top: 18px;/,
     '不同时间栏之间应该拉开层级间距，避免整页挤成一片',
+  )
+  assert.match(
+    styleSource,
+    /\.activity-time-group::before \{[\s\S]*height: 1px;[\s\S]*background: #eef0f4;/,
+    '同一分钟分组之间应该补一条浅色横线，做出参考图里的内容层级分隔',
   )
   assert.match(
     styleSource,
@@ -125,8 +140,13 @@ async function testActivityViewMatchesReferenceDensity() {
   )
   assert.match(
     styleSource,
-    /\.activity-time-group-items \{[\s\S]*gap: 12px;/,
-    '同一分钟内的多条动态应该更紧凑地堆叠在一个组里',
+    /\.activity-time-group-items \{[\s\S]*gap: 18px;/,
+    '同一分钟内的多条动态上下间距应该再放大一点，贴近参考图的呼吸感',
+  )
+  assert.match(
+    styleSource,
+    /\.activity-item \{[\s\S]*padding: 6px 0;/,
+    '同一分钟组内的单条动态需要增加上下内边距，避免相邻日志贴得太紧',
   )
   assert.match(
     styleSource,

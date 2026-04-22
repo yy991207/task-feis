@@ -179,7 +179,7 @@ function buildActivityMessage(activity: ApiTaskActivity, actorLabel: string): Re
   }
 }
 
-function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): ReactNode {
+function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): ReactNode | null {
   const payload = activity.payload as Record<string, unknown>
   const fieldLabel =
     typeof payload.field_name === 'string' && payload.field_name.trim().length > 0
@@ -195,16 +195,6 @@ function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): Re
           : normalizeActivityValue(payload.new_value)
 
   switch (activity.event_type) {
-    case 'task.created':
-      return (
-        <span className="activity-message-line">
-          <span className="activity-person">{actorLabel}</span>
-          <span> 创建了任务 </span>
-          <span className="activity-task-title">
-            {normalizeActivityValue(payload.task_title ?? '该任务')}
-          </span>
-        </span>
-      )
     case 'task.description_changed':
       return (
         <span className="activity-message-line">
@@ -213,6 +203,20 @@ function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): Re
           <span className="activity-value">{value}</span>
         </span>
       )
+    case 'task.custom_field_changed':
+      return (
+        <span className="activity-message-line">
+          <span className="activity-person">{actorLabel}</span>
+          <span> 将“{fieldLabel}”修改为：</span>
+          <span className="activity-value">{value}</span>
+        </span>
+      )
+    case 'task.status_changed':
+      return null
+    case 'task.created':
+    case 'task.completed':
+    case 'task.assignee_changed':
+      return null
     case 'comment.created':
       return (
         <span className="activity-message-line">
@@ -222,6 +226,7 @@ function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): Re
         </span>
       )
     case 'attachment.uploaded':
+    case 'attachment.created':
       return (
         <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
@@ -229,13 +234,25 @@ function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): Re
           <span className="activity-value">{value}</span>
         </span>
       )
-    default:
+    case 'attachment.deleted':
       return (
         <span className="activity-message-line">
           <span className="activity-person">{actorLabel}</span>
-          <span> 更新了任务</span>
+          <span> 移除了附件：</span>
+          <span className="activity-value">{value}</span>
         </span>
       )
+    default:
+      if (typeof payload.field === 'string' && payload.field.trim().length > 0) {
+        return (
+          <span className="activity-message-line">
+            <span className="activity-person">{actorLabel}</span>
+            <span> 将“{payload.field.trim()}”修改为：</span>
+            <span className="activity-value">{value}</span>
+          </span>
+        )
+      }
+      return null
   }
 }
 
@@ -339,6 +356,7 @@ export default function ActivityView({
                     <div className="activity-time-group-items">
                       {timeGroup.items.map((activity) => {
                         const actorLabel = resolveUserLabel(activity.actor_id)
+                        const detail = formatActivityDetail(activity, actorLabel)
                         return (
                           <div
                             key={activity.activity_id}
@@ -352,9 +370,7 @@ export default function ActivityView({
                               <div className="activity-message" title={normalizeActivityValue(activity.payload)}>
                                 {buildActivityMessage(activity, actorLabel)}
                               </div>
-                              <div className="activity-detail">
-                                {formatActivityDetail(activity, actorLabel)}
-                              </div>
+                              {detail && <div className="activity-detail">{detail}</div>}
                             </div>
                           </div>
                         )
