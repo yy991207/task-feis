@@ -452,9 +452,6 @@ export default function TaskRichInput({
     if (!editor) return
 
     const nextHtml = normalizeRichContent(editor.innerHTML)
-    if (editor.innerHTML !== nextHtml) {
-      editor.innerHTML = nextHtml
-    }
 
     editorHtmlRef.current = nextHtml
     setEditorHtml(nextHtml)

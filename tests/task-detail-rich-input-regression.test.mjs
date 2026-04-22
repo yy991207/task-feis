@@ -259,6 +259,11 @@ async function testDescriptionModeDoesNotRewriteEditorDomOnSameHtml() {
     /isInitialEditorSyncRef\.current = false/,
     '描述输入框首次同步后应该关闭初始灌值标记，后续才按输入过程规则处理',
   )
+  assert.doesNotMatch(
+    source,
+    /syncFromEditor = \(\) => \{[\s\S]*if \(editor\.innerHTML !== nextHtml\) \{[\s\S]*editor\.innerHTML = nextHtml[\s\S]*\}/,
+    '输入同步时不应该再把当前 DOM 重新写回自己，否则会把光标和中文输入法状态打断',
+  )
 }
 
 async function testDescriptionEditorBlursOnOutsideClick() {

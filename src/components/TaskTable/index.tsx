@@ -124,6 +124,8 @@ type ExtraColumnKey =
   | 'sourceCategory'
 type CustomFieldColumnKey = `custom:${string}`
 type ExtendedColumnKey = ColumnKey | ExtraColumnKey | CustomFieldColumnKey
+type CustomFieldGroupModeKey = `custom:${string}`
+type BaseGroupModeKey = 'section' | 'none' | 'assignee' | 'start' | 'due' | 'creator'
 type TaskTableTaskRow = Task & {
   key: string
   rowKind: 'task'
@@ -211,7 +213,7 @@ const toCustomFieldColumnKey = (guid: string): CustomFieldColumnKey => `custom:$
 type StatusFilterKey = 'all' | 'todo' | 'done'
 type SortModeKey = 'custom' | 'due' | 'start' | 'created'
 type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
-type GroupModeKey = 'section' | 'none'
+type GroupModeKey = BaseGroupModeKey | CustomFieldGroupModeKey
 type DateFieldKey = 'start' | 'due'
 type CalendarViewMode = 'month' | 'year'
 
@@ -243,10 +245,36 @@ const sortLabelMap: Record<VisibleSortModeKey, string> = {
 
 const visibleSortModes: VisibleSortModeKey[] = ['due', 'start', 'created']
 
-const groupLabelMap: Record<GroupModeKey, string> = {
+const baseGroupLabelMap: Record<BaseGroupModeKey, string> = {
   section: '任务分组',
   none: '无分组',
+  assignee: '负责人',
+  start: '开始时间',
+  due: '截止时间',
+  creator: '创建人',
 }
+
+interface GroupSection extends Section {
+  countLabel?: string
+}
+
+const startDateGroupDefinitions = [
+  { key: 'started', name: '已开始' },
+  { key: 'today', name: '今天' },
+  { key: 'tomorrow', name: '明天' },
+  { key: 'next7', name: '未来 7 天' },
+  { key: 'later', name: '以后' },
+  { key: 'none', name: '未安排' },
+] as const
+
+const dueDateGroupDefinitions = [
+  { key: 'overdue', name: '已逾期' },
+  { key: 'today', name: '今天' },
+  { key: 'tomorrow', name: '明天' },
+  { key: 'next7', name: '未来 7 天' },
+  { key: 'later', name: '以后' },
+  { key: 'none', name: '未安排' },
+] as const
 
 function getActionErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
@@ -1129,27 +1157,150 @@ export default function TaskTable({
     return Number(leftValue) - Number(rightValue)
   })
 
-  const shouldGroupBySection = groupMode === 'section'
+  const isSectionGroupMode = groupMode === 'section'
   const sortedSections = [...sectionSource].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
   )
-  const filteredSections = shouldGroupBySection
+  const filteredSections = isSectionGroupMode
     ? sortedSections.filter((section) => visibleSectionGuids.has(section.guid))
     : sortedSections
-  const groupedTasks = shouldGroupBySection
-    ? filteredSections.length > 0
-      ? filteredSections.map((section) => ({
-          section,
-          tasks: tasksAfterSort.filter((t) =>
-            t.tasklists.some(
-              (ref) =>
-                ref.section_guid === section.guid &&
-                (!tasklist || ref.tasklist_guid === tasklist.guid),
+  const groupableCustomFields = (tasklist?.custom_fields ?? []).filter(
+    (field) => field.type === 'single_select' || field.type === 'multi_select',
+  )
+  const groupModeOptions: { key: GroupModeKey; label: string }[] = [
+    ...Object.entries(baseGroupLabelMap).map(([key, label]) => ({
+      key: key as BaseGroupModeKey,
+      label,
+    })),
+    ...groupableCustomFields.map((field) => ({
+      key: `custom:${field.guid}` as CustomFieldGroupModeKey,
+      label: field.name,
+    })),
+  ]
+  const groupLabelMap: Record<string, string> = Object.fromEntries(
+    groupModeOptions.map((item) => [item.key, item.label]),
+  )
+
+  function buildGroupedTasksByMode() {
+    if (isSectionGroupMode) {
+      return filteredSections.length > 0
+        ? filteredSections.map((section) => ({
+            section,
+            tasks: tasksAfterSort.filter((t) =>
+              t.tasklists.some(
+                (ref) =>
+                  ref.section_guid === section.guid &&
+                  (!tasklist || ref.tasklist_guid === tasklist.guid),
+              ),
             ),
-          ),
+          }))
+        : [{ section: { guid: '__default__', name: '默认分组' } as GroupSection, tasks: tasksAfterSort }]
+    }
+
+    if (groupMode === 'none') {
+      return [{ section: { guid: '__all__', name: '全部' } as GroupSection, tasks: tasksAfterSort }]
+    }
+
+    const groupedTaskMap = new Map<string, { section: GroupSection; tasks: Task[] }>()
+    const appendGroupTask = (section: GroupSection, task: Task) => {
+      const existing = groupedTaskMap.get(section.guid)
+      if (existing) {
+        existing.tasks.push(task)
+        return
+      }
+      groupedTaskMap.set(section.guid, { section, tasks: [task] })
+    }
+
+    switch (groupMode) {
+      case 'assignee': {
+        const noAssigneeSection: GroupSection = { guid: '__assignee-none__', name: '未分配' }
+        tasksAfterSort.forEach((task) => {
+          const assigneeMembers = task.members.filter((member) => member.role === 'assignee')
+          if (assigneeMembers.length === 0) {
+            appendGroupTask(noAssigneeSection, task)
+            return
+          }
+          assigneeMembers.forEach((member) => {
+            const matchedUser = users.find((user) => user.id === member.id)
+            appendGroupTask(
+              {
+                guid: `__assignee__${member.id}`,
+                name: matchedUser?.name ?? member.name ?? member.id,
+              },
+              task,
+            )
+          })
+        })
+        return Array.from(groupedTaskMap.values())
+      }
+      case 'creator': {
+        tasksAfterSort.forEach((task) => {
+          const matchedUser = users.find((user) => user.id === task.creator.id)
+          appendGroupTask(
+            {
+              guid: `__creator__${task.creator.id}`,
+              name: matchedUser?.name ?? task.creator.id,
+            },
+            task,
+          )
+        })
+        return Array.from(groupedTaskMap.values())
+      }
+      case 'start':
+      case 'due': {
+        const definitions = groupMode === 'start' ? startDateGroupDefinitions : dueDateGroupDefinitions
+        const sections = definitions.map((item) => ({
+          section: {
+            guid: `__${groupMode}__${item.key}`,
+            name: item.name,
+          } as GroupSection,
+          tasks: [] as Task[],
         }))
-      : [{ section: { guid: '__default__', name: '默认分组' } as Section, tasks: tasksAfterSort }]
-    : [{ section: { guid: '__all__', name: '全部' } as Section, tasks: tasksAfterSort }]
+        const sectionMap = new Map(sections.map((item) => [item.section.guid, item]))
+        tasksAfterSort.forEach((task) => {
+          const groupKey = getDateGroupKey(groupMode, task)
+          const target = sectionMap.get(`__${groupMode}__${groupKey}`)
+          if (target) {
+            target.tasks.push(task)
+          }
+        })
+        return sections
+      }
+      default: {
+        if (groupMode.startsWith('custom:')) {
+          const fieldGuid = groupMode.slice(7)
+          const field = tasklist?.custom_fields.find((item) => item.guid === fieldGuid)
+          const optionMap = new Map((field?.options ?? []).map((option) => [option.guid, option.name]))
+          const noneSection: GroupSection = { guid: `__custom__${fieldGuid}__none`, name: '未设置' }
+          tasksAfterSort.forEach((task) => {
+            const fieldValue = task.custom_fields.find((item) => item.guid === fieldGuid)
+            const optionValues = fieldValue?.multi_select_value ?? []
+            const singleValues = fieldValue?.single_select_value ? [fieldValue.single_select_value] : []
+            const groupValues = fieldValue?.multi_select_value ?? []
+            const values = groupValues.length > 0 ? groupValues : singleValues
+            if (values.length === 0) {
+              appendGroupTask(noneSection, task)
+              return
+            }
+            values.forEach((value) => {
+              appendGroupTask(
+                {
+                  guid: `__custom__${fieldGuid}__${value}`,
+                  name: optionMap.get(value) ?? value,
+                },
+                task,
+              )
+            })
+          })
+          return Array.from(groupedTaskMap.values())
+        }
+        return [{ section: { guid: '__all__', name: '全部' } as GroupSection, tasks: tasksAfterSort }]
+      }
+    }
+  }
+
+  const groupedTasks = buildGroupedTasksByMode()
+  const shouldGroupBySection = groupMode !== 'none'
 
   const firstCreatableSection = sectionSource[0]
 
@@ -3485,6 +3636,37 @@ function buildSelectableCustomFieldOptions(field: CustomFieldDef, selectedValues
       value: option.guid,
       disabled: option.is_disabled === true,
     }))
+}
+
+function getDateGroupKey(field: 'start' | 'due', task: Task) {
+  const rawValue = field === 'start' ? task.start?.timestamp : task.due?.timestamp
+  if (!rawValue) {
+    return 'none'
+  }
+
+  const valueDate = dayjs(Number(rawValue)).startOf('day')
+  const today = dayjs().startOf('day')
+  const tomorrow = today.add(1, 'day')
+  const nextWeekEnd = today.add(7, 'day')
+
+  if (field === 'start') {
+    if (valueDate.isBefore(today)) {
+      return 'started'
+    }
+  } else if (valueDate.isBefore(today)) {
+    return 'overdue'
+  }
+
+  if (valueDate.isSame(today, 'day')) {
+    return 'today'
+  }
+  if (valueDate.isSame(tomorrow, 'day')) {
+    return 'tomorrow'
+  }
+  if (valueDate.isAfter(tomorrow) && (valueDate.isBefore(nextWeekEnd) || valueDate.isSame(nextWeekEnd, 'day'))) {
+    return 'next7'
+  }
+  return 'later'
 }
 
 function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string {
