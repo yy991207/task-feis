@@ -83,6 +83,37 @@ async function testTaskDescriptionUsesReadOnlyViewUntilEditing() {
   )
 }
 
+async function testTaskDescriptionMentionsRenderLikeComments() {
+  const richInputSource = await readRichInputSource()
+  const styleSource = await readTaskDetailStyleSource()
+
+  assert.match(
+    richInputSource,
+    /function decoratePlainMentionsForReadOnly/,
+    '只读富文本应该把普通文本里的 @人 包成 mention 样式，兼容旧描述内容',
+  )
+  assert.match(
+    richInputSource,
+    /closest\('\.task-rich-input-mention, a'\)/,
+    '只读富文本高亮 @人 时不能重复包已有 mention，也不能改链接里的内容',
+  )
+  assert.match(
+    richInputSource,
+    /span\.className = 'task-rich-input-mention'/,
+    '普通文本 @人 展示时应该复用评论区同一个 mention class',
+  )
+  assert.match(
+    richInputSource,
+    /const displayHtml = decoratePlainMentionsForReadOnly\(normalizedHtml\)[\s\S]*dangerouslySetInnerHTML=\{\{ __html: displayHtml \}\}/,
+    'TaskRichText 只读展示应该使用补过 @人 高亮的 HTML',
+  )
+  assert.match(
+    styleSource,
+    /\.detail-description-text \{[\s\S]*\.task-rich-input-mention \{[\s\S]*background: #edf3ff;[\s\S]*color: #245bdb;/,
+    '描述区 @人 应该明确使用和评论区一致的蓝色 mention 视觉',
+  )
+}
+
 async function testRichInputSupportsMentionLinkAndPasteImage() {
   const source = await readRichInputSource()
 
@@ -508,6 +539,7 @@ async function testCommentComposerLayoutFitsPanelAndGrowsWithContent() {
 async function main() {
   await testTaskDetailUsesSharedRichInput()
   await testTaskDescriptionUsesReadOnlyViewUntilEditing()
+  await testTaskDescriptionMentionsRenderLikeComments()
   await testRichInputSupportsMentionLinkAndPasteImage()
   await testRichInputSubmitsCommentOnEnter()
   await testDescriptionEditorBlursOnOutsideClick()

@@ -59,9 +59,61 @@ async function testCustomFieldStyleHasSavedStateVisuals() {
   )
 }
 
+async function testCustomFieldEditorUsesAdaptiveWidth() {
+  const source = await readTaskTableSource()
+  const style = await readTaskTableStyle()
+
+  assert.match(
+    source,
+    /className="custom-field-editor custom-field-editor-text"/,
+    '文本类自定义字段编辑态需要有专用类名，方便做自适应宽度',
+  )
+  assert.match(
+    source,
+    /className="custom-field-editor custom-field-editor-number"/,
+    '数字类自定义字段编辑态需要有专用类名，方便控制短输入宽度',
+  )
+  assert.match(
+    source,
+    /className="custom-field-editor custom-field-editor-date"/,
+    '日期类自定义字段编辑态需要有专用类名，避免日期框铺满整列',
+  )
+  assert.match(
+    source,
+    /className="custom-field-editor custom-field-editor-select"/,
+    '选择类自定义字段编辑态需要有专用类名，避免选择框铺满整列',
+  )
+  assert.match(
+    style,
+    /\.custom-field-editor \{[\s\S]*width: fit-content;[\s\S]*max-width: 100%;/,
+    '自定义字段编辑容器应该按内容宽度展示，并限制最大宽度不撑破单元格',
+  )
+  assert.match(
+    style,
+    /\.custom-field-editor-text[\s\S]*field-sizing: content;/,
+    '文本自定义字段输入框应该按输入内容自适应宽度',
+  )
+  assert.match(
+    style,
+    /\.custom-field-editor-number[\s\S]*field-sizing: content;/,
+    '数字自定义字段输入框应该按输入内容自适应宽度',
+  )
+  assert.match(
+    style,
+    /\.custom-field-editor-date[\s\S]*\.ant-picker \{[\s\S]*width: 132px;/,
+    '日期自定义字段编辑框应该使用固定短宽度，不要占满整列',
+  )
+  assert.match(
+    style,
+    /\.custom-field-editor-select[\s\S]*\.ant-select \{[\s\S]*width: min\(180px, 100%\);/,
+    '选择类自定义字段编辑框应该使用较短宽度并保留单元格内最大宽度限制',
+  )
+}
+
 async function main() {
   await testCustomFieldCellUsesReadModeTrigger()
   await testCustomFieldStyleHasSavedStateVisuals()
+  await testCustomFieldEditorUsesAdaptiveWidth()
   console.log('custom field display style regressions ok')
 }
 

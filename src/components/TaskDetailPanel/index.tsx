@@ -5,9 +5,7 @@ import Input from 'antd/es/input'
 import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
 import Avatar from 'antd/es/avatar'
-import Tag from 'antd/es/tag'
 import Popover from 'antd/es/popover'
-import Select from 'antd/es/select'
 import Card from 'antd/es/card'
 import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
@@ -139,7 +137,7 @@ export default function TaskDetailPanel({
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
-  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState<string | undefined>(undefined)
+  const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
   const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
   const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
@@ -418,13 +416,9 @@ export default function TaskDetailPanel({
     }
   }
 
-  const handleAssigneeChange = async (value?: string) => {
-    const currentPrimary = assignees[0]?.id ?? null
-    const desiredPrimary = value ?? null
+  const handleAssigneeChange = async (values: string[]) => {
     try {
-      if (desiredPrimary !== currentPrimary) {
-        await patchTaskAssignee(task.guid, desiredPrimary)
-      }
+      await patchTaskAssignee(task.guid, values)
       const fresh = await getTask(task.guid)
       const nextTask = apiTaskToTask(fresh)
       onTaskUpdated?.(nextTask)
@@ -494,7 +488,9 @@ export default function TaskDetailPanel({
                 size="middle"
                 placeholder="搜索并选择要新增的人"
                 value={selectedFollowerId}
-                onChange={setSelectedFollowerId}
+                onChange={(value) =>
+                  setSelectedFollowerId(Array.isArray(value) ? value[0] : value)
+                }
                 users={availableFollowerUsers}
               />
               <Button
@@ -592,15 +588,15 @@ export default function TaskDetailPanel({
   const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
   const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
 
-  const resetSubtaskCreateDraft = () => {
-    setSubtaskTitle('')
-    setSubtaskAssigneeId(undefined)
-    setSubtaskDue(null)
-  }
-
   const cancelEmptySubtaskCreate = () => {
     setSubtaskCreating(false)
     resetSubtaskCreateDraft()
+  }
+
+  const resetSubtaskCreateDraft = () => {
+    setSubtaskTitle('')
+    setSubtaskAssigneeIds([])
+    setSubtaskDue(null)
   }
 
   const handleAddSubtask = async () => {
@@ -628,12 +624,12 @@ export default function TaskDetailPanel({
         title: summary,
         parent_task_id: task.guid,
         section_id: primarySectionGuid || primaryTasklistRef?.section_guid,
-        assignee_id: subtaskAssigneeId,
+        assignee_ids: subtaskAssigneeIds,
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
       const defaultParticipantIds = Array.from(
-        new Set([appConfig.user_id, subtaskAssigneeId].filter((id): id is string => Boolean(id))),
+        new Set([appConfig.user_id, ...subtaskAssigneeIds].filter((id): id is string => Boolean(id))),
       )
       if (defaultParticipantIds.length > 0) {
         await addParticipants(apiTask.task_id, defaultParticipantIds)
@@ -743,14 +739,14 @@ export default function TaskDetailPanel({
     }
   }
 
-  const handleSubtaskAssigneeChange = async (subtask: Task, value?: string) => {
+  const handleSubtaskAssigneeChange = async (subtask: Task, values: string[]) => {
     try {
-      const apiTask = await patchTaskAssignee(subtask.guid, value ?? null)
+      const apiTask = await patchTaskAssignee(subtask.guid, values)
       const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
       onTaskUpdated?.(next)
       setActiveSubtaskAssigneeGuid(null)
-      message.success(value ? '已更新子任务负责人' : '已清空子任务负责人')
+      message.success(values.length > 0 ? '已更新子任务负责人' : '已清空子任务负责人')
     } catch (err) {
       message.error(getActionErrorMessage(err, '更新子任务负责人失败'))
     }
@@ -1219,34 +1215,28 @@ export default function TaskDetailPanel({
               content={
                 <div className="detail-popover-panel">
                   <Text strong>添加负责人</Text>
-                  <Select
+                  <UserSearchSelect
+                    mode="multiple"
                     size="small"
-                    showSearch
-                    allowClear
-                    value={assignees[0]?.id}
-                    onChange={(value: string | undefined) => void handleAssigneeChange(value)}
-                    options={availableUsers.map((user) => ({
-                      value: user.id,
-                      label: user.name,
-                    }))}
+                    value={assignees.map((member) => member.id)}
+                    onChange={(value) => void handleAssigneeChange(Array.isArray(value) ? value : [])}
+                    users={availableUsers}
+                    placeholder="搜索并选择负责人"
                   />
                 </div>
               }
             >
               <div className="field-content field-clickable">
                 {assignees.length > 0 ? (
-                  <Space size={4} wrap>
+                  <Avatar.Group size={16} max={{ count: 4 }}>
                     {assignees.map((a) => (
-                      <Tag key={a.id} className="assignee-tag">
-                        <Space size={4}>
-                          <Avatar size={16} style={{ backgroundColor: '#7b67ee', fontSize: 10 }}>
-                            {(a.name ?? a.id).slice(0, 1)}
-                          </Avatar>
-                          {a.name ?? a.id}
-                        </Space>
-                      </Tag>
+                      <Tooltip key={a.id} title={a.name ?? a.id}>
+                        <Avatar size={16} style={{ backgroundColor: '#7b67ee', fontSize: 10 }}>
+                          {(a.name ?? a.id).slice(0, 1)}
+                        </Avatar>
+                      </Tooltip>
                     ))}
-                  </Space>
+                  </Avatar.Group>
                 ) : (
                   <span className="field-placeholder">添加负责人</span>
                 )}
@@ -1537,13 +1527,12 @@ export default function TaskDetailPanel({
             <div className="detail-subtasks">
               {subtaskDrafts.map((subtask) => {
                 const isDone = subtask.status === 'done'
-                const assignee = subtask.members.find((m) => m.role === 'assignee')
-                const assigneeUser = assignee
-                  ? availableUsers.find((user) => user.id === assignee.id) ?? {
+                const assigneeUsers = subtask.members
+                  .filter((m) => m.role === 'assignee')
+                  .map((assignee) => availableUsers.find((user) => user.id === assignee.id) ?? {
                     id: assignee.id,
                     name: assignee.name ?? assignee.id,
-                  }
-                  : undefined
+                  })
                 const dueDate = subtask.due ? dayjs(Number(subtask.due.timestamp)) : null
                 return (
                   <div
@@ -1632,8 +1621,14 @@ export default function TaskDetailPanel({
                               autoFocus
                               label="设置子任务负责人"
                               placeholder="搜索并选择负责人"
-                              value={assigneeUser?.id}
-                              onChange={(value) => void handleSubtaskAssigneeChange(subtask, value)}
+                              mode="multiple"
+                              value={assigneeUsers.map((user) => user.id)}
+                              onChange={(value) =>
+                                void handleSubtaskAssigneeChange(
+                                  subtask,
+                                  Array.isArray(value) ? value : [],
+                                )
+                              }
                               users={availableUsers}
                             />
                           </div>
@@ -1645,13 +1640,23 @@ export default function TaskDetailPanel({
                             size="small"
                             className="subtask-meta-trigger subtask-assignee-trigger"
                           >
-                            {assigneeUser ? (
+                            {assigneeUsers.length > 0 ? (
                               <>
-                                <Avatar size={20} style={{ backgroundColor: '#7b67ee' }}>
-                                  {(assigneeUser.name ?? assigneeUser.id).slice(0, 1)}
-                                </Avatar>
+                                <Avatar.Group size={20} max={{ count: 3 }}>
+                                  {assigneeUsers.map((assigneeUser) => (
+                                    <Avatar
+                                      key={assigneeUser.id}
+                                      size={20}
+                                      style={{ backgroundColor: '#7b67ee' }}
+                                    >
+                                      {(assigneeUser.name ?? assigneeUser.id).slice(0, 1)}
+                                    </Avatar>
+                                  ))}
+                                </Avatar.Group>
                                 <span className="subtask-assignee-name">
-                                  {assigneeUser.name ?? assigneeUser.id}
+                                  {assigneeUsers
+                                    .map((assigneeUser) => assigneeUser.name ?? assigneeUser.id)
+                                    .join('、')}
                                 </span>
                               </>
                             ) : (
@@ -1741,28 +1746,24 @@ export default function TaskDetailPanel({
                                 e.preventDefault()
                               }}
                             >
-                              <Select
+                              <UserSearchSelect
                                 autoFocus
-                                showSearch
                                 size="small"
+                                mode="multiple"
                                 placeholder="选择负责人"
-                                value={subtaskAssigneeId}
-                                onChange={(value: string | undefined) =>
-                                  setSubtaskAssigneeId(value ?? undefined)
+                                value={subtaskAssigneeIds}
+                                onChange={(value) =>
+                                  setSubtaskAssigneeIds(Array.isArray(value) ? value : [])
                                 }
-                                options={availableUsers.map((u) => ({
-                                  value: u.id,
-                                  label: u.name,
-                                }))}
+                                users={availableUsers}
                                 style={{ width: '100%' }}
-                                allowClear
                               />
                             </div>
                           }
                         >
                           <Tooltip title="设置子任务负责人">
                             <UsergroupAddOutlined
-                              className={`subtask-icon-btn ${subtaskAssigneeId ? 'active' : ''}`}
+                              className={`subtask-icon-btn ${subtaskAssigneeIds.length > 0 ? 'active' : ''}`}
                             />
                           </Tooltip>
                         </Popover>

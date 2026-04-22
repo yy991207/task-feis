@@ -6,7 +6,7 @@ import './index.less'
 
 interface UserSearchSelectProps {
   users: User[]
-  value?: string
+  value?: string | string[]
   label?: string
   placeholder?: string
   className?: string
@@ -14,8 +14,9 @@ interface UserSearchSelectProps {
   autoFocus?: boolean
   open?: boolean
   style?: CSSProperties
+  mode?: 'multiple'
   getPopupContainer?: () => HTMLElement
-  onChange: (value?: string) => void
+  onChange: (value?: string | string[]) => void
   onOpenChange?: (open: boolean) => void
 }
 
@@ -29,6 +30,7 @@ export default function UserSearchSelect({
   autoFocus,
   open,
   style,
+  mode,
   getPopupContainer,
   onChange,
   onOpenChange,
@@ -47,6 +49,7 @@ export default function UserSearchSelect({
         getPopupContainer={getPopupContainer}
         style={style}
         placeholder={placeholder}
+        mode={mode}
         value={value}
         onChange={onChange}
         allowClear

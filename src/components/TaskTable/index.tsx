@@ -56,8 +56,6 @@ import {
   HolderOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
-  MoreOutlined,
-  DeleteOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -78,7 +76,6 @@ import {
   patchTaskStatus,
   patchTaskAssignee,
   addParticipants,
-  deleteTaskApi,
   getTask,
   apiTaskToTask,
   applyParticipantIdsToTask,
@@ -287,12 +284,12 @@ interface DateConfigPanelProps {
 interface AssigneePickerProps {
   pickerKey: string
   open: boolean
-  value?: string
+  value?: string[]
   users: User[]
   placeholderIcon: React.ReactNode
   isTasklistView: boolean
   triggerClassName?: string
-  onChange: (value?: string) => void
+  onChange: (value: string[]) => void
   onInteract?: () => void
   onOpenChange?: (open: boolean) => void
 }
@@ -310,7 +307,8 @@ function AssigneePicker({
 }: AssigneePickerProps) {
   const popupContainerRef = useRef<HTMLDivElement | null>(null)
   const [selectOpen, setSelectOpen] = useState(open)
-  const selectedUser = value ? users.find((user) => user.id === value) : undefined
+  const selectedUsers = (value ?? [])
+    .map((id) => users.find((user) => user.id === id) ?? { id, name: id })
 
   const handlePopoverOpenChange = (open: boolean) => {
     setSelectOpen(open)
@@ -333,13 +331,14 @@ function AssigneePicker({
           <UserSearchSelect
             label="添加负责人"
             size="small"
+            mode="multiple"
             open={open ? selectOpen : false}
             onOpenChange={setSelectOpen}
             getPopupContainer={() => popupContainerRef.current ?? document.body}
             style={{ width: '100%' }}
             placeholder="搜索用户"
             value={value}
-            onChange={onChange}
+            onChange={(nextValue) => onChange(Array.isArray(nextValue) ? nextValue : [])}
             users={users}
             autoFocus
           />
@@ -350,26 +349,40 @@ function AssigneePicker({
         className={triggerClassName ? `assignee-cell ${triggerClassName}` : 'assignee-cell'}
         onMouseDown={onInteract}
       >
-        {selectedUser ? (
+        {selectedUsers.length > 0 ? (
           isTasklistView ? (
-            <Tooltip title={selectedUser.name ?? selectedUser.id}>
-              <Avatar
-                size={20}
-                className="tasklist-assignee-avatar"
-                style={{ backgroundColor: '#7b67ee', color: '#fff', fontSize: 11 }}
-              >
-                {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
-              </Avatar>
-            </Tooltip>
+            <Avatar.Group size={20} max={{ count: 3 }}>
+              {selectedUsers.map((selectedUser) => (
+                <Tooltip
+                  key={selectedUser.id}
+                  title={selectedUser.name ?? selectedUser.id}
+                >
+                  <Avatar
+                    size={20}
+                    className="tasklist-assignee-avatar"
+                    style={{ backgroundColor: '#7b67ee', color: '#fff', fontSize: 11 }}
+                  >
+                    {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
+                  </Avatar>
+                </Tooltip>
+              ))}
+            </Avatar.Group>
           ) : (
-            <Tooltip title={selectedUser.name ?? selectedUser.id}>
-              <Avatar
-                size={24}
-                style={{ backgroundColor: '#7b67ee', fontSize: 12 }}
-              >
-                {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
-              </Avatar>
-            </Tooltip>
+            <Avatar.Group size={24} max={{ count: 3 }}>
+              {selectedUsers.map((selectedUser) => (
+                <Tooltip
+                  key={selectedUser.id}
+                  title={selectedUser.name ?? selectedUser.id}
+                >
+                  <Avatar
+                    size={24}
+                    style={{ backgroundColor: '#7b67ee', fontSize: 12 }}
+                  >
+                    {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
+                  </Avatar>
+                </Tooltip>
+              ))}
+            </Avatar.Group>
           )
         ) : (
           placeholderIcon
@@ -536,7 +549,6 @@ export default function TaskTable({
   onTaskUpdated,
   onTasklistUpdated,
   onTaskCreatedDetailOpen,
-  onTaskDeleted,
 }: TaskTableProps) {
   const { token } = theme.useToken()
   const currentUser: User = { id: appConfig.user_id, name: appConfig.user_id }
@@ -550,7 +562,7 @@ export default function TaskTable({
   })
   const [creatingInSection, setCreatingInSection] = useState<string | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string | undefined>(undefined)
+  const [newTaskAssigneeIds, setNewTaskAssigneeIds] = useState<string[]>([])
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>(Priority.None)
   const [newTaskStart, setNewTaskStart] = useState<dayjs.Dayjs | null>(null)
   const [newTaskDue, setNewTaskDue] = useState<dayjs.Dayjs | null>(null)
@@ -832,7 +844,7 @@ export default function TaskTable({
       next.delete(sectionGuid)
       return next
     })
-    setNewTaskAssigneeId(currentUser.id)
+    setNewTaskAssigneeIds([currentUser.id])
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
@@ -852,7 +864,7 @@ export default function TaskTable({
   const resetInlineCreate = () => {
     setCreatingInSection(null)
     setNewTaskTitle('')
-    setNewTaskAssigneeId(undefined)
+    setNewTaskAssigneeIds([])
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
@@ -873,18 +885,20 @@ export default function TaskTable({
     inlineCreateSubmittingRef.current = submittingKey
     setSubmittingSectionGuid(sectionGuid ?? null)
     try {
-      const assigneeId = newTaskAssigneeId ?? currentUser.id
+      const assigneeIds = Array.from(
+        new Set((newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).filter(Boolean)),
+      )
       const apiTask = await createTaskApi({
         project_id: tasklist!.guid,
         title: summary,
-        assignee_id: assigneeId,
+        assignee_ids: assigneeIds,
         priority: toPriorityString(newTaskPriority),
         section_id: sectionGuid,
         start_date: newTaskStart ? newTaskStart.toISOString() : undefined,
         due_date: newTaskDue ? newTaskDue.toISOString() : undefined,
       })
       const defaultParticipantIds = Array.from(
-        new Set([currentUser.id, assigneeId].filter((id): id is string => Boolean(id))),
+        new Set([currentUser.id, ...assigneeIds].filter((id): id is string => Boolean(id))),
       )
       if (defaultParticipantIds.length > 0) {
         await addParticipants(apiTask.task_id, defaultParticipantIds)
@@ -938,7 +952,7 @@ export default function TaskTable({
     currentUser.id,
     newTaskTitle,
     submittingSectionGuid,
-    newTaskAssigneeId,
+    newTaskAssigneeIds,
     newTaskPriority,
     newTaskStart,
     newTaskDue,
@@ -1511,23 +1525,6 @@ export default function TaskTable({
     }
   }
 
-  const handleDeleteTaskAction = async (taskGuid: string) => {
-    try {
-      await deleteTaskApi(taskGuid)
-      onTaskDeleted?.(taskGuid)
-      if (!onTaskDeleted) {
-        onRefresh()
-      }
-      message.success('已删除任务')
-    } catch (err: unknown) {
-      message.error(getActionErrorMessage(err, '删除任务失败'))
-    }
-  }
-
-  const handleOpenParentPicker = (task: Task) => {
-    setParentPickerTask(task)
-  }
-
   const handleCloseParentPicker = () => {
     if (parentPickerSubmitting) {
       return
@@ -1553,22 +1550,6 @@ export default function TaskTable({
       message.error(getActionErrorMessage(err, '设置父任务失败'))
     } finally {
       setParentPickerSubmitting(false)
-    }
-  }
-
-  const handleDetachTaskAction = async (task: Task) => {
-    if (!task.parent_task_guid) {
-      return
-    }
-
-    try {
-      const apiTask = await updateTaskApi(task.guid, { parent_task_id: null })
-      const nextTask = apiTaskToTask(apiTask, tasklist?.guid)
-      handleTaskUpdate(nextTask)
-      onRefresh()
-      message.success('已设为独立任务')
-    } catch (err: unknown) {
-      message.error(getActionErrorMessage(err, '设为独立任务失败'))
     }
   }
 
@@ -1895,7 +1876,7 @@ export default function TaskTable({
       <AssigneePicker
         pickerKey={`inline-assignee-${sectionGuid}`}
         open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
-        value={newTaskAssigneeId}
+        value={newTaskAssigneeIds}
         users={users}
         isTasklistView={isTasklistView}
         placeholderIcon={
@@ -1904,7 +1885,7 @@ export default function TaskTable({
             style={{ color: '#b8bcc5', fontSize: 16 }}
           />
         }
-        onChange={setNewTaskAssigneeId}
+        onChange={setNewTaskAssigneeIds}
         onInteract={markInlineCreateInteracting}
         onOpenChange={(open) => {
           setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
@@ -2183,9 +2164,6 @@ export default function TaskTable({
             onToggleStatus={handleToggleStatus}
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
-            onDeleteTask={handleDeleteTaskAction}
-            onSetParentTask={handleOpenParentPicker}
-            onDetachTask={handleDetachTaskAction}
           />
         )
       },
@@ -2789,9 +2767,6 @@ interface TaskTitleCellProps {
   onToggleStatus: (e: React.MouseEvent, task: Task) => void
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
-  onDeleteTask: (taskGuid: string) => Promise<void> | void
-  onSetParentTask: (task: Task) => void
-  onDetachTask: (task: Task) => Promise<void> | void
 }
 
 interface TaskPriorityCellProps {
@@ -2889,7 +2864,10 @@ function CustomFieldCell({
 
   if (field.type === 'text') {
     return (
-      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="custom-field-editor custom-field-editor-text"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Input
           size="small"
           value={textValue}
@@ -2905,7 +2883,10 @@ function CustomFieldCell({
 
   if (field.type === 'number') {
     return (
-      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="custom-field-editor custom-field-editor-number"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Input
           size="small"
           value={numberValue}
@@ -2921,12 +2902,14 @@ function CustomFieldCell({
 
   if (field.type === 'datetime') {
     return (
-      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="custom-field-editor custom-field-editor-date"
+        onClick={(event) => event.stopPropagation()}
+      >
         <DatePicker
           size="small"
           value={dateValue}
           placeholder="选择日期"
-          style={{ width: '100%' }}
           autoFocus
           onChange={(value) => {
             onChange({
@@ -2947,7 +2930,10 @@ function CustomFieldCell({
 
   if (field.type === 'single_select') {
     return (
-      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="custom-field-editor custom-field-editor-select"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Select
           size="small"
           autoFocus
@@ -2975,7 +2961,10 @@ function CustomFieldCell({
 
   if (field.type === 'multi_select') {
     return (
-      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="custom-field-editor custom-field-editor-select"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Select
           mode="multiple"
           size="small"
@@ -2997,7 +2986,10 @@ function CustomFieldCell({
 
   if (field.type === 'member') {
     return (
-      <div className="custom-field-editor" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="custom-field-editor custom-field-editor-select"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Select
           mode="multiple"
           size="small"
@@ -3041,12 +3033,8 @@ function TaskTitleCell({
   onToggleStatus,
   onOpenDetail,
   onUpdate,
-  onDeleteTask,
-  onSetParentTask,
-  onDetachTask,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const statusToggleTooltip = task.status === 'done' ? '标记未完成' : '标记已完成'
 
   const handleRenameSummary = async (rawName: string) => {
@@ -3061,33 +3049,6 @@ function TaskTitleCell({
       onUpdate(task)
       message.error('重命名任务失败')
     }
-  }
-
-  const handleDeleteTask = async () => {
-    await onDeleteTask(task.guid)
-  }
-
-  const moreMenu = {
-    items: [
-      { key: 'set-parent', icon: <SubnodeOutlined />, label: '设置父任务' },
-      ...(task.parent_task_guid
-        ? [{ key: 'detach', icon: <BranchesOutlined />, label: '设为独立任务' }]
-        : []),
-      { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
-    ],
-    onClick: ({ key }: { key: string }) => {
-      if (key === 'set-parent') {
-        onSetParentTask(task)
-        return
-      }
-      if (key === 'detach') {
-        void onDetachTask(task)
-        return
-      }
-      if (key === 'delete') {
-        void handleDeleteTask()
-      }
-    },
   }
 
   return (
@@ -3158,32 +3119,15 @@ function TaskTitleCell({
               {loadedSubtaskCount ?? 0} / {task.subtask_count}
             </Tag>
           )}
-          <Button
-            type="text"
-            size="small"
-            className="task-detail-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenDetail()
-            }}
-          >
-            详情
-          </Button>
-          <Dropdown
-            menu={moreMenu}
-            trigger={['click']}
-            open={moreMenuOpen}
-            onOpenChange={setMoreMenuOpen}
-            placement="bottomLeft"
-          >
-            <Button
-              type="text"
-              size="small"
-              className="task-row-more-btn"
-              icon={<MoreOutlined />}
-              onClick={(e) => e.stopPropagation()}
+          {!editingName && (
+            <span
+              className="task-detail-hotspot"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenDetail()
+              }}
             />
-          </Dropdown>
+          )}
         </div>
       </div>
     </div>
@@ -3262,27 +3206,28 @@ function TaskAssigneeCell({
   onAssigneePickerOpenChange,
 }: TaskAssigneeCellProps) {
   const assignees = task.members.filter((m) => m.role === 'assignee')
-  const assigneeId = assignees[0]?.id
+  const assigneeIds = assignees.map((member) => member.id)
   const assigneePickerKey = `task-assignee-${task.guid}`
 
-  const handleAssigneeChange = async (value?: string) => {
-    const currentPrimary = assigneeId ?? null
-    const desiredPrimary = value ?? null
+  const handleAssigneeChange = async (values: string[]) => {
+    const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
+    const currentAssigneeIds = Array.from(new Set(assigneeIds))
+    const isSameSelection =
+      nextAssigneeIds.length === currentAssigneeIds.length &&
+      nextAssigneeIds.every((id) => currentAssigneeIds.includes(id))
     const newMembers = [
-      ...(desiredPrimary
-        ? [{
-          id: desiredPrimary,
-          role: 'assignee' as const,
-          type: 'user' as const,
-          name: users.find((u) => u.id === desiredPrimary)?.name,
-        }]
-        : []),
+      ...nextAssigneeIds.map((id) => ({
+        id,
+        role: 'assignee' as const,
+        type: 'user' as const,
+        name: users.find((u) => u.id === id)?.name,
+      })),
       ...task.members.filter((m) => m.role === 'follower'),
     ]
     onUpdate({ ...task, members: newMembers })
     try {
-      if (desiredPrimary !== currentPrimary) {
-        await patchTaskAssignee(task.guid, desiredPrimary)
+      if (!isSameSelection) {
+        await patchTaskAssignee(task.guid, nextAssigneeIds)
       }
       const fresh = await getTask(task.guid)
       onUpdate(apiTaskToTask(fresh))
@@ -3297,7 +3242,7 @@ function TaskAssigneeCell({
       <AssigneePicker
         pickerKey={assigneePickerKey}
         open={activeAssigneePickerKey === assigneePickerKey}
-        value={assigneeId}
+        value={assigneeIds}
         users={users}
         isTasklistView={isTasklistView}
         triggerClassName="assignee-trigger"

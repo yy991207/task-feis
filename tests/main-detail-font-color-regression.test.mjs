@@ -5,7 +5,7 @@ async function readSource(relativePath) {
   return readFile(new URL(relativePath, import.meta.url), 'utf8')
 }
 
-async function testMainPageTextUsesDeepBlackAndDetailButtonBlue() {
+async function testMainPageTextUsesDeepBlackAndDetailHotspotBlue() {
   const styleSource = await readSource('../src/components/TaskTable/index.less')
 
   assert.match(
@@ -25,13 +25,13 @@ async function testMainPageTextUsesDeepBlackAndDetailButtonBlue() {
   )
   assert.match(
     styleSource,
-    /\.task-detail-btn\.ant-btn \{[\s\S]*color: #3370ff !important;/,
-    '主页面任务行里的“详情”按钮应该改成蓝色',
+    /\.task-detail-hotspot \{[\s\S]*background: transparent;[\s\S]*border: 1px solid transparent;/,
+    '主页面任务行里的详情空白热区默认应该隐藏样式，不要一直显示蓝色方条',
   )
   assert.match(
     styleSource,
-    /\.task-detail-btn\.ant-btn \{[\s\S]*&:hover \{[\s\S]*color: #1456d9 !important;/,
-    '主页面任务行里的“详情”按钮 hover 时也应该保持蓝色强调',
+    /\.task-title-cell \{[\s\S]*&:hover \{[\s\S]*\.task-detail-hotspot \{[\s\S]*background: #edf3ff;[\s\S]*border-color: #d7e6ff;/,
+    '主页面任务行 hover 时详情空白热区才应该出现轻量蓝色强调',
   )
 }
 
@@ -72,7 +72,7 @@ async function testDetailPageTextUsesDeepBlackAndSubtaskDetailCopy() {
 }
 
 async function main() {
-  await testMainPageTextUsesDeepBlackAndDetailButtonBlue()
+  await testMainPageTextUsesDeepBlackAndDetailHotspotBlue()
   await testDetailPageTextUsesDeepBlackAndSubtaskDetailCopy()
   console.log('main detail font color regressions ok')
 }

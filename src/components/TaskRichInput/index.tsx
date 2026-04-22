@@ -298,6 +298,44 @@ export function extractMentionIds(value: string): string[] {
     .filter((item): item is string => Boolean(item))
 }
 
+function decoratePlainMentionsForReadOnly(value: string): string {
+  const parser = getParser()
+  if (!parser || !value) return value
+
+  const doc = parser.parseFromString(value, 'text/html')
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+  const textNodes: Text[] = []
+
+  while (walker.nextNode()) {
+    const current = walker.currentNode
+    if (current.nodeType !== Node.TEXT_NODE) continue
+    const textNode = current as Text
+    const parent = textNode.parentElement
+    if (parent?.closest('.task-rich-input-mention, a')) continue
+    if (!/@[^\s@<]+/.test(textNode.data)) continue
+    textNodes.push(textNode)
+  }
+
+  textNodes.forEach((node) => {
+    const fragment = doc.createDocumentFragment()
+    const parts = node.data.split(/(@[^\s@<]+)/g)
+    parts.forEach((part) => {
+      if (!part) return
+      if (part.startsWith('@')) {
+        const span = doc.createElement('span')
+        span.className = 'task-rich-input-mention'
+        span.textContent = part
+        fragment.appendChild(span)
+        return
+      }
+      fragment.appendChild(doc.createTextNode(part))
+    })
+    node.replaceWith(fragment)
+  })
+
+  return doc.body.innerHTML
+}
+
 export interface TaskRichTextProps {
   html: string
   className?: string
@@ -310,6 +348,7 @@ interface ToolbarTooltipTitleProps {
 
 export function TaskRichText({ html, className }: TaskRichTextProps) {
   const normalizedHtml = normalizeRichContent(html)
+  const displayHtml = decoratePlainMentionsForReadOnly(normalizedHtml)
   if (!normalizedHtml) {
     return null
   }
@@ -317,7 +356,7 @@ export function TaskRichText({ html, className }: TaskRichTextProps) {
   return (
     <div
       className={className ? `task-rich-text ${className}` : 'task-rich-text'}
-      dangerouslySetInnerHTML={{ __html: normalizedHtml }}
+      dangerouslySetInnerHTML={{ __html: displayHtml }}
     />
   )
 }

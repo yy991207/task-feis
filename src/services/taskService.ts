@@ -16,6 +16,7 @@ export interface ApiTask {
   section_id: string
   creator_id: string
   assignee_id: string | null
+  assignee_ids?: string[]
   participant_ids: string[]
   follower_ids: string[]
   start_date: string | null
@@ -121,10 +122,11 @@ function mapApiCustomFieldValue(fieldId: string, rawValue: unknown): CustomField
 }
 
 export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
+  const apiAssigneeIds = Array.from(
+    new Set([...(api.assignee_ids ?? []), ...(api.assignee_id ? [api.assignee_id] : [])]),
+  )
   const members = [
-    ...(api.assignee_id
-      ? [{ id: api.assignee_id, role: 'assignee' as const, type: 'user' as const }]
-      : []),
+    ...apiAssigneeIds.map((id) => ({ id, role: 'assignee' as const, type: 'user' as const })),
     ...[...api.participant_ids, ...api.follower_ids].map((id) => ({
       id,
       role: 'follower' as const,
@@ -246,7 +248,7 @@ export function createTaskApi(payload: {
   title: string
   description?: string
   parent_task_id?: string
-  assignee_id?: string
+  assignee_ids?: string[]
   priority?: string
   tags?: string[]
   section_id?: string
@@ -268,7 +270,7 @@ export function updateTaskApi(
     parent_task_id?: string | null
     status?: string
     priority?: string
-    assignee_id?: string | null
+    assignee_ids?: string[]
     tags?: string[]
     section_id?: string | null
     tasklists?: TasklistRef[]
@@ -303,11 +305,11 @@ export function patchTaskStatus(
 
 export function patchTaskAssignee(
   taskId: string,
-  assigneeId: string | null,
+  assigneeIds: string[],
 ): Promise<ApiTask> {
   return request<ApiTask>(`api/v1/task-center/tasks/${taskId}/assignee`, {
     method: 'PATCH',
-    body: JSON.stringify({ user_id: appConfig.user_id, assignee_id: assigneeId }),
+    body: JSON.stringify({ user_id: appConfig.user_id, assignee_ids: assigneeIds }),
   })
 }
 
@@ -379,7 +381,7 @@ export function batchTasks(payload: {
   task_ids: string[]
   action: string
   status?: string
-  assignee_id?: string
+  assignee_ids?: string[]
   priority?: string
   tags?: string[]
 }): Promise<void> {
