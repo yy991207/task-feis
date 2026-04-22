@@ -94,7 +94,7 @@ async function testTaskHistoryUsesFeishuLikeStructuredTimeline() {
 
   assert.match(
     source,
-    /renderTaskActivityMessage/,
+    /renderTaskActivityMessage[\s\S]*ReactNode/,
     '历史记录文案应该结构化渲染，不能只输出整句纯文本',
   )
   assert.match(
@@ -114,7 +114,7 @@ async function testTaskHistoryUsesFeishuLikeStructuredTimeline() {
   )
   assert.match(
     styleSource,
-    /\.detail-history-item\s*\{[\s\S]*grid-template-columns: 46px 18px minmax\(0, 1fr\)/,
+    /\.detail-history-item\s*\{[\s\S]*grid-template-columns: 52px 20px minmax\(0, 1fr\)/,
     '历史记录每行应该固定时间列、头像列和内容列，贴近飞书时间线布局',
   )
   assert.match(
@@ -124,7 +124,7 @@ async function testTaskHistoryUsesFeishuLikeStructuredTimeline() {
   )
   assert.match(
     styleSource,
-    /\.detail-history-message\s*\{[\s\S]*line-height: 18px/,
+    /\.detail-history-message\s*\{[\s\S]*line-height: 22px/,
     '历史记录文案行高应该更贴近飞书紧凑列表',
   )
 }

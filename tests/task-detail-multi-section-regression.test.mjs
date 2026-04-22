@@ -41,8 +41,8 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
   )
   assert.match(
     detailSource,
-    /const currentTasklistRefs = tasklistOwner\.tasklists\.filter\(\s*\(item\) => item\.tasklist_guid === currentTasklist\?\.guid,\s*\)/,
-    '任务详情应该先筛出当前清单下的所有任务分组引用，再做已添加分组展示；子任务场景要支持沿用父任务分组',
+    /const currentTasklistRefs = task\.tasklists\.filter\(\s*\(item\) => item\.tasklist_guid === currentTasklist\?\.guid,\s*\)/,
+    '任务详情应该先筛出当前任务在当前清单下的所有分组引用，再做已添加分组展示',
   )
   assert.match(
     detailSource,
@@ -51,7 +51,7 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
   )
   assert.match(
     detailSource,
-    /import \{ listSections \} from '@\/services\/sectionService'/,
+    /import \{ listSections, moveTaskToSection \} from '@\/services\/sectionService'/,
     '任务详情任务分组候选必须和主页面一样从 sections 接口加载，不能只依赖清单缓存',
   )
   assert.match(
@@ -77,7 +77,7 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
   assert.match(
     detailSource,
     /const handleAddTaskToSection = async \(sectionGuid: string\) => \{/,
-    '任务详情应该提供添加单个任务分组的处理函数',
+    '任务详情应该提供切换单个任务分组的处理函数',
   )
   assert.match(
     detailSource,
@@ -86,8 +86,18 @@ async function testTaskDetailPanelRendersMultiSectionSelector() {
   )
   assert.match(
     detailSource,
-    /await handleTaskPatch\(\{\s*tasklists: nextTasklists,\s*\}\)/,
-    '任务详情增删任务分组时应该统一走 tasklists 回写，避免继续只改本地展示',
+    /const handleAddTaskToSection = async \(sectionGuid: string\) => \{[\s\S]*await moveTaskToSection\(task\.guid, sectionGuid\)[\s\S]*message\.success\('已切换任务分组'\)[\s\S]*\}/,
+    '任务详情切换任务分组时应该直接走分组切换接口，避免页面看起来没有变化',
+  )
+  assert.match(
+    detailSource,
+    /const handleAddTaskToSection = async \(sectionGuid: string\) => \{[\s\S]*onTaskUpdated\?\.\(nextTask\)[\s\S]*\}/,
+    '任务详情切换任务分组时应该先乐观更新本地状态，避免页面保持旧分组',
+  )
+  assert.doesNotMatch(
+    detailSource,
+    /const handleAddTaskToSection = async \(sectionGuid: string\) => \{[\s\S]*await handleTaskPatch\(\{\s*tasklists: nextTasklists,\s*\}\)[\s\S]*\}/,
+    '任务详情切换任务分组时不应该继续走 tasklists 追加回写',
   )
   assert.match(
     detailSource,

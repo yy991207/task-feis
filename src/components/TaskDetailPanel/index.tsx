@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import Button from 'antd/es/button'
 import Checkbox from 'antd/es/checkbox'
 import Input from 'antd/es/input'
@@ -77,7 +78,7 @@ import {
 import {
   updateProject as apiUpdateProject,
 } from '@/services/projectService'
-import { listSections } from '@/services/sectionService'
+import { listSections, moveTaskToSection } from '@/services/sectionService'
 import { FilePreviewRenderer } from '@/components/file-preview'
 import TaskRichInput, {
   TaskRichText,
@@ -254,6 +255,309 @@ function groupTaskActivitiesByDate(activities: ApiTaskActivity[]): Array<{
   })
 }
 
+function formatTaskStatusLabel(status: unknown): string {
+  switch (status) {
+    case 'todo':
+      return '待处理'
+    case 'in_progress':
+      return '进行中'
+    case 'done':
+      return '已完成'
+    case 'cancelled':
+      return '已取消'
+    default:
+      return normalizeActivityValue(status)
+  }
+}
+
+function formatReadableHistorySize(rawSize: unknown): string | null {
+  const size = typeof rawSize === 'string' ? Number(rawSize) : rawSize
+  if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) {
+    return null
+  }
+  if (size < 1024) {
+    return `${Math.max(1, Math.round(size))}B`
+  }
+  if (size < 1024 * 1024) {
+    const value = size / 1024
+    return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}KB`
+  }
+  return `${(size / 1024 / 1024).toFixed(2)}MB`
+}
+
+function normalizeHistoryPeople(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => isNonEmptyString(item))
+  }
+  if (isNonEmptyString(value)) {
+    return [value]
+  }
+  return []
+}
+
+function renderHistoryPersonList(
+  value: unknown,
+  getUserLabel: (userId: string) => string,
+): ReactNode {
+  const people = normalizeHistoryPeople(value)
+  if (people.length === 0) {
+    return <span className="detail-history-empty-value">空</span>
+  }
+
+  return people.map((person, index) => (
+    <span key={`${person}-${index}`}>
+      {index > 0 && '、'}
+      <span className="detail-history-person-highlight">{getUserLabel(person)}</span>
+    </span>
+  ))
+}
+
+function renderHistoryValue(value: unknown): ReactNode {
+  return <span className="detail-history-value">{normalizeActivityValue(value)}</span>
+}
+
+function renderTaskActivityMessage(
+  activity: ApiTaskActivity,
+  getUserLabel: (userId: string) => string,
+): ReactNode {
+  const { event_type: eventType, actor_id: actorId, payload } = activity
+  const actorLabel = getUserLabel(actorId)
+  const fieldName = isNonEmptyString(payload.field_name)
+    ? payload.field_name.trim()
+    : isNonEmptyString(payload.field)
+      ? formatActivityFieldName(payload.field)
+      : '字段'
+  const subtaskTitle = [
+    payload.subtask_title,
+    payload.child_task_title,
+    payload.task_title,
+    payload.title,
+  ].find(isNonEmptyString)
+
+  switch (eventType) {
+    case 'task.created':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>创建了任务</span>
+        </>
+      )
+    case 'task.completed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>完成了整个任务</span>
+        </>
+      )
+    case 'task.status_changed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将“状态”的字段值修改为：</span>
+          {renderHistoryValue(formatTaskStatusLabel(payload.new_value))}
+        </>
+      )
+    case 'task.title_changed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将“标题”的字段值修改为：</span>
+          {renderHistoryValue(payload.new_value)}
+        </>
+      )
+    case 'task.description_changed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将“任务描述”的字段值修改为：</span>
+          {renderHistoryValue(payload.new_value)}
+        </>
+      )
+    case 'task.start_date_changed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将“开始时间”的字段值修改为：</span>
+          {renderHistoryValue(payload.new_value)}
+        </>
+      )
+    case 'task.due_date_changed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将“截止时间”的字段值修改为：</span>
+          {renderHistoryValue(payload.new_value)}
+        </>
+      )
+    case 'task.assignee_changed': {
+      const added = normalizeHistoryPeople(payload.added_assignee_ids)
+      const removed = normalizeHistoryPeople(payload.removed_assignee_ids)
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          {added.length > 0 ? (
+            <>
+              <span>将</span>
+              {renderHistoryPersonList(added, getUserLabel)}
+              <span>添加为任务负责人</span>
+            </>
+          ) : null}
+          {added.length === 0 && removed.length > 0 ? (
+            <>
+              <span>移除了</span>
+              {renderHistoryPersonList(removed, getUserLabel)}
+              <span>的任务负责人</span>
+            </>
+          ) : null}
+          {added.length === 0 && removed.length === 0 ? <span>修改了负责人</span> : null}
+        </>
+      )
+    }
+    case 'task.participants_added':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将</span>
+          {renderHistoryPersonList(payload.target_user_ids, getUserLabel)}
+          <span>添加为关注人</span>
+        </>
+      )
+    case 'task.participants_removed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>移除了</span>
+          {renderHistoryPersonList(payload.target_user_ids, getUserLabel)}
+          <span>关注人</span>
+        </>
+      )
+    case 'task.custom_field_changed':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>将“{fieldName}”的字段值修改为：</span>
+          {renderHistoryValue(payload.new_value)}
+        </>
+      )
+    case 'comment.created':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>发表了评论：</span>
+          {renderHistoryValue(payload.comment_excerpt)}
+        </>
+      )
+    case 'comment.updated':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>编辑了评论：</span>
+          {renderHistoryValue(payload.comment_excerpt)}
+        </>
+      )
+    case 'comment.deleted':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>删除了评论</span>
+        </>
+      )
+    case 'attachment.created':
+    case 'attachment.uploaded':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>上传了附件：</span>
+        </>
+      )
+    case 'attachment.deleted':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>删除了附件：</span>
+          {renderHistoryValue(payload.file_name)}
+        </>
+      )
+    case 'task.subtask_added':
+    case 'task.subtask_created':
+    case 'subtask.created':
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>添加了子任务</span>
+          {subtaskTitle ? (
+            <>
+              <span> </span>
+              <span className="detail-history-task-link">{subtaskTitle}</span>
+            </>
+          ) : null}
+        </>
+      )
+    default:
+      if (payload.field) {
+        return (
+          <>
+            <span className="detail-history-person-highlight">{actorLabel}</span>
+            <span>将“{formatActivityFieldName(payload.field)}”修改为：</span>
+            {renderHistoryValue(payload.new_value)}
+          </>
+        )
+      }
+      return (
+        <>
+          <span className="detail-history-person-highlight">{actorLabel}</span>
+          <span>更新了任务</span>
+        </>
+      )
+  }
+}
+
+function extractActivityAttachmentInfo(activity: ApiTaskActivity): {
+  name: string
+  sizeLabel: string | null
+} | null {
+  const payload = activity.payload as Record<string, unknown>
+  const rawName = [
+    payload.file_name,
+    payload.attachment_name,
+    payload.name,
+    payload.filename,
+    payload.title,
+  ].find(isNonEmptyString)
+  const rawSize = payload.file_size ?? payload.attachment_size ?? payload.size
+  const sizeLabel = formatReadableHistorySize(rawSize)
+  if (!rawName && !sizeLabel) {
+    return null
+  }
+  return {
+    name: rawName ?? '附件',
+    sizeLabel,
+  }
+}
+
+function renderActivityAttachmentCard(activity: ApiTaskActivity): ReactNode {
+  const attachmentInfo = extractActivityAttachmentInfo(activity)
+  if (!attachmentInfo) {
+    return null
+  }
+
+  return (
+    <div className="detail-history-attachment-card">
+      <div className="detail-history-attachment-icon">
+        <PaperClipOutlined />
+      </div>
+      <div className="detail-history-attachment-body">
+        <div className="detail-history-attachment-name" title={attachmentInfo.name}>
+          {attachmentInfo.name}
+        </div>
+        {attachmentInfo.sizeLabel && (
+          <div className="detail-history-attachment-size">{attachmentInfo.sizeLabel}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 interface TaskDetailPanelProps {
   task: Task
   tasklists: Tasklist[]
@@ -332,15 +636,13 @@ export default function TaskDetailPanel({
   const assignees = task.members.filter((m) => m.role === 'assignee')
   const isSubtask = Boolean(task.parent_task_guid)
   const creator: User = { id: task.creator.id, name: task.creator.id }
-  const rootParentTask = parentTaskChain[0]
-  // 主表里的所有子任务都跟随顶级父任务所在分组展示，详情页这里保持同一套来源。
-  const tasklistOwner = isSubtask && rootParentTask ? rootParentTask : task
-  const primaryTasklistRef = tasklistOwner.tasklists[0]
+  // 任务分组直接跟随当前任务自身的 tasklists，父任务链只负责路径展示。
+  const primaryTasklistRef = task.tasklists[0]
   const creatorName = creator.name
   const currentTasklist = primaryTasklistRef
     ? tasklists.find((item) => item.guid === primaryTasklistRef.tasklist_guid)
     : undefined
-  const currentTasklistRefs = tasklistOwner.tasklists.filter(
+  const currentTasklistRefs = task.tasklists.filter(
     (item) => item.tasklist_guid === currentTasklist?.guid,
   )
   const tasklistSectionSource = detailTasklistSections
@@ -359,12 +661,60 @@ export default function TaskDetailPanel({
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
+  const resolveHistoryUserLabel = (userId: string): string => {
+    if (!userId) {
+      return '有人'
+    }
+    if (userId === appConfig.user_id) {
+      return '我'
+    }
+    const matched = availableUsers.find((user) => user.id === userId)
+    return matched?.name ?? userId
+  }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // 切换任务时，抽屉本身不重挂载，所以这里手动清理任务级状态，避免上一条任务的评论草稿、历史页和预览态残留到下一条。
     setSectionPopoverOpen(false)
     setSectionSearchValue('')
+    setCommentValue('')
+    setCommentMentions([])
+    setEditingCommentId(null)
+    setEditingCommentValue('')
+    setEditingCommentMentions([])
+    setComments([])
+    setCommentAttachments([])
+    setCommentAttachmentOrigins({})
+    setCommentAttachmentMap({})
+    setAttachments([])
+    setAttachmentCount(0)
+    setAttachmentUploading(false)
+    setCommentAttachmentUploading(false)
+    setDescriptionDraft(task.description)
+    setDescriptionEditing(false)
+    setSubtaskDrafts([])
+    setSubtaskCreating(false)
+    setSubtaskTitle('')
+    setSubtaskAssigneeIds([])
+    setSubtaskDue(null)
+    setParentTaskChain([])
+    setDetailTasklistSections([])
+    setDetailTasklistSectionsLoading(false)
+    setActiveSubtaskDueGuid(null)
+    setActiveSubtaskAssigneeGuid(null)
+    setSelectedFollowerId(undefined)
+    setFollowersPopoverOpen(false)
+    setPreviewAttachment(null)
+    setTasklistRenaming(false)
+    setTasklistRenameValue('')
     setHistoryOpen(false)
+    setHistoryLoading(false)
     setHistoryActivities([])
+    pendingCommentScrollRef.current = false
+    subtaskInteractingRef.current = false
+    subtaskSubmittingRef.current = false
+    if (detailScrollRef.current) {
+      detailScrollRef.current.scrollTo({ top: 0 })
+    }
   }, [task.guid])
 
   useEffect(() => {
@@ -1075,22 +1425,36 @@ export default function TaskDetailPanel({
       return
     }
 
+    if (currentTasklistRefs.some((item) => item.section_guid === sectionGuid)) {
+      setSectionSearchValue('')
+      setSectionPopoverOpen(false)
+      return
+    }
+
+    // 切换分组时先乐观更新本地状态，避免接口返回慢时页面看起来没有变化。
     const nextTasklists = [
-      ...task.tasklists,
+      ...task.tasklists.filter((item) => item.tasklist_guid !== currentTasklist.guid),
       {
         tasklist_guid: currentTasklist.guid,
         section_guid: sectionGuid,
       },
     ]
+    const nextTask: Task = {
+      ...task,
+      tasklists: nextTasklists,
+    }
 
     try {
-      await handleTaskPatch({
-        tasklists: nextTasklists,
-      })
+      onTaskUpdated?.(nextTask)
+      await moveTaskToSection(task.guid, sectionGuid)
       setSectionSearchValue('')
-      message.success('已添加任务分组')
+      message.success('已切换任务分组')
+      if (!onTaskUpdated) {
+        onRefresh?.()
+      }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '添加任务分组失败')
+      onTaskUpdated?.(task)
+      message.error(err instanceof Error ? err.message : '切换任务分组失败')
     }
   }
 
@@ -1354,7 +1718,10 @@ export default function TaskDetailPanel({
 
   if (historyOpen) {
     return (
-      <div className="detail-panel" style={{ width: panelWidth, minWidth: panelWidth }}>
+      <div
+        className="detail-panel detail-panel--drawer"
+        style={{ width: panelWidth, minWidth: panelWidth }}
+      >
         <div
           className="detail-resize-handle"
           onPointerDown={handleResizeStart}
@@ -1401,18 +1768,32 @@ export default function TaskDetailPanel({
                   <div className="detail-history-list">
                     {group.items.map((activity) => (
                       <div key={activity.activity_id} className="detail-history-item">
+                        {(() => {
+                          const activityText = formatTaskActivityText(activity)
+                          return (
+                            <>
                         <div className="detail-history-time">
                           {dayjs(activity.created_at).format('HH:mm')}
                         </div>
                         <Avatar
-                          size={18}
+                          size={20}
                           className="detail-history-avatar"
                         >
-                          {(activity.actor_id || 'U').slice(0, 1).toUpperCase()}
+                          {resolveHistoryUserLabel(activity.actor_id).slice(0, 1).toUpperCase()}
                         </Avatar>
-                        <div className="detail-history-message">
-                          {formatTaskActivityText(activity)}
+                        <div className="detail-history-message" title={activityText}>
+                          <div className="detail-history-message-line">
+                            {renderTaskActivityMessage(activity, resolveHistoryUserLabel)}
+                          </div>
+                          {extractActivityAttachmentInfo(activity) && (
+                            <div className="detail-history-attachment-wrap">
+                              {renderActivityAttachmentCard(activity)}
+                            </div>
+                          )}
                         </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1426,7 +1807,10 @@ export default function TaskDetailPanel({
   }
 
   return (
-    <div className="detail-panel" style={{ width: panelWidth, minWidth: panelWidth }}>
+    <div
+      className="detail-panel detail-panel--drawer"
+      style={{ width: panelWidth, minWidth: panelWidth }}
+    >
       <div
         className="detail-resize-handle"
         onPointerDown={handleResizeStart}
