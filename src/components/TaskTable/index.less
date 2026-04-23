@@ -154,12 +154,40 @@
   .ant-btn-text {
     color: #1f2329 !important;
   }
+
+  .toolbar-save-view-btn {
+    margin-left: auto;
+    color: #1f2329 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+
+    &:hover,
+    &:focus {
+      color: #1f2329 !important;
+      background: #f2f3f5 !important;
+    }
+
+    &.toolbar-save-view-btn-dirty {
+      color: #1677ff !important;
+
+      &:hover,
+      &:focus {
+        color: #4096ff !important;
+        background: #f2f3f5 !important;
+      }
+    }
+  }
 }
 
 .table-body {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 24px;
+}
+
+.table-view-loading {
+  padding: 24px;
 }
 
 .table-column-title {

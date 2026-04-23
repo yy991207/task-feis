@@ -15,6 +15,7 @@ import Tag from 'antd/es/tag'
 import Tooltip from 'antd/es/tooltip'
 import Badge from 'antd/es/badge'
 import Divider from 'antd/es/divider'
+import Skeleton from 'antd/es/skeleton'
 import theme from 'antd/es/theme'
 import message from 'antd/es/message'
 import {
@@ -100,6 +101,15 @@ import {
   deleteSection as apiDeleteSection,
   updateSection as apiUpdateSection,
 } from '@/services/sectionService'
+import {
+  listViews,
+  getView,
+  createView,
+  updateView,
+  DEFAULT_VIEW_NAME,
+  type TaskView,
+  type ViewFilters,
+} from '@/services/viewService'
 import type { ViewConfig, ColumnKey } from '@/config/viewConfig'
 import EditableInput from '@/components/EditableInput'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
@@ -1462,6 +1472,9 @@ export default function TaskTable({
   } | null>(null)
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
   const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
+  const isTasklistView = Boolean(tasklist)
+  const projectIdForView = tasklist?.guid ?? ''
+  const [customFieldsReadyProjectId, setCustomFieldsReadyProjectId] = useState<string>('')
   void creatingCustomField
   void setCreatingCustomField
 
@@ -1561,14 +1574,22 @@ export default function TaskTable({
 
   // 加载项目自定义字段
   useEffect(() => {
-    if (!tasklist) return
+    if (!tasklist) {
+      return
+    }
+    const projectId = tasklist.guid
     let cancelled = false
-    void listCustomFields(tasklist.guid, { includeDisabledOptions: true })
+    void listCustomFields(projectId, { includeDisabledOptions: true })
       .then((list) => {
         if (cancelled) return
         applyCustomFieldList(list)
       })
       .catch(() => undefined)
+      .finally(() => {
+        if (cancelled) return
+        // 清单自定义字段会参与过滤字段表，未就绪前不能渲染表格，否则保存的自定义字段筛选会被短暂当成无效条件。
+        setCustomFieldsReadyProjectId(projectId)
+      })
     return () => {
       cancelled = true
     }
@@ -1614,6 +1635,7 @@ export default function TaskTable({
     [filterFieldConfigs],
   )
   const defaultFilterField = filterFieldConfigs[0] ?? systemFilterFieldConfigs[0]
+  const areFilterFieldsReady = !isTasklistView || !projectIdForView || customFieldsReadyProjectId === projectIdForView
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>(() => [
     createDefaultFilterCondition(systemFilterFieldConfigs[0]),
   ])
@@ -1634,6 +1656,9 @@ export default function TaskTable({
 
   useEffect(() => {
     setFilterConditions((prev) => {
+      if (!areFilterFieldsReady) {
+        return prev
+      }
       const next = prev
         .filter((condition) => filterFieldConfigMap.has(condition.fieldKey))
         .map((condition) => {
@@ -1661,7 +1686,7 @@ export default function TaskTable({
 
       return [createDefaultFilterCondition(filterFieldConfigs[0] ?? systemFilterFieldConfigs[0])]
     })
-  }, [filterFieldConfigMap, filterFieldConfigs])
+  }, [areFilterFieldsReady, filterFieldConfigMap, filterFieldConfigs])
 
   const sectionSource = hasLocalSectionEdits ? localSections : (sections ?? [])
 
@@ -2402,7 +2427,150 @@ export default function TaskTable({
   }
   // ---- end drag & drop ----
 
-  const isTasklistView = Boolean(tasklist)
+  // ---- 清单视图：保存/加载 filters JSON ----
+  const [currentView, setCurrentView] = useState<TaskView | null>(null)
+  const [savedFiltersSignature, setSavedFiltersSignature] = useState<string>('')
+  const [viewSaving, setViewSaving] = useState(false)
+  const [viewLoading, setViewLoading] = useState<boolean>(Boolean(tasklist?.guid))
+  const [viewReadyProjectId, setViewReadyProjectId] = useState<string>('')
+  const viewInitRef = useRef<string>('')
+
+  const buildViewFilters = useCallback((): ViewFilters => ({
+    version: 1,
+    statusFilter,
+    sortMode: effectiveSortMode,
+    groupMode,
+    filterConditions,
+  }), [statusFilter, effectiveSortMode, groupMode, filterConditions])
+
+  const currentFiltersSignature = useMemo(
+    () => JSON.stringify(buildViewFilters()),
+    [buildViewFilters],
+  )
+  const viewDirty = isTasklistView && savedFiltersSignature !== '' && currentFiltersSignature !== savedFiltersSignature
+
+  // 拉取已保存的默认视图并应用 filters
+  useEffect(() => {
+    if (!isTasklistView || !projectIdForView) {
+      return
+    }
+    if (viewInitRef.current === projectIdForView) {
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const views = await listViews(projectIdForView)
+        if (cancelled) return
+        viewInitRef.current = projectIdForView
+        // 优先加载名为"默认视图"的个人视图（保存视图默认写入此名称）
+        const matched = views.find((v) => v.name === DEFAULT_VIEW_NAME && v.scope === 'personal' && v.creator_id === appConfig.user_id)
+          ?? views.find((v) => v.name === DEFAULT_VIEW_NAME && v.scope === 'personal')
+          ?? views.find((v) => v.scope === 'personal' && v.creator_id === appConfig.user_id)
+          ?? views.find((v) => v.scope === 'personal')
+          ?? views[0]
+          ?? null
+        // 命中后再请求视图详情接口，以最新的 filters 为准
+        let mine: TaskView | null = matched
+        if (matched?.view_id) {
+          try {
+            const detail = await getView(matched.view_id)
+            if (cancelled) return
+            if (detail) mine = detail
+          } catch {
+            // 详情失败则回退到列表里的数据
+          }
+        }
+        if (mine?.filters) {
+          const f = mine.filters
+          if (f.statusFilter) {
+            setInternalStatusFilter(f.statusFilter as StatusFilterKey)
+            onStatusFilterChange?.(f.statusFilter as StatusFilterKey)
+          }
+          if (f.sortMode) {
+            setInternalSortMode(f.sortMode as SortModeKey)
+            onSortModeChange?.(f.sortMode as SortModeKey)
+          }
+          if (f.groupMode) setGroupMode(f.groupMode as GroupModeKey)
+          if (Array.isArray(f.filterConditions) && f.filterConditions.length > 0) {
+            setFilterConditions(f.filterConditions as FilterCondition[])
+          }
+        }
+        setCurrentView(mine)
+        setSavedFiltersSignature(
+          mine?.filters ? JSON.stringify({
+            version: 1,
+            statusFilter: mine.filters.statusFilter ?? statusFilter,
+            sortMode: mine.filters.sortMode ?? effectiveSortMode,
+            groupMode: mine.filters.groupMode ?? groupMode,
+            filterConditions: mine.filters.filterConditions ?? filterConditions,
+          }) : JSON.stringify(buildViewFilters()),
+        )
+      } catch {
+        // 接口不可用时，用当前本地状态作为"已保存"基线，避免按钮一直显示未保存
+        setSavedFiltersSignature(JSON.stringify(buildViewFilters()))
+      } finally {
+        if (!cancelled) {
+          // 这里记录当前清单已完成视图初始化，用同步派生状态挡住 useEffect 生效前的那一帧旧表格。
+          setViewReadyProjectId(projectIdForView)
+          setViewLoading(false)
+        }
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectIdForView, isTasklistView])
+
+  const handleSaveView = useCallback(async () => {
+    if (!isTasklistView || !projectIdForView || viewSaving) return
+    const filters = buildViewFilters()
+    setViewSaving(true)
+    try {
+      // 保存前实时拉一遍清单下的视图，避免初始化时漏掉已有视图而走到 POST 触发"同名视图已存在"
+      let targetViewId = currentView?.view_id
+      if (!targetViewId) {
+        try {
+          const views = await listViews(projectIdForView)
+          const exist = views.find((v) => v.name === DEFAULT_VIEW_NAME && v.scope === 'personal' && v.creator_id === appConfig.user_id)
+            ?? views.find((v) => v.name === DEFAULT_VIEW_NAME && v.scope === 'personal')
+            ?? views.find((v) => v.scope === 'personal' && v.creator_id === appConfig.user_id)
+            ?? views.find((v) => v.scope === 'personal')
+            ?? views[0]
+          if (exist) {
+            targetViewId = exist.view_id
+            setCurrentView(exist)
+          }
+        } catch {
+          // 列表接口失败时继续尝试 POST
+        }
+      }
+      let view: TaskView
+      if (targetViewId) {
+        view = await updateView(targetViewId, { filters })
+      } else {
+        view = await createView(projectIdForView, {
+          name: DEFAULT_VIEW_NAME,
+          scope: 'personal',
+          filters,
+        })
+      }
+      setCurrentView(view)
+      setSavedFiltersSignature(JSON.stringify(filters))
+      message.success('视图已保存')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '保存视图失败')
+    } finally {
+      setViewSaving(false)
+    }
+  }, [isTasklistView, projectIdForView, viewSaving, buildViewFilters, currentView])
+  // ---- end 清单视图 ----
+
+  const shouldShowViewLoading = isTasklistView && projectIdForView !== '' && (
+    viewLoading ||
+    viewReadyProjectId !== projectIdForView ||
+    customFieldsReadyProjectId !== projectIdForView
+  )
+
   const visibleCustomFieldDefMap = new Map(
     (tasklist?.custom_fields ?? [])
       .filter((field) => !systemFieldIdToColumnKeyMap[field.guid])
@@ -4265,6 +4433,18 @@ export default function TaskTable({
                   字段配置
                 </Button>
               </Popover>
+              {isTasklistView && (
+                <Button
+                  size="small"
+                  type="text"
+                  className={`toolbar-trigger-btn toolbar-save-view-btn ${viewDirty ? 'toolbar-save-view-btn-dirty' : ''}`}
+                  loading={viewSaving}
+                  disabled={shouldShowViewLoading}
+                  onClick={handleSaveView}
+                >
+                  保存视图
+                </Button>
+              )}
             </div>
           </>
         ) : (
@@ -4323,6 +4503,9 @@ export default function TaskTable({
       </div>
 
       <div className="table-body">
+        {shouldShowViewLoading ? (
+          <div className="table-view-loading"><Skeleton active paragraph={{ rows: 6 }} /></div>
+        ) : (
         <>
           {renderTaskTable()}
 
@@ -4339,6 +4522,7 @@ export default function TaskTable({
             </Button>
           )}
         </>
+        )}
       </div>
       {tasklist && (
         <TaskParentPickerModal
