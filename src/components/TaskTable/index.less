@@ -540,13 +540,23 @@
       display: inline-flex !important;
       align-items: center;
       gap: 4px;
+      max-width: 100%;
       margin: 0 !important;
       padding: 2px 8px !important;
       border-radius: 10px !important;
       font-size: 12px !important;
+      overflow: hidden;
 
       .anticon {
         font-size: 11px;
+        flex-shrink: 0;
+      }
+
+      span:not(.anticon) {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
 
@@ -618,9 +628,13 @@
 
     .date-text {
       display: inline-block;
+      max-width: 100%;
       min-height: 20px;
       min-width: 20px;
+      overflow: hidden;
       color: #1f2329;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .empty-date-icon {
@@ -753,6 +767,9 @@
     color: #1456f0 !important;
     font-size: 12px !important;
     line-height: 20px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .custom-field-value-tag-disabled {

@@ -31,11 +31,6 @@ async function testTaskRowUsesBlankHotspotToOpenDetail() {
 
   assert.doesNotMatch(
     taskRowSource,
-    /className=\{`task-row[\s\S]*onClick=\{onClick\}/,
-    '任务行根节点不应该再绑定整行点击打开详情，避免点到空白区域误触',
-  )
-  assert.doesNotMatch(
-    taskRowSource,
     /className="task-detail-btn"[\s\S]*>\s*详情\s*<\/Button>/,
     '任务标题区域不应该再渲染“详情”按钮',
   )
@@ -46,9 +41,25 @@ async function testTaskRowUsesBlankHotspotToOpenDetail() {
   )
 }
 
+async function testTaskRowBlankAreaUsesOnRowToOpenDetail() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /onRow=\{\(record\) => \{[\s\S]*if \(!isTaskTableTaskRow\(record\)\) \{[\s\S]*return \{\}[\s\S]*onClick: \(\) => onTaskClick\(record\)/,
+    '任务行应该在 onRow 里统一处理点击，这样整条任务上的空白区域都能打开详情',
+  )
+  assert.match(
+    source,
+    /<div className="cell cell-priority" onClick=\{\(e\) => e\.stopPropagation\(\)\}>/,
+    '优先级等交互控件要继续拦截冒泡，避免改成整行可点后误打开详情',
+  )
+}
+
 async function main() {
   await testTaskRowDoesNotRenderPlusOrMoreActions()
   await testTaskRowUsesBlankHotspotToOpenDetail()
+  await testTaskRowBlankAreaUsesOnRowToOpenDetail()
   console.log('task row actions regressions ok')
 }
 

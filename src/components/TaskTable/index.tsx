@@ -181,8 +181,8 @@ const allConfigurableColumns: ConfigurableColumnKey[] = [
   'created',
 ]
 
-const DEFAULT_COLUMN_WIDTH = 42
-const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = 42
+const DEFAULT_COLUMN_WIDTH = 120
+const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = DEFAULT_COLUMN_WIDTH
 const DEFAULT_COLUMN_WIDTHS: Partial<Record<ResizableColumnKey, number>> = {
   title: 140,
 }
@@ -3350,7 +3350,6 @@ export default function TaskTable({
       key: 'priority',
       dataIndex: 'priority',
       title: <span>优先级</span>,
-      width: 96,
       render: (_value, record) =>
         isInlineCreateRow(record) ? (
           renderInlineCreatePriorityCell(record.section.guid)
@@ -3370,7 +3369,6 @@ export default function TaskTable({
           <span>负责人</span>
         </span>
       ),
-      width: 156,
       render: (_value, record) =>
         isInlineCreateRow(record) ? (
           renderInlineCreateAssigneeCell(record.section.guid)
@@ -3392,7 +3390,6 @@ export default function TaskTable({
       key: 'estimate',
       dataIndex: 'estimate',
       title: <span>预估工时</span>,
-      width: 104,
       render: (_value, record) =>
         isInlineCreateRow(record) ? (
           <div className="inline-create-field-cell cell cell-estimate">
@@ -3414,7 +3411,6 @@ export default function TaskTable({
           <span>开始时间</span>
         </span>
       ),
-      width: 120,
       render: (_value, record) =>
         isInlineCreateRow(record) ? (
           renderInlineCreateDateCell(record.section.guid, 'start')
@@ -3434,7 +3430,6 @@ export default function TaskTable({
           <span>截止时间</span>
         </span>
       ),
-      width: 120,
       render: (_value, record) =>
         isInlineCreateRow(record) ? (
           renderInlineCreateDateCell(record.section.guid, 'due')
@@ -3454,7 +3449,6 @@ export default function TaskTable({
           <span>创建人</span>
         </span>
       ),
-      width: 108,
       render: (_value, record) => {
         if (isInlineCreateRow(record)) {
           return renderInlineCreateCreatorCell()
@@ -3487,7 +3481,6 @@ export default function TaskTable({
       key: 'created',
       dataIndex: 'created_at',
       title: <span>创建时间</span>,
-      width: 140,
       render: (value: string, record) =>
         isInlineCreateRow(record) ? (
           <div className="inline-create-field-cell cell cell-created" />
@@ -3502,7 +3495,6 @@ export default function TaskTable({
       key: 'subtaskProgress',
       dataIndex: 'subtask_count',
       title: <span>子任务进度</span>,
-      width: 120,
       render: (value: number, record) =>
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">{value > 0 ? `0 / ${value}` : '-'}</span>
@@ -3515,7 +3507,6 @@ export default function TaskTable({
       key: 'taskSource',
       dataIndex: 'source',
       title: <span>任务来源</span>,
-      width: 120,
       render: (_value, record) =>
         isTaskTableTaskRow(record) ? <span className="custom-field-text">任务</span> : null,
     }, 'taskSource'))
@@ -3526,7 +3517,6 @@ export default function TaskTable({
       key: 'assigner',
       dataIndex: 'creator',
       title: <span>分配人</span>,
-      width: 120,
       render: (_value, record) => {
         if (!isTaskTableTaskRow(record)) {
           return null
@@ -3542,7 +3532,6 @@ export default function TaskTable({
       key: 'followers',
       dataIndex: 'members',
       title: <span>关注人</span>,
-      width: 108,
       render: (_value, record) => {
         if (!isTaskTableTaskRow(record)) {
           return null
@@ -3563,7 +3552,6 @@ export default function TaskTable({
       key: 'completed',
       dataIndex: 'completed_at',
       title: <span>完成时间</span>,
-      width: 140,
       render: (value: string, record) =>
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">
@@ -3578,7 +3566,6 @@ export default function TaskTable({
       key: 'updated',
       dataIndex: 'updated_at',
       title: <span>更新时间</span>,
-      width: 140,
       render: (value: string, record) =>
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">
@@ -3593,7 +3580,6 @@ export default function TaskTable({
       key: 'taskId',
       dataIndex: 'task_id',
       title: <span>任务 ID</span>,
-      width: 140,
       render: (value: string, record) =>
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">{value}</span>
@@ -3606,7 +3592,6 @@ export default function TaskTable({
       key: 'sourceCategory',
       dataIndex: 'sourceCategory',
       title: <span>来源类别</span>,
-      width: 120,
       render: (_value, record) =>
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">任务列表</span>
@@ -3620,7 +3605,6 @@ export default function TaskTable({
       key: columnKey,
       dataIndex: field.guid,
       title: <span>{field.name}</span>,
-      width: 160,
       render: (_value, record) =>
         isTaskTableTaskRow(record) ? (
           <CustomFieldCell
@@ -3788,6 +3772,7 @@ export default function TaskTable({
 
         return {
           draggable: isTasklistView && record.tableDepth === 0,
+          onClick: () => onTaskClick(record),
           onDragStart:
             isTasklistView && record.tableDepth === 0
               ? (event) => handleTaskDragStart(event, record.guid)

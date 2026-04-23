@@ -34,7 +34,7 @@ async function testTitleColumnFixedAndRightFieldsScrollable() {
   )
 }
 
-async function testColumnMinimumWidthUsesHalfSize() {
+async function testNonTitleColumnsUseUnifiedDefaultWidth() {
   const source = await readTaskTableSource()
 
   assert.match(
@@ -49,13 +49,13 @@ async function testColumnMinimumWidthUsesHalfSize() {
   )
   assert.match(
     source,
-    /const DEFAULT_COLUMN_WIDTH = 42/,
-    '普通字段默认显示宽度应该直接使用当前最小宽度，避免初始状态过宽',
+    /const DEFAULT_COLUMN_WIDTH = 120/,
+    '除任务标题外，普通字段默认显示宽度应该统一为适中宽度，能基本显示开始/截止时间',
   )
   assert.match(
     source,
-    /const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = 42/,
-    '自定义字段默认显示宽度也应该直接使用当前最小宽度',
+    /const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = DEFAULT_COLUMN_WIDTH/,
+    '自定义字段默认显示宽度应该跟普通字段保持一致',
   )
 
   const widthMapMatch = source.match(
@@ -65,7 +65,41 @@ async function testColumnMinimumWidthUsesHalfSize() {
   assert.doesNotMatch(
     widthMapMatch[1],
     /\n\s+(priority|assignee|estimate|start|due|creator|created|subtaskProgress|taskSource|assigner|followers|completed|updated|taskId|sourceCategory):\s+\d+/,
-    '除任务标题外，普通字段默认宽度不应该再单独覆盖，应该统一使用当前最小宽度',
+    '除任务标题外，普通字段默认宽度不应该再单独覆盖，应该统一使用默认字段宽度',
+  )
+
+  const nonTitleColumnWidthMatch = source.match(
+    /key: '(priority|assignee|estimate|start|due|creator|created|subtaskProgress|taskSource|assigner|followers|completed|updated|taskId|sourceCategory)'[\s\S]{0,220}?width:\s+\d+/,
+  )
+  assert.equal(
+    nonTitleColumnWidthMatch,
+    null,
+    '除任务标题和工具列外，普通字段列对象不应该再写单独 width，默认宽度应该统一从 DEFAULT_COLUMN_WIDTH 取得',
+  )
+}
+
+async function testNarrowDefaultContentUsesEllipsis() {
+  const style = await readTaskTableStyle()
+
+  assert.match(
+    style,
+    /\.task-column-header-content\s*\{[\s\S]*text-overflow:\s*ellipsis;/,
+    '字段表头默认宽度放不下完整标题时应该省略显示',
+  )
+  assert.match(
+    style,
+    /\.date-text\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/,
+    '开始/截止时间默认宽度放不下完整日期时应该省略显示',
+  )
+  assert.match(
+    style,
+    /\.priority-tag[\s\S]*max-width:\s*100%[\s\S]*\.anticon[\s\S]*flex-shrink:\s*0;[\s\S]*span:not\(\.anticon\)[\s\S]*text-overflow:\s*ellipsis;/,
+    '优先级标签默认宽度放不下完整内容时应该省略显示，图标不能被挤掉',
+  )
+  assert.match(
+    style,
+    /\.custom-field-value-tag[\s\S]*overflow:\s*hidden;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/,
+    '自定义字段标签默认宽度放不下完整内容时应该省略显示',
   )
 }
 
@@ -121,7 +155,8 @@ async function testResizeHandleHasVisibleHitArea() {
 
 async function main() {
   await testTitleColumnFixedAndRightFieldsScrollable()
-  await testColumnMinimumWidthUsesHalfSize()
+  await testNonTitleColumnsUseUnifiedDefaultWidth()
+  await testNarrowDefaultContentUsesEllipsis()
   await testColumnsCanResizeFromAntdHeaderCell()
   await testResizeHandleHasVisibleHitArea()
   console.log('task table resizable layout regressions ok')
