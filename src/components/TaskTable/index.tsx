@@ -2668,6 +2668,10 @@ export default function TaskTable({
     if (sortableFields.length === 0) {
       return
     }
+    if (!tasklist) {
+      return
+    }
+    const projectId = tasklist.guid
 
     const visiblePersistedKeys = nextVisibleKeys.filter((columnKey) =>
       sortableFields.some((field) => resolveRawFieldColumnKey(field) === columnKey),
@@ -2698,7 +2702,7 @@ export default function TaskTable({
     try {
       await Promise.all(
         reorderedFields.map((field) =>
-          updateCustomField(field.field_id, {
+          updateCustomField(projectId, field.field_id, {
             sort_order: field.sort_order,
             is_visible: field.is_visible,
           }),
@@ -2783,6 +2787,10 @@ export default function TaskTable({
   }
 
   const handleHideVisibleColumn = async (columnKey: ExtendedColumnKey) => {
+    if (!tasklist) {
+      return
+    }
+    const projectId = tasklist.guid
     const nextVisibleKeys = visibleColumnKeys.filter((key) => key !== columnKey)
     setVisibleColumnKeys(nextVisibleKeys)
     const targetField = rawCustomFields.find((field) => resolveRawFieldColumnKey(field) === columnKey)
@@ -2790,7 +2798,7 @@ export default function TaskTable({
       return
     }
     try {
-      await updateCustomField(targetField.field_id, { is_visible: false })
+      await updateCustomField(projectId, targetField.field_id, { is_visible: false })
       await reloadCustomFields()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '隐藏字段失败'
@@ -2800,12 +2808,16 @@ export default function TaskTable({
   }
 
   const handleToggleCustomFieldVisibility = async (field: ApiCustomField) => {
+    if (!tasklist) {
+      return
+    }
+    const projectId = tasklist.guid
     const columnKey = resolveRawFieldColumnKey(field)
     if (!columnKey) {
       return
     }
     try {
-      await updateCustomField(field.field_id, { is_visible: !field.is_visible })
+      await updateCustomField(projectId, field.field_id, { is_visible: !field.is_visible })
       if (field.is_visible) {
         handleRemoveVisibleColumn(columnKey)
       } else {
@@ -2822,6 +2834,10 @@ export default function TaskTable({
     if (dragFieldId === dropFieldId) {
       return
     }
+    if (!tasklist) {
+      return
+    }
+    const projectId = tasklist.guid
 
     const orderedFields = [...rawCustomFields]
       .filter((field) => {
@@ -2853,7 +2869,7 @@ export default function TaskTable({
     try {
       await Promise.all(
         nextOrderedFields.map((field, index) =>
-          updateCustomField(field.field_id, { sort_order: index + 1 }),
+          updateCustomField(projectId, field.field_id, { sort_order: index + 1 }),
         ),
       )
       await reloadCustomFields()
@@ -4638,7 +4654,7 @@ export default function TaskTable({
           onPickExisting={(f) => {
             void (async () => {
               try {
-                await updateCustomField(f.field_id, { is_visible: true })
+                await updateCustomField(tasklist.guid, f.field_id, { is_visible: true })
                 handleAddVisibleColumn(toCustomFieldColumnKey(f.field_id))
                 await reloadCustomFields()
               } catch (err: unknown) {

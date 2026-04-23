@@ -18,6 +18,7 @@ import {
   type ApiCustomField,
   type CustomFieldType,
   type FieldOption,
+  type UpdateFieldOption,
 } from '@/services/customFieldService'
 
 interface Props {
@@ -64,23 +65,30 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, projectId])
 
-  const parseOptions = (raw?: string): FieldOption[] | undefined => {
+  const parseOptions = (
+    raw?: string,
+    sourceOptions?: FieldOption[] | null,
+  ): UpdateFieldOption[] | undefined => {
     if (!raw) return undefined
     return raw
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean)
-      .map((l) => ({ value: l, label: l }))
+      .map((label, index) => ({
+        id: sourceOptions?.[index]?.id,
+        label,
+        color: sourceOptions?.[index]?.color,
+      }))
   }
 
   const handleSubmit = async () => {
     const values = await form.validateFields()
     const needOptions =
       values.field_type === 'select' || values.field_type === 'multi_select'
-    const options = needOptions ? parseOptions(values.options) : undefined
+    const options = needOptions ? parseOptions(values.options, editing?.options) : undefined
     try {
       if (editing) {
-        await updateCustomField(editing.field_id, {
+        await updateCustomField(projectId, editing.field_id, {
           name: values.name,
           options,
         })

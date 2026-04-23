@@ -25,6 +25,7 @@ import {
   type ApiCustomField,
   type CustomFieldType,
   type FieldOption,
+  type UpdateFieldOption,
 } from '@/services/customFieldService'
 
 interface Props {
@@ -131,14 +132,14 @@ export default function CustomFieldEditorModal({
     }
     setSubmitting(true)
     try {
-      const finalOptions = needsOptions
+      const finalOptions: UpdateFieldOption[] | undefined = needsOptions
         ? options
             .filter((o) => o.label.trim())
-            .map((o) => ({ value: o.value, label: o.label.trim(), color: o.color }))
+            .map((o) => ({ id: o.id, label: o.label.trim(), color: o.color }))
         : undefined
       let saved: ApiCustomField
       if (isEdit && field) {
-        saved = await updateCustomField(field.field_id, {
+        saved = await updateCustomField(projectId, field.field_id, {
           name: trimmed,
           options: finalOptions,
         })

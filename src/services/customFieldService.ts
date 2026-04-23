@@ -10,11 +10,23 @@ export type CustomFieldType =
   | 'member'
 
 export interface FieldOption {
+  id?: string | null
   value: string
   label: string
   color?: string | null
   is_disabled?: boolean
   disabled_at?: string | null
+}
+
+export interface UpdateFieldOption {
+  id?: string | null
+  label: string
+  color?: string | null
+}
+
+export interface CreateFieldOption {
+  label: string
+  color?: string | null
 }
 
 export interface ApiCustomField {
@@ -59,7 +71,7 @@ export async function createCustomField(
   data: {
     name: string
     field_type: CustomFieldType
-    options?: FieldOption[]
+    options?: CreateFieldOption[]
     required?: boolean
   },
 ): Promise<ApiCustomField> {
@@ -79,19 +91,23 @@ export async function createCustomField(
 }
 
 export async function updateCustomField(
+  projectId: string,
   fieldId: string,
   patch: {
     name?: string
-    options?: FieldOption[]
+    options?: UpdateFieldOption[]
     required?: boolean
     is_visible?: boolean
     sort_order?: number
   },
 ): Promise<ApiCustomField> {
-  return request<ApiCustomField>(`api/v1/task-center/custom-fields/${fieldId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ user_id: appConfig.user_id, ...patch }),
-  })
+  return request<ApiCustomField>(
+    `api/v1/task-center/projects/${projectId}/custom-fields/${fieldId}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ user_id: appConfig.user_id, ...patch }),
+    },
+  )
 }
 
 export async function deleteCustomField(fieldId: string): Promise<void> {
