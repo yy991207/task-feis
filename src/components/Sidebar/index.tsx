@@ -11,7 +11,6 @@ import Badge from 'antd/es/badge'
 import Tooltip from 'antd/es/tooltip'
 import Flex from 'antd/es/flex'
 import Space from 'antd/es/space'
-import Tag from 'antd/es/tag'
 import Select from 'antd/es/select'
 import Spin from 'antd/es/spin'
 import type { DataNode, TreeProps } from 'antd/es/tree'
@@ -94,20 +93,9 @@ interface SidebarProps {
 }
 
 type CreatingTarget = 'root' | string
-type SidebarDragPlacement = 'gap-top' | 'gap-bottom' | 'inner'
 
 const encodeTasklistKey = (guid: string) => `tl:${guid}`
 const encodeGroupKey = (id: string) => `grp:${id}`
-
-function getSidebarDropHintText(nodeKey: string, placement: SidebarDragPlacement): string {
-  if (nodeKey === 'root') {
-    return placement === 'inner' ? '放入默认分组' : placement === 'gap-top' ? '插到上方' : '插到下方'
-  }
-  if (nodeKey.startsWith('grp:')) {
-    return placement === 'inner' ? '放入此分组' : placement === 'gap-top' ? '插到上方' : '插到下方'
-  }
-  return placement === 'gap-top' ? '插到前面' : placement === 'gap-bottom' ? '插到后面' : '拖到这里'
-}
 
 function buildSidebarDragNodeClassName(
   nodeKey: string,
@@ -133,19 +121,6 @@ function buildSidebarDragNodeClassName(
     }
   }
   return classNames.filter(Boolean).join(' ')
-}
-
-function getSidebarDropPlacement(dropPosition: -1 | 0 | 1 | null): SidebarDragPlacement | null {
-  if (dropPosition === -1) {
-    return 'gap-top'
-  }
-  if (dropPosition === 1) {
-    return 'gap-bottom'
-  }
-  if (dropPosition === 0) {
-    return 'inner'
-  }
-  return null
 }
 
 // 刷新后默认展示完整清单树：根清单区和所有清单分组都展开。
@@ -635,15 +610,6 @@ export default function Sidebar({
           <Text ellipsis className="group-name">
             {group.name}
           </Text>
-          {dropIndicatorState?.key === encodeGroupKey(group.group_id) &&
-            getSidebarDropPlacement(dropIndicatorState.dropPosition) && (
-              <Tag bordered={false} className="sidebar-drop-hint-tag">
-                {getSidebarDropHintText(
-                  encodeGroupKey(group.group_id),
-                  getSidebarDropPlacement(dropIndicatorState.dropPosition)!,
-                )}
-              </Tag>
-            )}
         </Space>
         <Space size={2} className="group-actions">
           <Dropdown
@@ -685,15 +651,6 @@ export default function Sidebar({
         <Text ellipsis className="group-name">
           任务清单
         </Text>
-        {dropIndicatorState?.key === 'root' &&
-          getSidebarDropPlacement(dropIndicatorState.dropPosition) && (
-            <Tag bordered={false} className="sidebar-drop-hint-tag">
-              {getSidebarDropHintText(
-                'root',
-                getSidebarDropPlacement(dropIndicatorState.dropPosition)!,
-              )}
-            </Tag>
-          )}
       </Space>
       <Space size={2} className="group-actions">
         <Button
@@ -744,15 +701,6 @@ export default function Sidebar({
       >
         <Badge color="#3370ff" />
         <span className="tasklist-name">{proj.name}</span>
-        {dropIndicatorState?.key === encodeTasklistKey(proj.project_id) &&
-          getSidebarDropPlacement(dropIndicatorState.dropPosition) && (
-            <Tag bordered={false} className="sidebar-drop-hint-tag">
-              {getSidebarDropHintText(
-                encodeTasklistKey(proj.project_id),
-                getSidebarDropPlacement(dropIndicatorState.dropPosition)!,
-              )}
-            </Tag>
-          )}
         <Dropdown
           menu={buildTasklistActionMenu(proj)}
           trigger={['click']}
@@ -1114,7 +1062,7 @@ export default function Sidebar({
             return false
           }}
           dropIndicatorRender={(props) => {
-            if (!dropIndicatorState) {
+            if (!dropIndicatorState || props.dropPosition === 0) {
               return null
             }
             const placement =
@@ -1122,14 +1070,11 @@ export default function Sidebar({
                 ? 'drag-drop-indicator gap-top'
                 : props.dropPosition === 1
                   ? 'drag-drop-indicator gap-bottom'
-                  : 'drag-drop-indicator inner'
+                  : ''
             return (
               <div
                 style={{
-                  left:
-                    props.dropPosition === 0
-                      ? props.indent + 8
-                      : -props.dropLevelOffset * props.indent + 8,
+                  left: -props.dropLevelOffset * props.indent + 8,
                   right: 10,
                 }}
                 className={placement}

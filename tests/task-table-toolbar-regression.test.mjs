@@ -5,6 +5,15 @@ async function readTaskTableSource() {
   return readFile(new URL('../src/components/TaskTable/index.tsx', import.meta.url), 'utf8')
 }
 
+async function readViewConfigSource() {
+  return readFile(new URL('../src/config/viewConfig.ts', import.meta.url), 'utf8')
+}
+
+function getViewConfigBlock(source, navKey) {
+  const pattern = new RegExp(`'${navKey}': \\{[\\s\\S]*?columns: \\[[^\\n]+\\],\\n  \\}`)
+  return source.match(pattern)?.[0] ?? ''
+}
+
 async function testCreateButtonReferenceHasDefinition() {
   const source = await readTaskTableSource()
 
@@ -140,6 +149,70 @@ async function testGroupedTaskRowsUseSectionScopedKeys() {
   )
 }
 
+async function testMyCreatedDoesNotUseStaticFilterBadgeCount() {
+  const source = await readViewConfigSource()
+  const configBlock = getViewConfigBlock(source, 'my-created')
+
+  assert.ok(
+    configBlock,
+    'viewConfig 里应该保留“我创建的”页面配置，方便约束工具栏展示',
+  )
+  assert.doesNotMatch(
+    configBlock,
+    /filterBadgeCount:\s*1/,
+    '“我创建的”页面不应该再配置写死的红色角标 1，避免被误认为通知',
+  )
+}
+
+async function testMyAssignedDoesNotUseStaticFilterBadgeCount() {
+  const source = await readViewConfigSource()
+  const configBlock = getViewConfigBlock(source, 'my-assigned')
+
+  assert.ok(
+    configBlock,
+    'viewConfig 里应该保留“我负责的”页面配置，方便约束工具栏展示',
+  )
+  assert.doesNotMatch(
+    configBlock,
+    /filterBadgeCount:\s*1/,
+    '“我负责的”页面不应该再配置写死的红色角标 1，避免被误认为通知',
+  )
+}
+
+async function testMyFollowedDoesNotUseStaticFilterBadgeCount() {
+  const source = await readViewConfigSource()
+  const configBlock = getViewConfigBlock(source, 'my-followed')
+
+  assert.ok(
+    configBlock,
+    'viewConfig 里应该保留“我关注的”页面配置，方便约束工具栏展示',
+  )
+  assert.doesNotMatch(
+    configBlock,
+    /filterBadgeCount:\s*3/,
+    '“我关注的”页面不应该再配置写死的红色角标 3，避免被误认为通知',
+  )
+}
+
+async function testQuickAccessViewsDoNotShowSubtaskToolbar() {
+  const source = await readViewConfigSource()
+  const quickAccessNavKeys = ['all-tasks', 'my-created', 'my-assigned-quick']
+
+  for (const navKey of quickAccessNavKeys) {
+    const configBlock = getViewConfigBlock(source, navKey)
+
+    assert.ok(
+      configBlock,
+      `viewConfig 里应该保留 ${navKey} 页面配置，方便约束工具栏展示`,
+    )
+    assert.doesNotMatch(
+      configBlock,
+      /showSubtask:\s*true/,
+      `${navKey} 页面不应该再显示“子任务”工具栏入口`,
+    )
+  }
+}
+
 async function main() {
   await testCreateButtonReferenceHasDefinition()
   await testSortMenuDoesNotExposeCustomDragOption()
@@ -149,6 +222,10 @@ async function main() {
   await testFilterCountUsesInlinePillLabel()
   await testFilterPopoverUsesTransparentOuterShell()
   await testGroupedTaskRowsUseSectionScopedKeys()
+  await testMyCreatedDoesNotUseStaticFilterBadgeCount()
+  await testMyAssignedDoesNotUseStaticFilterBadgeCount()
+  await testMyFollowedDoesNotUseStaticFilterBadgeCount()
+  await testQuickAccessViewsDoNotShowSubtaskToolbar()
   console.log('task table toolbar regressions ok')
 }
 

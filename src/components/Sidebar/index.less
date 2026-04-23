@@ -276,19 +276,6 @@
     }
   }
 
-  .sidebar-drop-hint-tag {
-    margin-inline-start: 2px;
-    border-radius: 999px;
-    padding-inline: 8px;
-    height: 22px;
-    line-height: 22px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #1456f0;
-    background: #e8f0ff;
-    flex-shrink: 0;
-  }
-
   .tasklist-drag-handle {
     width: 16px;
     font-size: 13px;
@@ -384,42 +371,9 @@
     cursor: grabbing;
   }
 
-  .ant-tree .ant-tree-treenode.drop-target {
-    > .ant-tree-node-content-wrapper {
-      background: #f3f7ff !important;
-      box-shadow: inset 0 0 0 1px rgba(51, 112, 255, 0.18);
-    }
-  }
-
-  .ant-tree .ant-tree-treenode.drop-target::after {
-    content: '';
-    position: absolute;
-    left: 18px;
-    right: 10px;
-    border-radius: 999px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-
-  .ant-tree .ant-tree-treenode.drop-target-gap-top::after {
-    top: -3px;
-    opacity: 1;
-    border-top: 2px solid #3370ff;
-  }
-
-  .ant-tree .ant-tree-treenode.drop-target-gap-bottom::after {
-    bottom: -3px;
-    opacity: 1;
-    border-bottom: 2px solid #3370ff;
-  }
-
-  .ant-tree .ant-tree-treenode.drop-target-inner::after {
-    top: 4px;
-    bottom: 4px;
-    opacity: 1;
-    border: 1px dashed rgba(51, 112, 255, 0.5);
-    background: rgba(51, 112, 255, 0.05);
+  .ant-tree .ant-tree-treenode.drop-target-inner > .ant-tree-node-content-wrapper {
+    background: #f3f7ff !important;
+    box-shadow: inset 0 0 0 1px rgba(51, 112, 255, 0.18);
   }
 
   .drag-drop-indicator {
