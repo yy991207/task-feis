@@ -199,7 +199,46 @@
 .table-column-title-dropdown {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   max-width: 100%;
+
+  &:hover,
+  &:focus-within {
+    .table-column-title-trigger {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+}
+
+.table-column-title-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.table-column-title-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #86909c;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+
+  &:hover,
+  &:focus-visible {
+    background: #eff1f4;
+    color: #1f2329;
+    outline: none;
+  }
 }
 
 .table-column-title-main {

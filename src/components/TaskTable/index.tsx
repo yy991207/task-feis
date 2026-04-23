@@ -3432,35 +3432,45 @@ export default function TaskTable({
     const disableMoveRight = currentIndex === -1 || currentIndex >= orderedKeys.length - 1
 
     return (
-      <Dropdown
-        trigger={['click']}
-        menu={{
-          items: [
-            {
-              key: 'move-left',
-              label: '向左移动',
-              disabled: disableMoveLeft,
-              onClick: () => void handleMoveVisibleColumn(columnKey, 'left'),
-            },
-            {
-              key: 'move-right',
-              label: '向右移动',
-              disabled: disableMoveRight,
-              onClick: () => void handleMoveVisibleColumn(columnKey, 'right'),
-            },
-            { type: 'divider' as const },
-            {
-              key: 'hide',
-              label: '隐藏字段',
-              onClick: () => void handleHideVisibleColumn(columnKey),
-            },
-          ],
-        }}
-      >
-        <span className="table-column-title-dropdown" onClick={(event) => event.stopPropagation()}>
+      <span className="table-column-title-dropdown" onClick={(event) => event.stopPropagation()}>
+        <span className="table-column-title-label">
           {title}
         </span>
-      </Dropdown>
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: [
+              {
+                key: 'move-left',
+                label: '向左移动',
+                disabled: disableMoveLeft,
+                onClick: () => void handleMoveVisibleColumn(columnKey, 'left'),
+              },
+              {
+                key: 'move-right',
+                label: '向右移动',
+                disabled: disableMoveRight,
+                onClick: () => void handleMoveVisibleColumn(columnKey, 'right'),
+              },
+              { type: 'divider' as const },
+              {
+                key: 'hide',
+                label: '隐藏字段',
+                onClick: () => void handleHideVisibleColumn(columnKey),
+              },
+            ],
+          }}
+        >
+          <button
+            type="button"
+            className="table-column-title-trigger"
+            aria-label="打开字段菜单"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <DownOutlined />
+          </button>
+        </Dropdown>
+      </span>
     )
   }
 
