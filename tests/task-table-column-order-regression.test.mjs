@@ -7,12 +7,16 @@ async function readTaskTableSource() {
 
 async function testSystemFieldsMapBackToBuiltInColumns() {
   const source = await readTaskTableSource()
+  const mapStart = source.indexOf('const systemFieldIdToColumnKeyMap')
+  const mapEnd = source.indexOf('}', mapStart)
+  const mapSource = source.slice(mapStart, mapEnd)
 
-  assert.match(
-    source,
-    /const systemFieldIdToColumnKeyMap:[\s\S]*assignee_ids: 'assignee'[\s\S]*due_date: 'due'[\s\S]*start_date: 'start'[\s\S]*creator_id: 'creator'[\s\S]*created_at: 'created'/,
-    '系统字段应该先映射回内置列表列，不能继续一律转成 custom:field_id',
-  )
+  assert.notEqual(mapStart, -1, 'TaskTable 里应该有系统字段到列表列 key 的映射表')
+  assert.match(mapSource, /assignee_ids: 'assignee'/, '负责人系统字段应该映射回 assignee 列')
+  assert.match(mapSource, /due_date: 'due'/, '截止日期系统字段应该映射回 due 列')
+  assert.match(mapSource, /start_date: 'start'/, '开始日期系统字段应该映射回 start 列')
+  assert.match(mapSource, /creator_id: 'creator'/, '创建人系统字段应该映射回 creator 列')
+  assert.match(mapSource, /created_at: 'created'/, '创建时间系统字段应该映射回 created 列')
   assert.match(
     source,
     /function resolveRawFieldColumnKey\(field: ApiCustomField\): ExtendedColumnKey \| null \{/,
@@ -75,7 +79,7 @@ async function testColumnHeaderMenuSupportsMoveAndHide() {
   )
   assert.match(
     source,
-    /const handleMoveVisibleColumn = async \(columnKey: ExtendedColumnKey, direction: 'left' \| 'right'\) => \{/,
+    /const handleMoveVisibleColumn = async \(\s*columnKey: Exclude<ExtendedColumnKey, 'title'>,\s*direction: 'left' \| 'right'/,
     'TaskTable 应该有独立的字段左右移动处理函数，避免把顺序逻辑散在 JSX 菜单里',
   )
   assert.match(
@@ -85,8 +89,43 @@ async function testColumnHeaderMenuSupportsMoveAndHide() {
   )
   assert.match(
     source,
-    /title: renderAdjustableColumnTitle\('priority',[\s\S]*title: renderAdjustableColumnTitle\('assignee',[\s\S]*title: renderAdjustableColumnTitle\('due',/,
-    '主表普通字段表头应该统一接入字段顺序菜单，不应该只停留在静态标题文本',
+    /renderAdjustableColumnTitle\(\s*'priority',/,
+    '优先级表头应该接入字段顺序菜单',
+  )
+  assert.match(
+    source,
+    /renderAdjustableColumnTitle\(\s*'assignee',/,
+    '负责人表头应该接入字段顺序菜单',
+  )
+  assert.match(
+    source,
+    /renderAdjustableColumnTitle\(\s*'due',/,
+    '截止时间表头应该接入字段顺序菜单',
+  )
+}
+
+async function testReloadKeepsMixedVisibleColumnOrderStable() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /const mergeVisibleColumnKeys = useCallback\(\s*\(\s*prevKeys: ExtendedColumnKey\[],\s*fields: ApiCustomField\[\]/,
+    '字段重新加载后应该用统一函数合并当前顺序和后端字段顺序，避免本地列被直接顶到末尾',
+  )
+  assert.match(
+    source,
+    /setVisibleColumnKeys\(\(prev\) => mergeVisibleColumnKeys\(prev, list\)\)/,
+    '无论首屏加载还是 reload，都应该复用同一套字段顺序合并逻辑',
+  )
+  assert.match(
+    source,
+    /const hasPersistedFieldOrderChange = reorderedFields\.some\(\(field\) => \{[\s\S]*field\.sort_order !== originalField\.sort_order[\s\S]*field\.is_visible !== originalField\.is_visible/,
+    '左右移动时应该先判断后端字段顺序或显隐是否真的变化，避免只动本地列也触发回写',
+  )
+  assert.match(
+    source,
+    /if \(!hasPersistedFieldOrderChange\) \{\s*return\s*\}/,
+    '只移动没有后端字段的本地列时不应该再 reload 字段列表，否则本地顺序会被冲掉',
   )
 }
 
@@ -95,6 +134,7 @@ async function main() {
   await testFieldConfigPanelSupportsDraggingPersistedFields()
   await testVisibleColumnsRenderInUserAdjustedOrder()
   await testColumnHeaderMenuSupportsMoveAndHide()
+  await testReloadKeepsMixedVisibleColumnOrderStable()
   console.log('task table column order regressions ok')
 }
 

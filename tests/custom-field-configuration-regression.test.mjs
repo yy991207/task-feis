@@ -19,7 +19,7 @@ async function testCreatedCustomFieldBecomesVisibleColumn() {
   )
   assert.match(
     source,
-    /handleAddVisibleColumn\(toCustomFieldColumnKey\(field\.field_id\)\)/,
+    /const columnKey = resolveRawFieldColumnKey\(field\)[\s\S]*handleAddVisibleColumn\(columnKey\)/,
     '新建自定义字段保存后应该自动加入当前表格可见列，用户才能继续配置字段值',
   )
   assert.match(

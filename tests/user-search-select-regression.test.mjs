@@ -76,10 +76,32 @@ async function testPickerShowsAvatarAndCheckedStateInList() {
   )
 }
 
+async function testAssigneePickerRemovesPopupTitleCopy() {
+  const taskTableSource = await readSource('../src/components/TaskTable/index.tsx')
+  const taskDetailSource = await readSource('../src/components/TaskDetailPanel/index.tsx')
+
+  assert.doesNotMatch(
+    taskTableSource,
+    /<UserSearchSelect[\s\S]*label="添加负责人"[\s\S]*placeholder="搜索用户"/,
+    '主表负责人配置弹层不应该再显示“添加负责人”标题文案',
+  )
+  assert.doesNotMatch(
+    taskDetailSource,
+    /<div className="detail-popover-panel">\s*<Text strong>添加负责人<\/Text>\s*<UserSearchSelect/,
+    '任务详情负责人配置弹层不应该再显示“添加负责人”标题文案',
+  )
+  assert.doesNotMatch(
+    taskDetailSource,
+    /<UserSearchSelect[\s\S]*label="设置子任务负责人"[\s\S]*placeholder="搜索并选择负责人"/,
+    '子任务负责人配置弹层不应该再显示“设置子任务负责人”标题文案',
+  )
+}
+
 async function main() {
   await testPickerUsesSearchOnlyInput()
   await testPickerTogglesUsersFromList()
   await testPickerShowsAvatarAndCheckedStateInList()
+  await testAssigneePickerRemovesPopupTitleCopy()
   console.log('user search select regressions ok')
 }
 

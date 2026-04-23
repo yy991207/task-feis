@@ -23,6 +23,7 @@ async function testTaskKeepsParticipantIds() {
 
 async function testDetailFollowersSupportAddAndRemove() {
   const detailSource = await readSource('../src/components/TaskDetailPanel/index.tsx')
+  const detailStyle = await readSource('../src/components/TaskDetailPanel/index.less')
   const taskTableSource = await readSource('../src/components/TaskTable/index.tsx')
   const followersPopoverStart = detailSource.indexOf('const followerPopoverContent = (')
   const followersPopoverEnd = detailSource.indexOf('const followersEntry = (', followersPopoverStart)
@@ -75,13 +76,23 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /<UserSearchSelect[\s\S]*className="followers-search"[\s\S]*mode="multiple"[\s\S]*value=\{followedUserIds\}[\s\S]*onChange=\{\(value\) => void handleFollowersChange\(Array\.isArray\(value\) \? value : \[\]\)\}/,
+    /<UserSearchSelect[\s\S]*mode="multiple"[\s\S]*value=\{followedUserIds\}[\s\S]*onChange=\{\(value\) => void handleFollowersChange\(Array\.isArray\(value\) \? value : \[\]\)\}/,
     '关注人弹层应该复用多人选人组件，点击列表人员完成增删',
   )
   assert.match(
-    detailSource,
-    /<Card[\s\S]*className="followers-popover-card"/,
-    '关注人管理弹层应该用 antd Card 重新组织标题、选择区和列表，避免裸 div 拼出来显得粗糙',
+    followersPopoverSource,
+    /<div\s+style=\{\{ width: 220 \}\}>[\s\S]*<UserSearchSelect/,
+    '关注人弹层外层容器应该和负责人选人组件保持同样的 220px 宽度配置',
+  )
+  assert.doesNotMatch(
+    detailStyle,
+    /followers-popover|followers-toolbar|followers-search/,
+    '关注人弹层不应该再保留独立宽高样式，避免和负责人选人组件配置不一致',
+  )
+  assert.doesNotMatch(
+    followersPopoverSource,
+    /<Card|followers-popover-card|followers-popover|followers-toolbar|followers-search|size=|placeholder=/,
+    '关注人弹层不应该再套 Card，也不应该给共享选人组件传单独尺寸、占位或样式配置',
   )
   assert.doesNotMatch(
     detailSource,
@@ -90,12 +101,12 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /<UserSearchSelect[\s\S]*className="followers-search"/,
+    /<UserSearchSelect[\s\S]*mode="multiple"/,
     '添加关注人应该复用主页面负责人选择的 UserSearchSelect 搜索控件',
   )
   assert.match(
     taskTableSource,
-    /<UserSearchSelect[\s\S]*label="添加负责人"/,
+    /<UserSearchSelect[\s\S]*mode="multiple"[\s\S]*placeholder="搜索用户"/,
     '主页面负责人选择应该使用共享的 UserSearchSelect，确保关注人和负责人选人控件一致',
   )
   assert.doesNotMatch(
@@ -135,8 +146,8 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /className="followers-popover"/,
-    '关注人弹层应该有独立的卡片容器，方便控制无边框摘要和弹层滚动布局',
+    /style=\{\{ width: 220 \}\}/,
+    '关注人弹层应该直接使用和负责人一致的 220px 容器配置',
   )
   assert.match(
     detailSource,

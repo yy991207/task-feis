@@ -7,7 +7,6 @@ import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
 import Avatar from 'antd/es/avatar'
 import Popover from 'antd/es/popover'
-import Card from 'antd/es/card'
 import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
@@ -1236,25 +1235,13 @@ export default function TaskDetailPanel({
   }
 
   const followerPopoverContent = (
-    <div className="followers-popover">
-      <Card
-        className="followers-popover-card"
-        variant="borderless"
-      >
-        <Space direction="vertical" size={0} className="followers-popover-body">
-          <div className="followers-toolbar">
-            <UserSearchSelect
-              className="followers-search"
-              size="middle"
-              mode="multiple"
-              placeholder="搜索并选择要新增的人"
-              value={followedUserIds}
-              onChange={(value) => void handleFollowersChange(Array.isArray(value) ? value : [])}
-              users={availableUsers}
-            />
-          </div>
-        </Space>
-      </Card>
+    <div style={{ width: 220 }}>
+      <UserSearchSelect
+        mode="multiple"
+        value={followedUserIds}
+        onChange={(value) => void handleFollowersChange(Array.isArray(value) ? value : [])}
+        users={availableUsers}
+      />
     </div>
   )
 
@@ -2033,7 +2020,6 @@ export default function TaskDetailPanel({
               placement="bottomLeft"
               content={
                 <div className="detail-popover-panel">
-                  <Text strong>添加负责人</Text>
                   <UserSearchSelect
                     mode="multiple"
                     size="small"
@@ -2082,7 +2068,6 @@ export default function TaskDetailPanel({
                 placement="bottomLeft"
                 trigger="click"
                 content={followerPopoverContent}
-                overlayClassName="followers-popover-overlay"
               >
                 {followersEntry}
               </Popover>
@@ -2444,7 +2429,6 @@ export default function TaskDetailPanel({
                             <div style={{ width: 220 }}>
                               <UserSearchSelect
                                 autoFocus
-                                label="设置子任务负责人"
                                 placeholder="搜索并选择负责人"
                                 mode="multiple"
                                 value={assigneeUsers.map((user) => user.id)}

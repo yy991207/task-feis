@@ -905,7 +905,6 @@ function AssigneePicker({
           onMouseDown={onInteract}
         >
           <UserSearchSelect
-            label="添加负责人"
             size="small"
             mode="multiple"
             open={open ? selectOpen : false}
@@ -1464,6 +1463,16 @@ export default function TaskTable({
     })),
   })
 
+  const getFieldOptionLabel = (columnKey: ExtendedColumnKey, fallbackLabel: string) => {
+    if (columnKey in columnLabelMap) {
+      return columnLabelMap[columnKey as ConfigurableColumnKey]
+    }
+    if (columnKey in extraColumnLabelMap) {
+      return extraColumnLabelMap[columnKey as ExtraColumnKey]
+    }
+    return fallbackLabel
+  }
+
   function resolveRawFieldColumnKey(field: ApiCustomField): ExtendedColumnKey | null {
     const mappedSystemColumnKey = systemFieldIdToColumnKeyMap[field.field_id]
     if (mappedSystemColumnKey) {
@@ -1505,7 +1514,7 @@ export default function TaskTable({
         setVisibleColumnKeys((prev) => {
           const persistedKeys = buildVisibleColumnKeys(list)
           const extraVisibleKeys = prev.filter(
-            (key) => typeof key === 'string' && !key.startsWith('custom:'),
+            (key) => !list.some((field) => resolveRawFieldColumnKey(field) === key),
           )
           return Array.from(new Set([...persistedKeys, ...extraVisibleKeys]))
         })
@@ -1535,7 +1544,7 @@ export default function TaskTable({
       setVisibleColumnKeys((prev) => {
         const persistedKeys = buildVisibleColumnKeys(list)
         const extraVisibleKeys = prev.filter(
-          (key) => typeof key === 'string' && !key.startsWith('custom:'),
+          (key) => !list.some((field) => resolveRawFieldColumnKey(field) === key),
         )
         return Array.from(new Set([...persistedKeys, ...extraVisibleKeys]))
       })
@@ -2369,26 +2378,28 @@ export default function TaskTable({
     persistedFieldOptionMap.set(columnKey, {
       key: columnKey,
       fieldId: field.field_id,
-      label: field.name,
+      label: getFieldOptionLabel(columnKey, field.name),
       isVisible: visibleColumnKeys.includes(columnKey),
       sortOrder: field.sort_order,
     })
   })
-  const allFieldOptions: FieldOption[] = [
-    ...allConfigurableColumns.map((column) =>
-      persistedFieldOptionMap.get(column) ?? {
-        key: column as ExtendedColumnKey,
-        label: columnLabelMap[column],
-        isVisible: visibleColumnKeys.includes(column),
-      }),
-    ...extraFieldColumns.map((column) => ({
+  const persistedFieldOptions = [...persistedFieldOptionMap.values()]
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const localOnlyFieldOptions: FieldOption[] = [
+    ...allConfigurableColumns,
+    ...extraFieldColumns,
+  ]
+    .filter((column) => !persistedFieldOptionMap.has(column))
+    .map((column) => ({
       key: column as ExtendedColumnKey,
-      label: extraColumnLabelMap[column],
+      label: column in columnLabelMap
+        ? columnLabelMap[column as ConfigurableColumnKey]
+        : extraColumnLabelMap[column as ExtraColumnKey],
       isVisible: visibleColumnKeys.includes(column),
-    })),
-    ...[...persistedFieldOptionMap.values()]
-      .filter((field) => String(field.key).startsWith('custom:'))
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    }))
+  const allFieldOptions: FieldOption[] = [
+    ...persistedFieldOptions,
+    ...localOnlyFieldOptions,
   ]
   const orderedVisibleColumnKeys = visibleColumnKeys.filter((key) => key !== 'title')
 
@@ -2510,10 +2521,12 @@ export default function TaskTable({
 
   const moveVisibleColumnKeys = (
     keys: ExtendedColumnKey[],
-    columnKey: ExtendedColumnKey,
+    columnKey: Exclude<ExtendedColumnKey, 'title'>,
     direction: 'left' | 'right',
-  ) => {
-    const orderedKeys = keys.filter((key) => key !== 'title')
+  ): ExtendedColumnKey[] => {
+    const orderedKeys: Exclude<ExtendedColumnKey, 'title'>[] = keys.filter(
+      (key): key is Exclude<ExtendedColumnKey, 'title'> => key !== 'title',
+    )
     const currentIndex = orderedKeys.indexOf(columnKey)
     if (currentIndex === -1) {
       return keys
@@ -2528,7 +2541,10 @@ export default function TaskTable({
     return ['title', ...nextOrderedKeys]
   }
 
-  const handleMoveVisibleColumn = async (columnKey: ExtendedColumnKey, direction: 'left' | 'right') => {
+  const handleMoveVisibleColumn = async (
+    columnKey: Exclude<ExtendedColumnKey, 'title'>,
+    direction: 'left' | 'right',
+  ) => {
     const nextVisibleKeys = moveVisibleColumnKeys(visibleColumnKeys, columnKey, direction)
     if (nextVisibleKeys === visibleColumnKeys) {
       return
@@ -3022,8 +3038,8 @@ export default function TaskTable({
   }
 
   const handleToggleField = (field: FieldOption) => {
-    if (typeof field.key === 'string' && field.key.startsWith('custom:')) {
-      const customField = rawCustomFields.find((item) => item.field_id === field.key.slice(7))
+    if (field.fieldId) {
+      const customField = rawCustomFields.find((item) => item.field_id === field.fieldId)
       if (customField) {
         void handleToggleCustomFieldVisibility(customField)
       }
@@ -3160,10 +3176,12 @@ export default function TaskTable({
   )
 
   function renderAdjustableColumnTitle(
-    columnKey: ExtendedColumnKey,
+    columnKey: Exclude<ExtendedColumnKey, 'title'>,
     title: React.ReactNode,
   ): React.ReactNode {
-    const orderedKeys = visibleColumnKeys.filter((key) => key !== 'title')
+    const orderedKeys: Exclude<ExtendedColumnKey, 'title'>[] = visibleColumnKeys.filter(
+      (key): key is Exclude<ExtendedColumnKey, 'title'> => key !== 'title',
+    )
     const currentIndex = orderedKeys.indexOf(columnKey)
     const disableMoveLeft = currentIndex <= 0
     const disableMoveRight = currentIndex === -1 || currentIndex >= orderedKeys.length - 1
