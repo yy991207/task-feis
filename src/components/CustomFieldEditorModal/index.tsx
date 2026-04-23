@@ -29,6 +29,12 @@ interface Props {
   open: boolean
   projectId: string
   initialType?: CustomFieldType
+  initialTab?: 'new' | 'existing'
+  initialDraft?: {
+    name?: string
+    required?: boolean
+    options?: FieldOption[]
+  } | null
   field?: ApiCustomField | null
   existingFields?: ApiCustomField[]
   onClose: () => void
@@ -59,6 +65,8 @@ export default function CustomFieldEditorModal({
   open,
   projectId,
   initialType,
+  initialTab = 'new',
+  initialDraft = null,
   field,
   existingFields = [],
   onClose,
@@ -76,13 +84,13 @@ export default function CustomFieldEditorModal({
 
   useEffect(() => {
     if (open) {
-      setActiveTab('new')
+      setActiveTab(field ? 'new' : initialTab)
       setType(field?.field_type ?? initialType ?? 'text')
-      setName(field?.name ?? '')
-      setRequired(field?.required ?? false)
-      setOptions(getEnabledFieldOptions(field))
+      setName(field?.name ?? initialDraft?.name ?? '')
+      setRequired(field?.required ?? initialDraft?.required ?? false)
+      setOptions(field ? getEnabledFieldOptions(field) : (initialDraft?.options ?? []))
     }
-  }, [open, field, initialType])
+  }, [open, field, initialType, initialTab, initialDraft])
 
   const needsOptions = type === 'select' || type === 'multi_select'
 

@@ -44,8 +44,14 @@ async function testSubtaskDueCanBeEditedInline() {
 
   assert.match(
     source,
-    /className="subtask-meta-trigger subtask-date-trigger"[\s\S]*>\s*\{dueDate \? dueDate\.format\('M月D日'\) : null\}\s*<\/Button>/,
-    '子任务没有截止时间时，按钮里不应该再显示“截止时间”四个字，只保留日历图标',
+    /className="subtask-meta-trigger subtask-date-trigger"[\s\S]*>\s*\{dueDate \? `\$\{dueDate\.format\('M月D日'\)\} 截止` : null\}\s*<\/Button>/,
+    '子任务已设置截止时间时，日期入口应该显示“目标时间 + 截止”的样式',
+  )
+
+  assert.match(
+    source,
+    /className="subtask-meta-trigger subtask-date-trigger"[\s\S]*icon=\{dueDate \? undefined : <CalendarOutlined \/>\}/,
+    '子任务未设置截止时间时仍然应该保留日历图标入口，已设置日期后不再显示图标',
   )
 }
 

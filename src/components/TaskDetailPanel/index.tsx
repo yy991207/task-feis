@@ -2384,7 +2384,7 @@ export default function TaskDetailPanel({
                               className="subtask-meta-trigger subtask-date-trigger"
                               icon={<CalendarOutlined />}
                             >
-                              {dueDate ? dueDate.format('M月D日') : '截止时间'}
+                              {dueDate ? dueDate.format('M月D日') : null}
                             </Button>
                           </Tooltip>
                         </Popover>
@@ -2418,6 +2418,7 @@ export default function TaskDetailPanel({
                             type="text"
                             size="small"
                             className="subtask-meta-trigger subtask-assignee-trigger"
+                            aria-label="设置子任务负责人"
                           >
                             {assigneeUsers.length > 0 ? (
                               <>
@@ -2435,7 +2436,6 @@ export default function TaskDetailPanel({
                             ) : (
                               <>
                                 <UserOutlined />
-                                <span className="subtask-assignee-name">负责人</span>
                               </>
                             )}
                           </Button>

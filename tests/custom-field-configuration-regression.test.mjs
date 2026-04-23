@@ -5,6 +5,10 @@ async function readTaskTableSource() {
   return readFile(new URL('../src/components/TaskTable/index.tsx', import.meta.url), 'utf8')
 }
 
+async function readTaskTableStyle() {
+  return readFile(new URL('../src/components/TaskTable/index.less', import.meta.url), 'utf8')
+}
+
 async function testCreatedCustomFieldBecomesVisibleColumn() {
   const source = await readTaskTableSource()
 
@@ -90,11 +94,88 @@ async function testCustomFieldTypeMenuAnchorsInsidePanel() {
 
 async function testTableHeaderDoesNotRenderStandaloneAddFieldPlus() {
   const source = await readTaskTableSource()
+  const quickAddColumnStart = source.indexOf("key: 'quickAddCustomField'")
+  const quickAddColumnEnd = source.indexOf('const buildTableRows = () =>', quickAddColumnStart)
+  const quickAddColumnSource = source.slice(quickAddColumnStart, quickAddColumnEnd)
 
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /<Popover[\s\S]*open=\{headerAddOpen\}[\s\S]*<div className="col col-add">[\s\S]*<PlusOutlined \/>[\s\S]*<\/div>[\s\S]*<\/Popover>/,
-    '表头右侧不应该再单独渲染新增自定义字段的加号入口',
+    /const \[headerAddOpen, setHeaderAddOpen\] = useState\(false\)/,
+    '表头右侧应该单独维护一个新增字段快捷入口的开关状态',
+  )
+  assert.match(
+    source,
+    /key: 'quickAddCustomField'[\s\S]*overlayClassName="field-config-popover field-config-popover-quick-add"[\s\S]*open=\{headerAddOpen\}[\s\S]*content=\{quickAddFieldPanel\}/,
+    '表头右侧加号入口应该通过单独的 Popover 打开快速新增字段面板',
+  )
+  assert.match(
+    source,
+    /className="toolbar-quick-add-field-btn"[\s\S]*icon={<PlusOutlined \/>}/,
+    '表头右侧应该渲染独立的新增字段加号按钮',
+  )
+  assert.notEqual(
+    quickAddColumnStart,
+    -1,
+    '任务表格列定义里应该存在独立的快速新增字段列',
+  )
+  assert.doesNotMatch(
+    quickAddColumnSource,
+    /content=\{fieldConfigPanel\}/,
+    '表头右侧加号入口打开后不应该再复用完整字段配置面板',
+  )
+}
+
+async function testQuickAddFieldPanelOnlyShowsTypeMenu() {
+  const source = await readTaskTableSource()
+
+  const panelStart = source.indexOf('const quickAddFieldPanel = (')
+  const panelEnd = source.indexOf('const createTaskInlineRow =')
+  const panelSource = source.slice(panelStart, panelEnd)
+
+  assert.notEqual(
+    panelStart,
+    -1,
+    '任务表头右侧应该提供独立的快速新增字段面板',
+  )
+  assert.doesNotMatch(
+    panelSource,
+    /field-config-main-panel/,
+    '快速新增字段面板里不应该再显示左侧字段配置主面板',
+  )
+  assert.match(
+    panelSource,
+    /className="field-config-side-panel field-config-type-menu field-config-type-menu-standalone"/,
+    '快速新增字段面板应该直接渲染独立的字段类型菜单容器',
+  )
+  assert.match(
+    panelSource,
+    /field-config-side-section-title">基础字段<\/div>/,
+    '快速新增字段面板应该直接从基础字段类型开始展示',
+  )
+  assert.match(
+    panelSource,
+    /field-config-side-section-title">推荐字段<\/div>/,
+    '快速新增字段面板应该继续展示推荐字段分组',
+  )
+  assert.match(
+    panelSource,
+    /选择已创建的字段/,
+    '快速新增字段面板底部应该保留选择已创建字段入口',
+  )
+}
+
+async function testQuickAddFieldStyleExists() {
+  const style = await readTaskTableStyle()
+
+  assert.match(
+    style,
+    /\.toolbar-quick-add-field-btn/,
+    '任务表格样式里应该提供表头快速新增字段按钮样式',
+  )
+  assert.match(
+    style,
+    /\.field-config-type-menu-standalone/,
+    '任务表格样式里应该提供独立单列快捷字段面板样式',
   )
 }
 
@@ -103,6 +184,8 @@ async function main() {
   await testCustomFieldCellCanEditValues()
   await testCustomFieldTypeMenuAnchorsInsidePanel()
   await testTableHeaderDoesNotRenderStandaloneAddFieldPlus()
+  await testQuickAddFieldPanelOnlyShowsTypeMenu()
+  await testQuickAddFieldStyleExists()
   console.log('custom field configuration regressions ok')
 }
 

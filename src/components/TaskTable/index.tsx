@@ -60,6 +60,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import type { ColumnType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
   Priority,
@@ -161,6 +162,7 @@ type TaskTableDisplayRow =
   | TaskTableSectionRow
   | TaskTableInlineCreateRow
   | TaskTableNewTaskRow
+type ResizableColumnKey = 'title' | ExtendedColumnKey
 
 interface FieldOption {
   key: ExtendedColumnKey
@@ -177,6 +179,66 @@ const allConfigurableColumns: ConfigurableColumnKey[] = [
   'due',
   'creator',
   'created',
+]
+
+const DEFAULT_COLUMN_WIDTH = 42
+const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = 42
+const DEFAULT_COLUMN_WIDTHS: Partial<Record<ResizableColumnKey, number>> = {
+  title: 140,
+  priority: 96,
+  assignee: 156,
+  estimate: 104,
+  start: 120,
+  due: 120,
+  creator: 108,
+  created: 140,
+  subtaskProgress: 120,
+  taskSource: 120,
+  assigner: 120,
+  followers: 108,
+  completed: 140,
+  updated: 140,
+  taskId: 140,
+  sourceCategory: 120,
+}
+const MIN_COLUMN_WIDTH = 42
+const MIN_TITLE_COLUMN_WIDTH = 140
+const MAX_COLUMN_WIDTH = 720
+
+const QUICK_CREATE_RECOMMENDED_FIELDS: Array<{
+  key: string
+  label: string
+  type: ApiCustomFieldType
+  draft?: {
+    options?: Array<{ value: string; label: string; color?: string | null }>
+  }
+}> = [
+  {
+    key: 'priority',
+    label: '优先级',
+    type: 'select',
+    draft: {
+      options: [
+        { value: 'urgent', label: '高', color: '#f53f3f' },
+        { value: 'medium', label: '中', color: '#ff7d00' },
+        { value: 'low', label: '低', color: '#00b42a' },
+      ],
+    },
+  },
+  { key: 'price', label: '价格', type: 'number' },
+  {
+    key: 'risk_level',
+    label: '风险级',
+    type: 'select',
+    draft: {
+      options: [
+        { value: 'high', label: '高', color: '#f53f3f' },
+        { value: 'medium', label: '中', color: '#ff7d00' },
+        { value: 'low', label: '低', color: '#00b42a' },
+      ],
+    },
+  },
+  { key: 'cost', label: '成本', type: 'number' },
 ]
 
 const columnLabelMap: Record<ConfigurableColumnKey, string> = {
@@ -1039,6 +1101,75 @@ function isInlineCreateFloatingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(INLINE_CREATE_FLOATING_SELECTOR))
 }
 
+type ResizableHeaderCellProps = React.ThHTMLAttributes<HTMLTableCellElement> & {
+  columnKey?: ResizableColumnKey
+  width?: number
+  minWidth?: number
+  onResize?: (columnKey: ResizableColumnKey, width: number) => void
+}
+
+function ResizableHeaderCell({
+  columnKey,
+  width,
+  minWidth = MIN_COLUMN_WIDTH,
+  onResize,
+  children,
+  className,
+  ...restProps
+}: ResizableHeaderCellProps) {
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(0)
+
+  const handleMouseDown = (event: React.MouseEvent<HTMLSpanElement>) => {
+    if (!columnKey || !width || !onResize) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    startXRef.current = event.clientX
+    startWidthRef.current = width
+
+    // 拖拽过程中监听 window，避免鼠标移出表头后列宽停止更新。
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const nextWidth = Math.min(
+        MAX_COLUMN_WIDTH,
+        Math.max(minWidth, startWidthRef.current + moveEvent.clientX - startXRef.current),
+      )
+      onResize(columnKey, nextWidth)
+    }
+
+    const handleMouseUp = () => {
+      document.body.classList.remove('task-column-resizing')
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.body.classList.add('task-column-resizing')
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  return (
+    <th
+      {...restProps}
+      className={[className, columnKey ? 'task-resizable-column-header' : '']
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <span className="task-column-header-content">{children}</span>
+      {columnKey && onResize ? (
+        <span
+          className="task-column-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="拖拽调整字段宽度"
+          onMouseDown={handleMouseDown}
+        />
+      ) : null}
+    </th>
+  )
+}
+
 export default function TaskTable({
   config,
   tasks,
@@ -1114,6 +1245,7 @@ export default function TaskTable({
   )
   const [visibleSectionGuids, setVisibleSectionGuids] = useState<Set<string>>(new Set())
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ExtendedColumnKey[]>(config.columns)
+  const [columnWidths, setColumnWidths] = useState<Partial<Record<ResizableColumnKey, number>>>({})
   const [localSections, setLocalSections] = useState<Section[]>(sections ?? [])
   const [hasLocalSectionEdits, setHasLocalSectionEdits] = useState(false)
   const [creatingSection, setCreatingSection] = useState(false)
@@ -1233,6 +1365,12 @@ export default function TaskTable({
   const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorInitialType, setEditorInitialType] = useState<ApiCustomFieldType>('text')
+  const [editorInitialTab, setEditorInitialTab] = useState<'new' | 'existing'>('new')
+  const [editorInitialDraft, setEditorInitialDraft] = useState<{
+    name?: string
+    required?: boolean
+    options?: Array<{ value: string; label: string; color?: string | null }>
+  } | null>(null)
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
   const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
   void creatingCustomField
@@ -2153,6 +2291,35 @@ export default function TaskTable({
 
   const showColumn = (col: ColumnKey) => visibleColumnKeys.includes(col)
 
+  const getColumnDefaultWidth = (columnKey: ResizableColumnKey) =>
+    DEFAULT_COLUMN_WIDTHS[columnKey] ??
+    (String(columnKey).startsWith('custom:')
+      ? DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH
+      : DEFAULT_COLUMN_WIDTH)
+  const getColumnMinWidth = (columnKey: ResizableColumnKey) =>
+    columnKey === 'title' ? MIN_TITLE_COLUMN_WIDTH : MIN_COLUMN_WIDTH
+  const getColumnWidth = (columnKey: ResizableColumnKey) =>
+    Math.max(getColumnMinWidth(columnKey), columnWidths[columnKey] ?? getColumnDefaultWidth(columnKey))
+  const handleColumnResize = useCallback((columnKey: ResizableColumnKey, width: number) => {
+    setColumnWidths((prev) => ({
+      ...prev,
+      [columnKey]: Math.round(width),
+    }))
+  }, [])
+  const withResizableHeader = (
+    column: ColumnType<TaskTableDisplayRow>,
+    columnKey: ResizableColumnKey,
+  ): ColumnType<TaskTableDisplayRow> => ({
+    ...column,
+    width: getColumnWidth(columnKey),
+    onHeaderCell: () => ({
+      columnKey,
+      width: getColumnWidth(columnKey),
+      minWidth: getColumnMinWidth(columnKey),
+      onResize: handleColumnResize,
+    }) as React.ThHTMLAttributes<HTMLTableCellElement>,
+  })
+
   const handleAddVisibleColumn = (column: ExtendedColumnKey) => {
     setVisibleColumnKeys((prev) => {
       if (prev.includes(column)) {
@@ -2549,6 +2716,7 @@ export default function TaskTable({
 
   const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
   const [customFieldTypeMenuOpen, setCustomFieldTypeMenuOpen] = useState(false)
+  const [headerAddOpen, setHeaderAddOpen] = useState(false)
 
   const handleFieldConfigOpenChange = (open: boolean) => {
     setFieldConfigOpen(open)
@@ -2562,17 +2730,49 @@ export default function TaskTable({
     setCustomFieldTypeMenuOpen(false)
   }
 
+  const closeHeaderQuickAdd = () => {
+    setHeaderAddOpen(false)
+  }
+
   const handlePickType = (t: ApiCustomFieldType) => {
     closeFieldConfig()
+    closeHeaderQuickAdd()
     setEditorField(null)
     setEditorInitialType(t)
+    setEditorInitialTab('new')
+    setEditorInitialDraft(null)
     setEditorOpen(true)
   }
 
   const handleEditField = (field: ApiCustomField) => {
     closeFieldConfig()
+    closeHeaderQuickAdd()
     setEditorField(field)
     setEditorInitialType(field.field_type)
+    setEditorInitialTab('new')
+    setEditorInitialDraft(null)
+    setEditorOpen(true)
+  }
+
+  const handlePickRecommendedField = (field: (typeof QUICK_CREATE_RECOMMENDED_FIELDS)[number]) => {
+    closeHeaderQuickAdd()
+    setEditorField(null)
+    setEditorInitialType(field.type)
+    setEditorInitialTab('new')
+    setEditorInitialDraft({
+      name: field.label,
+      required: false,
+      options: field.draft?.options,
+    })
+    setEditorOpen(true)
+  }
+
+  const handleOpenExistingFieldPicker = () => {
+    closeHeaderQuickAdd()
+    setEditorField(null)
+    setEditorInitialType('text')
+    setEditorInitialTab('existing')
+    setEditorInitialDraft(null)
     setEditorOpen(true)
   }
 
@@ -2727,6 +2927,50 @@ export default function TaskTable({
           </div>
         </div>
       )}
+    </div>
+  )
+
+  const quickAddFieldPanel = (
+    <div className="field-config-side-panel field-config-type-menu field-config-type-menu-standalone">
+      <div className="field-config-side-section-title">基础字段</div>
+      <div className="field-config-side-list">
+        {customFieldTypeMenuItems.map((item) => (
+          <div
+            key={item.key}
+            className="field-config-side-item"
+            onClick={() => handlePickType(item.type)}
+          >
+            <span className="field-config-side-item-icon">{item.icon}</span>
+            <span className="field-config-side-item-label">{item.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="field-config-side-divider" />
+      <div className="field-config-side-section-title">推荐字段</div>
+      <div className="field-config-side-list">
+        {QUICK_CREATE_RECOMMENDED_FIELDS.map((item) => (
+          <div
+            key={item.key}
+            className="field-config-side-item"
+            onClick={() => handlePickRecommendedField(item)}
+          >
+            <span className="field-config-side-item-icon">
+              {item.type === 'number' ? <NumberOutlined /> : <CheckCircleOutlined />}
+            </span>
+            <span className="field-config-side-item-label">{item.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="field-config-side-divider" />
+      <div
+        className="field-config-side-item field-config-side-item-link"
+        onClick={handleOpenExistingFieldPicker}
+      >
+        <span className="field-config-side-item-icon">
+          <ReloadOutlined />
+        </span>
+        <span className="field-config-side-item-label">选择已创建的字段</span>
+      </div>
     </div>
   )
 
@@ -3403,6 +3647,35 @@ export default function TaskTable({
     })
   })
 
+  if (isTasklistView) {
+    taskColumns.push({
+      key: 'quickAddCustomField',
+      dataIndex: '__quickAddCustomField',
+      title: (
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          overlayClassName="field-config-popover field-config-popover-quick-add"
+          open={headerAddOpen}
+          onOpenChange={setHeaderAddOpen}
+          content={quickAddFieldPanel}
+        >
+          <Button
+            size="small"
+            type="text"
+            className="toolbar-quick-add-field-btn"
+            icon={<PlusOutlined />}
+            aria-label="快速添加自定义字段"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </Popover>
+      ),
+      width: 52,
+      align: 'center',
+      render: () => null,
+    })
+  }
+
   const buildTableRows = () => {
     const rows: TaskTableDisplayRow[] = []
     groupedTasks.forEach(({ section, tasks: sectionTasks }) => {
@@ -3695,9 +3968,15 @@ export default function TaskTable({
           open={editorOpen}
           projectId={tasklist.guid}
           initialType={editorInitialType}
+          initialTab={editorInitialTab}
+          initialDraft={editorInitialDraft}
           field={editorField}
           existingFields={rawCustomFields}
-          onClose={() => setEditorOpen(false)}
+          onClose={() => {
+            setEditorOpen(false)
+            setEditorInitialTab('new')
+            setEditorInitialDraft(null)
+          }}
           onSaved={(field) => void handleCustomFieldSaved(field)}
           onDeleted={(fieldId) => void handleCustomFieldDeleted(fieldId)}
           onPickExisting={(f) => {

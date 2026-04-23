@@ -1220,17 +1220,17 @@ body.detail-panel-resizing {
     align-items: center;
     gap: 6px;
     height: 28px;
-    padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid #e5e6eb;
-    background: #fff;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     color: #4e5969;
 
     &:hover,
     &:focus {
       color: #1f2329;
-      border-color: #91caff;
-      background: #f0f7ff;
+      background: transparent;
     }
 
     .ant-avatar {
@@ -1246,12 +1246,6 @@ body.detail-panel-resizing {
   .subtask-assignee-trigger {
     min-width: 0;
     max-width: 100%;
-  }
-
-  .subtask-assignee-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .subtask-detail-btn {
