@@ -2,7 +2,7 @@ import Avatar from 'antd/es/avatar'
 import Input from 'antd/es/input'
 import type { InputRef } from 'antd/es/input'
 import Typography from 'antd/es/typography'
-import { CheckOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons'
+import { CheckOutlined, DownOutlined, SearchOutlined, UpOutlined, UserOutlined } from '@ant-design/icons'
 import type { CSSProperties, KeyboardEvent, ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { User } from '@/types/task'
@@ -50,7 +50,10 @@ export default function UserSearchSelect({
   onOpenChange,
 }: UserSearchSelectProps): ReactElement {
   const inputRef = useRef<InputRef>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [internalOpen, setInternalOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const dropdownOpen = open ?? internalOpen
   const selectedIds = useMemo(
     () => (Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []),
     [value],
@@ -74,10 +77,34 @@ export default function UserSearchSelect({
   }, [autoFocus])
 
   useEffect(() => {
-    if (open === false) {
+    if (!dropdownOpen) {
       setSearchText('')
     }
-  }, [open])
+  }, [dropdownOpen])
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+      if (rootRef.current?.contains(target)) {
+        return
+      }
+      handleDropdownOpenChange(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  })
+
+  const handleDropdownOpenChange = (nextOpen: boolean): void => {
+    // 外部传 open 时走受控模式；未传 open 时组件自己维护展开状态，默认保持收起。
+    if (open === undefined) {
+      setInternalOpen(nextOpen)
+    }
+    onOpenChange?.(nextOpen)
+  }
 
   const handleUserToggle = (userId: string): void => {
     // 输入框只负责搜索，人员增删统一由列表点击切换，避免已选标签挤占搜索区域。
@@ -93,6 +120,10 @@ export default function UserSearchSelect({
   }
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Escape') {
+      handleDropdownOpenChange(false)
+      return
+    }
     if (event.key !== 'Enter' || filteredUsers.length === 0) {
       return
     }
@@ -100,13 +131,18 @@ export default function UserSearchSelect({
     handleUserToggle(filteredUsers[0].id)
   }
 
-  const wrapperClassName = className ? `user-search-select ${className}` : 'user-search-select'
+  const wrapperClassName = [
+    'user-search-select',
+    dropdownOpen ? 'user-search-select-open' : '',
+    className ?? '',
+  ].filter(Boolean).join(' ')
 
   return (
     <div
+      ref={rootRef}
       className={wrapperClassName}
       style={style}
-      onMouseDown={() => onOpenChange?.(true)}
+      onMouseDown={() => handleDropdownOpenChange(true)}
     >
       {label && (
         <Typography.Text strong className="user-search-select-label">
@@ -119,40 +155,43 @@ export default function UserSearchSelect({
         value={searchText}
         placeholder={placeholder}
         prefix={<SearchOutlined />}
+        suffix={dropdownOpen ? <UpOutlined /> : <DownOutlined />}
         allowClear
-        onFocus={() => onOpenChange?.(true)}
+        onFocus={() => handleDropdownOpenChange(true)}
         onChange={(event) => setSearchText(event.target.value)}
         onKeyDown={handleSearchKeyDown}
       />
-      <div className="user-search-options" role="listbox">
-        {filteredUsers.map((user) => {
-          const isSelected = selectedIds.includes(user.id)
-          const avatarSrc = normalizeAvatarSrc(user.avatar)
-          return (
-            <button
-              key={user.id}
-              type="button"
-              className={isSelected ? 'user-search-option user-search-option-selected' : 'user-search-option'}
-              onClick={() => handleUserToggle(user.id)}
-            >
-              <Avatar
-                size={24}
-                src={normalizeAvatarSrc(user.avatar)}
-                icon={avatarSrc ? undefined : <UserOutlined />}
-                className="user-search-option-avatar"
-                style={{ backgroundColor: avatarSrc ? undefined : USER_AVATAR_FALLBACK_COLOR }}
+      {dropdownOpen && (
+        <div className="user-search-options" role="listbox">
+          {filteredUsers.map((user) => {
+            const isSelected = selectedIds.includes(user.id)
+            const avatarSrc = normalizeAvatarSrc(user.avatar)
+            return (
+              <button
+                key={user.id}
+                type="button"
+                className={isSelected ? 'user-search-option user-search-option-selected' : 'user-search-option'}
+                onClick={() => handleUserToggle(user.id)}
               >
-                {avatarSrc ? null : user.name.slice(0, 1)}
-              </Avatar>
-              <span className="user-search-option-name">{user.name}</span>
-              {isSelected && <CheckOutlined className="user-search-option-check" />}
-            </button>
-          )
-        })}
-        {filteredUsers.length === 0 && (
-          <div className="user-search-empty">未找到人员</div>
-        )}
-      </div>
+                <Avatar
+                  size={24}
+                  src={normalizeAvatarSrc(user.avatar)}
+                  icon={avatarSrc ? undefined : <UserOutlined />}
+                  className="user-search-option-avatar"
+                  style={{ backgroundColor: avatarSrc ? undefined : USER_AVATAR_FALLBACK_COLOR }}
+                >
+                  {avatarSrc ? null : user.name.slice(0, 1)}
+                </Avatar>
+                <span className="user-search-option-name">{user.name}</span>
+                {isSelected && <CheckOutlined className="user-search-option-check" />}
+              </button>
+            )
+          })}
+          {filteredUsers.length === 0 && (
+            <div className="user-search-empty">未找到人员</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

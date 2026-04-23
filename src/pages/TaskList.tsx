@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Layout from 'antd/es/layout'
 import Button from 'antd/es/button'
-import Skeleton from 'antd/es/skeleton'
 import Tooltip from 'antd/es/tooltip'
 import message from 'antd/es/message'
 import { UnorderedListOutlined } from '@ant-design/icons'
@@ -349,14 +348,6 @@ export default function TaskListPage() {
   }
 
   const renderMainView = () => {
-    if (loading) {
-      return (
-        <div style={{ padding: 24 }}>
-          <Skeleton active paragraph={{ rows: 8 }} />
-        </div>
-      )
-    }
-
     // 动态视图
     if (activeNav === 'activity') {
       return (
@@ -386,6 +377,7 @@ export default function TaskListPage() {
         sections={activeTasklist?.sections}
         tasklist={activeTasklist}
         selectedTaskGuid={selectedTask?.guid}
+        loading={loading}
         statusFilter={statusFilter}
         sortMode={sortMode}
         mineOnly={mineOnly}

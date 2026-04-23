@@ -1,4 +1,5 @@
 .user-search-select {
+  position: relative;
   width: 100%;
   min-width: 192px;
 
@@ -11,7 +12,7 @@
 
   .ant-input-affix-wrapper {
     width: 100%;
-    border-color: #3370ff;
+    border-color: #d0d3d9;
     border-radius: 6px;
     box-shadow: none;
 
@@ -19,7 +20,7 @@
     &:focus,
     &:focus-within {
       border-color: #3370ff;
-      box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.12);
+      box-shadow: none;
     }
   }
 
@@ -27,10 +28,24 @@
     color: #a8abb2;
   }
 
+  .ant-input-suffix {
+    color: #6b7280;
+    font-size: 12px;
+  }
+
   .user-search-options {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1050;
+    width: 100%;
     max-height: 188px;
-    margin-top: 6px;
+    padding: 6px;
     overflow-y: auto;
+    border: 1px solid #dee0e3;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(31, 35, 41, 0.14);
   }
 
   .user-search-option {
@@ -40,7 +55,7 @@
     height: 36px;
     padding: 0 10px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
     color: #1f2329;
     font-size: 13px;
@@ -89,5 +104,12 @@
     color: #8f959e;
     font-size: 12px;
     text-align: center;
+  }
+
+  &.user-search-select-open {
+    .ant-input-affix-wrapper {
+      border-color: #3370ff;
+      box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.08);
+    }
   }
 }

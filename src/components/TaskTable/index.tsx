@@ -841,6 +841,7 @@ interface TaskTableProps {
   sections?: Section[]
   tasklist?: Tasklist
   selectedTaskGuid?: string
+  loading?: boolean
   statusFilter?: StatusFilterKey
   sortMode?: SortModeKey
   mineOnly?: boolean
@@ -1275,6 +1276,7 @@ export default function TaskTable({
   sections,
   tasklist,
   selectedTaskGuid,
+  loading = false,
   statusFilter: controlledStatusFilter,
   sortMode: controlledSortMode,
   mineOnly: _controlledMineOnly,
@@ -2570,6 +2572,8 @@ export default function TaskTable({
     viewReadyProjectId !== projectIdForView ||
     customFieldsReadyProjectId !== projectIdForView
   )
+  // 任务刷新只遮住表格内容，不卸载整个组件，避免保存视图的本地脏状态被重置。
+  const shouldShowTaskLoading = loading && !shouldShowViewLoading
 
   const visibleCustomFieldDefMap = new Map(
     (tasklist?.custom_fields ?? [])
@@ -4503,7 +4507,7 @@ export default function TaskTable({
       </div>
 
       <div className="table-body">
-        {shouldShowViewLoading ? (
+        {shouldShowViewLoading || shouldShowTaskLoading ? (
           <div className="table-view-loading"><Skeleton active paragraph={{ rows: 6 }} /></div>
         ) : (
         <>
