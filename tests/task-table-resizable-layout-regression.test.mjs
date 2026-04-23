@@ -57,6 +57,16 @@ async function testColumnMinimumWidthUsesHalfSize() {
     /const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = 42/,
     '自定义字段默认显示宽度也应该直接使用当前最小宽度',
   )
+
+  const widthMapMatch = source.match(
+    /const DEFAULT_COLUMN_WIDTHS:[\s\S]*?= \{([\s\S]*?)\}\nconst MIN_COLUMN_WIDTH/,
+  )
+  assert.ok(widthMapMatch, '任务表格应该保留列宽默认值映射，方便标题列单独设置默认宽度')
+  assert.doesNotMatch(
+    widthMapMatch[1],
+    /\n\s+(priority|assignee|estimate|start|due|creator|created|subtaskProgress|taskSource|assigner|followers|completed|updated|taskId|sourceCategory):\s+\d+/,
+    '除任务标题外，普通字段默认宽度不应该再单独覆盖，应该统一使用当前最小宽度',
+  )
 }
 
 async function testColumnsCanResizeFromAntdHeaderCell() {

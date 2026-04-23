@@ -177,6 +177,16 @@ async function testQuickAddFieldStyleExists() {
     /\.field-config-type-menu-standalone/,
     '任务表格样式里应该提供独立单列快捷字段面板样式',
   )
+  assert.match(
+    style,
+    /\.toolbar-quick-add-field-btn[\s\S]*border:\s*none\s*!important;/,
+    '表头快速新增字段按钮不应该再带边框，只保留加号图标',
+  )
+  assert.match(
+    style,
+    /\.toolbar-quick-add-field-btn[\s\S]*color:\s*#1f2329\s*!important;/,
+    '表头快速新增字段按钮的加号应该使用黑色文字色',
+  )
 }
 
 async function main() {

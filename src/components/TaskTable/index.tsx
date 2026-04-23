@@ -185,21 +185,6 @@ const DEFAULT_COLUMN_WIDTH = 42
 const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = 42
 const DEFAULT_COLUMN_WIDTHS: Partial<Record<ResizableColumnKey, number>> = {
   title: 140,
-  priority: 96,
-  assignee: 156,
-  estimate: 104,
-  start: 120,
-  due: 120,
-  creator: 108,
-  created: 140,
-  subtaskProgress: 120,
-  taskSource: 120,
-  assigner: 120,
-  followers: 108,
-  completed: 140,
-  updated: 140,
-  taskId: 140,
-  sourceCategory: 120,
 }
 const MIN_COLUMN_WIDTH = 42
 const MIN_TITLE_COLUMN_WIDTH = 140
