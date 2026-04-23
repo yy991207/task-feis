@@ -156,7 +156,7 @@ type TaskTableSectionRow = {
   key: string
   guid: string
   rowKind: 'section'
-  section: Section
+  section: GroupSection
   sectionTasks: Task[]
 }
 type TaskTableInlineCreateRow = {
@@ -461,6 +461,7 @@ const baseGroupLabelMap: Record<BaseGroupModeKey, string> = {
 
 interface GroupSection extends Section {
   countLabel?: string
+  assigneeUsers?: User[]
 }
 
 const startDateGroupDefinitions = [
@@ -2002,6 +2003,29 @@ export default function TaskTable({
     groupModeOptions.map((item) => [item.key, item.label]),
   )
 
+  const buildAssigneeGroupSection = (task: Task): GroupSection => {
+    const assigneeMembers = task.members
+      .filter((member) => member.role === 'assignee')
+      .sort((a, b) => a.id.localeCompare(b.id))
+    const assigneeGroupKey = assigneeMembers.map((member) => member.id).join('__')
+    const assigneeUsers = assigneeMembers.map((member) => {
+      const matchedUser = users.find((user) => user.id === member.id)
+      return {
+        id: member.id,
+        name: matchedUser?.name ?? member.name ?? member.id,
+        avatar: matchedUser?.avatar ?? member.avatar,
+      }
+    })
+    const assigneeGroupName = assigneeUsers.map((user) => user.name).join('、')
+
+    // 负责人分组按“同一组负责人组合”归类，不按单个人拆分，避免一个多人任务重复出现在多个负责人组。
+    return {
+      guid: `__assignee-combo__${assigneeGroupKey}`,
+      name: assigneeGroupName,
+      assigneeUsers,
+    }
+  }
+
   function buildGroupedTasksByMode() {
     if (isSectionGroupMode) {
       return filteredSections.length > 0
@@ -2041,16 +2065,7 @@ export default function TaskTable({
             appendGroupTask(noAssigneeSection, task)
             return
           }
-          assigneeMembers.forEach((member) => {
-            const matchedUser = users.find((user) => user.id === member.id)
-            appendGroupTask(
-              {
-                guid: `__assignee__${member.id}`,
-                name: matchedUser?.name ?? member.name ?? member.id,
-              },
-              task,
-            )
-          })
+          appendGroupTask(buildAssigneeGroupSection(task), task)
         })
         return Array.from(groupedTaskMap.values())
       }
@@ -3717,7 +3732,44 @@ export default function TaskTable({
     return result
   }
 
-  const renderSectionRow = (section: Section, sectionTasks: Task[]) => (
+  const renderSectionName = (section: GroupSection) => {
+    if (section.assigneeUsers && section.assigneeUsers.length > 0) {
+      return (
+        <Tooltip title={section.name}>
+          <span className="section-name section-assignee-group-title">
+            <Avatar.Group size={20} max={{ count: 3 }}>
+              {section.assigneeUsers.map((user) => (
+                <Avatar
+                  key={user.id}
+                  size={20}
+                  src={user.avatar}
+                  className="tasklist-assignee-avatar"
+                  style={{ backgroundColor: user.avatar ? undefined : '#7b67ee', color: '#fff', fontSize: 11 }}
+                >
+                  {user.avatar ? null : user.name.slice(0, 1)}
+                </Avatar>
+              ))}
+            </Avatar.Group>
+          </span>
+        </Tooltip>
+      )
+    }
+
+    return (
+      <span
+        className="section-name"
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          setEditingSectionGuid(section.guid)
+          setEditingSectionName(section.name)
+        }}
+      >
+        {section.name}
+      </span>
+    )
+  }
+
+  const renderSectionRow = (section: GroupSection, sectionTasks: Task[]) => (
     <div
       className={`section-row-content ${animatedSectionGuid === section.guid ? 'section-row-new' : ''} ${
         draggingSectionGuid === section.guid ? 'dragging' : ''
@@ -3756,18 +3808,7 @@ export default function TaskTable({
           onClick={(e) => e.stopPropagation()}
           autoFocus
         />
-      ) : (
-        <span
-          className="section-name"
-          onDoubleClick={(e) => {
-            e.stopPropagation()
-            setEditingSectionGuid(section.guid)
-            setEditingSectionName(section.name)
-          }}
-        >
-          {section.name}
-        </span>
-      )}
+      ) : renderSectionName(section)}
       <Tag color="default" className="section-count-tag">
         {sectionTasks.length}
       </Tag>
@@ -4091,12 +4132,39 @@ export default function TaskTable({
           if (!isTaskTableTaskRow(record)) {
             return null
           }
-          const participantNames = (record.participant_ids ?? []).map((id) => {
+          const participantUsers = (record.participant_ids ?? []).map((id) => {
             const matchedUser = users.find((user) => user.id === id)
             const matchedMember = record.members.find((member) => member.id === id)
-            return matchedUser?.name ?? matchedMember?.name ?? id
+            return {
+              id,
+              name: matchedUser?.name ?? matchedMember?.name ?? id,
+              avatar: matchedUser?.avatar ?? matchedMember?.avatar,
+            }
           })
-          return renderOverflowText(participantNames.length > 0 ? participantNames.join('、') : '-')
+          if (participantUsers.length === 0) {
+            return renderOverflowText('-')
+          }
+          return (
+            <div className="cell cell-participants">
+              <Avatar.Group size={20} max={{ count: 3 }}>
+                {participantUsers.map((participantUser) => (
+                  <Tooltip
+                    key={participantUser.id}
+                    title={participantUser.name}
+                  >
+                    <Avatar
+                      size={20}
+                      src={participantUser.avatar}
+                      className="tasklist-assignee-avatar"
+                      style={{ backgroundColor: participantUser.avatar ? undefined : '#7b67ee', color: '#fff', fontSize: 11 }}
+                    >
+                      {participantUser.avatar ? null : participantUser.name.slice(0, 1)}
+                    </Avatar>
+                  </Tooltip>
+                ))}
+              </Avatar.Group>
+            </div>
+          )
         },
       }, 'participants'))
       return
