@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, isValidElement } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Input from 'antd/es/input'
 import Checkbox from 'antd/es/checkbox'
 import Popover from 'antd/es/popover'
@@ -1136,39 +1136,6 @@ function isInlineCreateFloatingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(INLINE_CREATE_FLOATING_SELECTOR))
 }
 
-function getTooltipTextFromNode(node: React.ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') {
-    return ''
-  }
-
-  if (typeof node === 'string' || typeof node === 'number') {
-    return String(node)
-  }
-
-  if (Array.isArray(node)) {
-    return node.map(getTooltipTextFromNode).join('').trim()
-  }
-
-  if (isValidElement<{ children?: React.ReactNode }>(node)) {
-    return getTooltipTextFromNode(node.props.children)
-  }
-
-  return ''
-}
-
-function getColumnTooltipTitle(children: React.ReactNode): React.ReactNode {
-  const text = getTooltipTextFromNode(children).trim()
-  if (text) {
-    return text
-  }
-
-  if (typeof children === 'string' || typeof children === 'number') {
-    return children
-  }
-
-  return null
-}
-
 function renderOverflowTooltip(
   title: React.ReactNode,
   content: React.ReactElement,
@@ -1250,14 +1217,7 @@ function ResizableHeaderCell({
         .filter(Boolean)
         .join(' ')}
     >
-      <Tooltip
-        title={getColumnTooltipTitle(children)}
-        placement="top"
-        color="#000"
-        overlayInnerStyle={{ color: '#fff' }}
-      >
-        <span className="task-column-header-content">{children}</span>
-      </Tooltip>
+      <span className="task-column-header-content">{children}</span>
       {columnKey && onResize ? (
         <span
           className="task-column-resize-handle"
@@ -2591,9 +2551,12 @@ export default function TaskTable({
   const shouldShowTaskLoading = loading && !shouldShowViewLoading
 
   const visibleCustomFieldDefMap = new Map(
-    (tasklist?.custom_fields ?? [])
-      .filter((field) => !systemFieldIdToColumnKeyMap[field.guid])
-      .map((field) => [toCustomFieldColumnKey(field.guid), field]),
+    rawCustomFields
+      .filter((field) => !systemFieldIdToColumnKeyMap[field.field_id] && field.creator_id !== 'system')
+      .map((field) => {
+        const def = apiToCustomFieldDef(field)
+        return [toCustomFieldColumnKey(field.field_id), def] as const
+      }),
   )
   const persistedFieldOptionMap = new Map<ExtendedColumnKey, FieldOption>()
   rawCustomFields.forEach((field) => {
@@ -2690,7 +2653,6 @@ export default function TaskTable({
       .map((field, index) => ({
         ...field,
         sort_order: index + 1,
-        is_visible: nextVisibleKeys.includes(resolveRawFieldColumnKey(field) as ExtendedColumnKey),
       }))
     const nextRawFields = rawCustomFields.map((field) => {
       const updatedField = reorderedFields.find((item) => item.field_id === field.field_id)
@@ -2704,7 +2666,6 @@ export default function TaskTable({
         reorderedFields.map((field) =>
           updateCustomField(projectId, field.field_id, {
             sort_order: field.sort_order,
-            is_visible: field.is_visible,
           }),
         ),
       )
