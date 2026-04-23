@@ -92,8 +92,8 @@ import './index.less'
 
 const { Text } = Typography
 const PARENT_TASK_CHAIN_MAX_DEPTH = 5
-const DETAIL_PANEL_DEFAULT_WIDTH = 460
-const DETAIL_PANEL_MIN_WIDTH = 440
+const DETAIL_PANEL_DEFAULT_WIDTH = 560
+const DETAIL_PANEL_MIN_WIDTH = 520
 const DETAIL_PANEL_MAX_WIDTH = 720
 
 const SUBTASK_CREATE_FLOATING_SELECTOR = [
@@ -1838,15 +1838,14 @@ export default function TaskDetailPanel({
               />
             </Tooltip>
             <div className="detail-history-title">历史记录</div>
-            <Tooltip title="关闭详情" placement="bottom">
-              <Button
-                type="text"
-                size="small"
-                className="detail-history-close"
-                icon={<CloseOutlined />}
-                onClick={onClose}
-              />
-            </Tooltip>
+            <Button
+              type="text"
+              size="small"
+              className="detail-history-close"
+              icon={<CloseOutlined />}
+              aria-label="关闭详情"
+              onClick={onClose}
+            />
           </div>
 
           <div className="detail-history-content">
@@ -1923,11 +1922,14 @@ export default function TaskDetailPanel({
               <MoreOutlined />
             </span>
           </Dropdown>
-          <Tooltip title="关闭详情" placement="bottom">
-            <span className="detail-action-icon" onClick={onClose}>
-              <CloseOutlined />
-            </span>
-          </Tooltip>
+          <button
+            type="button"
+            className="detail-action-icon detail-action-button"
+            aria-label="关闭详情"
+            onClick={onClose}
+          >
+            <CloseOutlined />
+          </button>
         </div>
       </div>
 
@@ -2331,86 +2333,86 @@ export default function TaskDetailPanel({
                         {isDone && <CheckOutlined />}
                       </span>
                     </Tooltip>
-                    <button
-                      type="button"
-                      className="subtask-title-btn"
-                      onClick={() => handleOpenSubtaskDetail(subtask)}
-                    >
-                      <span className="subtask-title">{subtask.summary}</span>
-                    </button>
-                    <div
-                      className="subtask-meta"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Popover
-                        trigger="click"
-                        placement="bottomLeft"
-                        open={activeSubtaskDueGuid === subtask.guid}
-                        onOpenChange={(open) =>
-                          setActiveSubtaskDueGuid(open ? subtask.guid : null)
-                        }
-                        content={
-                          <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-                            <Calendar
-                              fullscreen={false}
-                              value={dueDate ?? undefined}
-                              onSelect={(value) => void handleSubtaskDueChange(subtask, value)}
-                              disabledDate={(current) =>
-                                current && current < dayjs().startOf('day')
-                              }
-                            />
-                            {dueDate && (
-                              <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                                <Button
-                                  type="link"
-                                  size="small"
-                                  onClick={() => void handleSubtaskDueChange(subtask, null)}
-                                >
-                                  清除
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        }
+                    <div className="subtask-main">
+                      <button
+                        type="button"
+                        className="subtask-title-btn"
+                        onClick={() => handleOpenSubtaskDetail(subtask)}
                       >
-                        <Tooltip title="设置子任务截止时间">
-                          <Button
-                            type="text"
-                            size="small"
-                            className="subtask-meta-trigger subtask-date-trigger"
-                            icon={<CalendarOutlined />}
-                          >
-                            {dueDate ? dueDate.format('M月D日') : '截止时间'}
-                          </Button>
-                        </Tooltip>
-                      </Popover>
-                      <Popover
-                        trigger="click"
-                        placement="bottomLeft"
-                        open={activeSubtaskAssigneeGuid === subtask.guid}
-                        onOpenChange={(open) =>
-                          setActiveSubtaskAssigneeGuid(open ? subtask.guid : null)
-                        }
-                        content={
-                          <div style={{ width: 220 }}>
-                            <UserSearchSelect
-                              autoFocus
-                              label="设置子任务负责人"
-                              placeholder="搜索并选择负责人"
-                              mode="multiple"
-                              value={assigneeUsers.map((user) => user.id)}
-                              onChange={(value) =>
-                                void handleSubtaskAssigneeChange(
-                                  subtask,
-                                  Array.isArray(value) ? value : [],
-                                )
-                              }
-                              users={availableUsers}
-                            />
-                          </div>
-                        }
+                        <span className="subtask-title">{subtask.summary}</span>
+                      </button>
+                      <div
+                        className="subtask-meta"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Tooltip title="设置子任务负责人">
+                        <Popover
+                          trigger="click"
+                          placement="bottomLeft"
+                          open={activeSubtaskDueGuid === subtask.guid}
+                          onOpenChange={(open) =>
+                            setActiveSubtaskDueGuid(open ? subtask.guid : null)
+                          }
+                          content={
+                            <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+                              <Calendar
+                                fullscreen={false}
+                                value={dueDate ?? undefined}
+                                onSelect={(value) => void handleSubtaskDueChange(subtask, value)}
+                                disabledDate={(current) =>
+                                  current && current < dayjs().startOf('day')
+                                }
+                              />
+                              {dueDate && (
+                                <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                                  <Button
+                                    type="link"
+                                    size="small"
+                                    onClick={() => void handleSubtaskDueChange(subtask, null)}
+                                  >
+                                    清除
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          }
+                        >
+                          <Tooltip title="设置子任务截止时间">
+                            <Button
+                              type="text"
+                              size="small"
+                              className="subtask-meta-trigger subtask-date-trigger"
+                              icon={<CalendarOutlined />}
+                            >
+                              {dueDate ? dueDate.format('M月D日') : '截止时间'}
+                            </Button>
+                          </Tooltip>
+                        </Popover>
+                        <Popover
+                          trigger="click"
+                          placement="bottomLeft"
+                          open={activeSubtaskAssigneeGuid === subtask.guid}
+                          onOpenChange={(open) =>
+                            setActiveSubtaskAssigneeGuid(open ? subtask.guid : null)
+                          }
+                          content={
+                            <div style={{ width: 220 }}>
+                              <UserSearchSelect
+                                autoFocus
+                                label="设置子任务负责人"
+                                placeholder="搜索并选择负责人"
+                                mode="multiple"
+                                value={assigneeUsers.map((user) => user.id)}
+                                onChange={(value) =>
+                                  void handleSubtaskAssigneeChange(
+                                    subtask,
+                                    Array.isArray(value) ? value : [],
+                                  )
+                                }
+                                users={availableUsers}
+                              />
+                            </div>
+                          }
+                        >
                           <Button
                             type="text"
                             size="small"
@@ -2428,9 +2430,6 @@ export default function TaskDetailPanel({
                                     </Tooltip>
                                   ))}
                                 </Avatar.Group>
-                                <span className="subtask-assignee-name">
-                                  {assigneeUsers.map(getUserDisplayName).join('、')}
-                                </span>
                               </>
                             ) : (
                               <>
@@ -2439,17 +2438,17 @@ export default function TaskDetailPanel({
                               </>
                             )}
                           </Button>
-                        </Tooltip>
-                      </Popover>
-                      <Button
-                        type="text"
-                        size="small"
-                        className="subtask-detail-btn"
-                        icon={<EyeOutlined />}
-                        onClick={() => handleOpenSubtaskDetail(subtask)}
-                      >
-                        详情
-                      </Button>
+                        </Popover>
+                        <Button
+                          type="text"
+                          size="small"
+                          className="subtask-detail-btn"
+                          icon={<EyeOutlined />}
+                          onClick={() => handleOpenSubtaskDetail(subtask)}
+                        >
+                          详情
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )

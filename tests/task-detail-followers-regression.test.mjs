@@ -180,8 +180,22 @@ async function testDetailFollowersAreBelowAssigneeAndIconsHaveTooltips() {
     /import Tooltip from 'antd\/es\/tooltip'/,
     '详情页图标浮窗应该统一使用 antd Tooltip',
   )
+  assert.doesNotMatch(
+    detailSource,
+    /<Tooltip title="关闭详情"/,
+    '关闭详情入口不应该再显示“关闭详情”浮窗，避免鼠标移上去出现多余提示',
+  )
+  assert.match(
+    detailSource,
+    /className="detail-history-close"[\s\S]*aria-label="关闭详情"/,
+    '历史记录页右上角关闭按钮应该保留 aria-label，避免去掉浮窗后按钮语义丢失',
+  )
+  assert.match(
+    detailSource,
+    /className="detail-action-icon[^"]*"[\s\S]*aria-label="关闭详情"/,
+    '详情页右上角关闭按钮应该保留 aria-label，避免去掉浮窗后按钮语义丢失',
+  )
   ;[
-    '关闭详情',
     '负责人',
     '关注人',
     '开始和截止时间',

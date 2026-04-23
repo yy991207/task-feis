@@ -572,13 +572,13 @@ async function testCommentComposerLayoutFitsPanelAndGrowsWithContent() {
   )
   assert.match(
     detailSource,
-    /const DETAIL_PANEL_DEFAULT_WIDTH = 460/,
-    '任务详情面板默认宽度应该加大到 460，避免底部发送按钮被挤出可视区域',
+    /const DETAIL_PANEL_DEFAULT_WIDTH = 560/,
+    '任务详情面板默认宽度应该加大到 560，避免子任务元信息在默认抽屉宽度下挤成双行',
   )
   assert.match(
     detailSource,
-    /const DETAIL_PANEL_MIN_WIDTH = 440/,
-    '任务详情面板最小宽度应该不小于 440，拖拽后也不能挤掉发送按钮',
+    /const DETAIL_PANEL_MIN_WIDTH = 520/,
+    '任务详情面板最小宽度应该不小于 520，拖拽后也尽量保留子任务单行布局',
   )
   assert.match(
     detailSource,

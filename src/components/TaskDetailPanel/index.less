@@ -1,7 +1,7 @@
 .detail-panel {
   position: relative;
-  width: 460px;
-  min-width: 440px;
+  width: 560px;
+  min-width: 520px;
   height: 100vh;
   border-left: 1px solid #e5e6eb;
   background: #fff;
@@ -294,12 +294,19 @@ body.detail-panel-resizing {
       }
     }
   }
+
+  .detail-action-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
 }
 
 /* ── Scrollable area (body + comments) ── */
 .detail-scroll {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
 }
@@ -1121,7 +1128,7 @@ body.detail-panel-resizing {
 
 .detail-subtask-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 6px 8px;
   border-radius: 10px;
@@ -1156,6 +1163,7 @@ body.detail-panel-resizing {
     font-size: 10px;
     background: #fff;
     transition: all 0.15s ease;
+    margin-top: 6px;
 
     &:hover {
       border-color: #3370ff;
@@ -1167,6 +1175,15 @@ body.detail-panel-resizing {
     }
   }
 
+  .subtask-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
   .subtask-title {
     flex: 1;
     overflow: hidden;
@@ -1176,7 +1193,7 @@ body.detail-panel-resizing {
   }
 
   .subtask-title-btn {
-    flex: 1;
+    flex: 1 1 150px;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -1191,8 +1208,11 @@ body.detail-panel-resizing {
   .subtask-meta {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .subtask-meta-trigger {
@@ -1224,7 +1244,8 @@ body.detail-panel-resizing {
   }
 
   .subtask-assignee-trigger {
-    max-width: 160px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .subtask-assignee-name {

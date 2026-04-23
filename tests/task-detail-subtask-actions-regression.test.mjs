@@ -48,14 +48,14 @@ async function testSubtaskAssigneeCanBeEditedInline() {
 
   assert.match(
     source,
-    /const handleSubtaskAssigneeChange = async \(subtask: Task, value\?: string\) => \{/,
-    '任务详情里的子任务应该提供独立的负责人更新函数',
+    /const handleSubtaskAssigneeChange = async \(subtask: Task, values: string\[\]\) => \{/,
+    '任务详情里的子任务应该提供独立的多负责人更新函数',
   )
 
   assert.match(
     source,
-    /await patchTaskAssignee\(subtask\.guid, value \?\? null\)/,
-    '子任务负责人更新应该复用现有负责人 patch 接口',
+    /await patchTaskAssignee\(subtask\.guid, nextAssigneeIds\)/,
+    '子任务负责人更新应该发送完整 assignee_ids 数组',
   )
 
   assert.match(

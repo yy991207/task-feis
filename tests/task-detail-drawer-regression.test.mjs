@@ -75,11 +75,33 @@ async function testTaskDetailPanelClosesOnOutsidePointerDown() {
   )
 }
 
+async function testTaskDetailScrollKeepsStableScrollbarGutter() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.less')
+
+  assert.match(
+    source,
+    /\.detail-scroll\s*\{[\s\S]*scrollbar-gutter:\s*stable;/,
+    'Windows 浏览器的滚动条会占宽，详情滚动区需要预留 gutter，避免关闭详情页时宽度来回抖动',
+  )
+}
+
+async function testTaskDetailPanelUsesWiderDefaultWidth() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.less')
+
+  assert.match(
+    source,
+    /\.detail-panel\s*\{[\s\S]*width:\s*560px;[\s\S]*min-width:\s*520px;/,
+    '任务详情抽屉默认宽度和最小宽度要加大，避免子任务元信息默认挤成双行',
+  )
+}
+
 async function main() {
   await testTaskDetailPanelIsNotRemountedOnTaskSwitch()
   await testTaskDetailPanelUsesFixedDrawerShell()
   await testTaskDetailPanelResetsTaskScopedState()
   await testTaskDetailPanelClosesOnOutsidePointerDown()
+  await testTaskDetailScrollKeepsStableScrollbarGutter()
+  await testTaskDetailPanelUsesWiderDefaultWidth()
   console.log('task detail drawer regressions ok')
 }
 
