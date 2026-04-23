@@ -58,6 +58,8 @@ import {
   EyeOutlined,
   EyeInvisibleOutlined,
   CloseOutlined,
+  PaperClipOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { ColumnType } from 'antd/es/table'
@@ -3356,7 +3358,7 @@ export default function TaskTable({
                 {
                   key: 'delete',
                   danger: true,
-                  label: '删除任务分组',
+                  label: '删除',
                   onClick: () => void handleDeleteSection(section.guid),
                 },
               ],
@@ -4419,10 +4421,27 @@ function TaskTitleCell({
               {task.summary}
             </span>
           )}
-          {task.subtask_count > 0 && !editingName && (
-            <Tag className="subtask-tag">
-              {loadedSubtaskCount ?? 0} / {task.subtask_count}
-            </Tag>
+          {!editingName && (
+            <span className="task-meta-stats">
+              {task.attachment_count > 0 && (
+                <span className="task-meta-stat" title={`附件 ${task.attachment_count}`}>
+                  <PaperClipOutlined />
+                  <span>{task.attachment_count}</span>
+                </span>
+              )}
+              {task.comment_count > 0 && (
+                <span className="task-meta-stat" title={`评论 ${task.comment_count}`}>
+                  <MessageOutlined />
+                  <span>{task.comment_count}</span>
+                </span>
+              )}
+              {task.subtask_count > 0 && (
+                <span className="task-meta-stat" title={`子任务 ${loadedSubtaskCount ?? 0} / ${task.subtask_count}`}>
+                  <SubnodeOutlined />
+                  <span>{loadedSubtaskCount ?? 0} / {task.subtask_count}</span>
+                </span>
+              )}
+            </span>
           )}
           {!editingName && (
             <span

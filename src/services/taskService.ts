@@ -229,6 +229,8 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     source: 1,
     parent_task_guid: api.parent_task_id ?? '',
     depth: api.depth,
+    attachment_count: api.attachment_count,
+    comment_count: api.comment_count,
     subtask_count: api.subtask_count,
     participant_ids: [...api.participant_ids],
     members,

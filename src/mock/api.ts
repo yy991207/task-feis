@@ -66,6 +66,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 1,
     members: [
       { id: 'ou_002', role: 'assignee', type: 'user', name: '张洪磊' },
@@ -91,6 +93,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_002', role: 'assignee', type: 'user', name: '张洪磊' },
@@ -116,6 +120,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_002', role: 'assignee', type: 'user', name: '张洪磊' },
@@ -141,6 +147,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_002', role: 'assignee', type: 'user', name: '张洪磊' },
@@ -166,6 +174,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 1,
     members: [
       { id: 'ou_002', role: 'assignee', type: 'user', name: '张洪磊' },
@@ -191,6 +201,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_004', role: 'assignee', type: 'user', name: '金林峰' },
@@ -217,6 +229,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_001', role: 'assignee', type: 'user', name: '杨金玮' },
@@ -242,6 +256,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_001', role: 'assignee', type: 'user', name: '杨金玮' },
@@ -267,6 +283,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 3,
     members: [
       { id: 'ou_002', role: 'assignee', type: 'user', name: '张洪磊' },
@@ -292,6 +310,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [
       { id: 'ou_001', role: 'assignee', type: 'user', name: '杨金玮' },
@@ -317,6 +337,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 1,
     members: [],
     tasklists: [{ tasklist_guid: 'tl_001', section_guid: 'sec_002' }],
@@ -340,6 +362,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [],
     tasklists: [{ tasklist_guid: 'tl_001', section_guid: 'sec_003' }],
@@ -363,6 +387,8 @@ const sampleTasks: Task[] = [
     is_milestone: false,
     source: 1,
     parent_task_guid: '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: [],
     tasklists: [{ tasklist_guid: 'tl_001', section_guid: 'sec_003' }],
@@ -550,6 +576,8 @@ export async function createTask(payload: CreateTaskPayload): Promise<Task> {
     is_milestone: payload.is_milestone ?? false,
     source: 1,
     parent_task_guid: payload.parent_task_guid ?? '',
+    attachment_count: 0,
+    comment_count: 0,
     subtask_count: 0,
     members: (payload.members ?? []).map((m) => ({
       ...m,

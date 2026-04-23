@@ -736,6 +736,18 @@ export default function TaskDetailPanel({
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
+  const updateTaskAttachmentCount = (nextCount: number) => {
+    onTaskUpdated?.({
+      ...task,
+      attachment_count: Math.max(0, nextCount),
+    })
+  }
+  const updateTaskCommentCount = (nextCount: number) => {
+    onTaskUpdated?.({
+      ...task,
+      comment_count: Math.max(0, nextCount),
+    })
+  }
   const resolveHistoryUserLabel = (userId: string): string => {
     if (!userId) {
       return '有人'
@@ -1484,8 +1496,10 @@ export default function TaskDetailPanel({
     setAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file)
-      setAttachments((prev) => [...prev, created])
-      setAttachmentCount((prev) => prev + 1)
+      const nextAttachments = [...attachments, created]
+      setAttachments(nextAttachments)
+      setAttachmentCount(nextAttachments.length)
+      updateTaskAttachmentCount(nextAttachments.length)
       message.success('附件已上传')
       return created
     } catch (err) {
@@ -1522,8 +1536,10 @@ export default function TaskDetailPanel({
   const handleAttachmentDelete = async (attachmentId: string) => {
     try {
       await deleteAttachment(attachmentId)
-      setAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
-      setAttachmentCount((prev) => Math.max(0, prev - 1))
+      const nextAttachments = attachments.filter((a) => a.attachment_id !== attachmentId)
+      setAttachments(nextAttachments)
+      setAttachmentCount(nextAttachments.length)
+      updateTaskAttachmentCount(nextAttachments.length)
       message.success('附件已删除')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')
@@ -1730,7 +1746,9 @@ export default function TaskDetailPanel({
         attachmentIds.length > 0 ? attachmentIds : undefined,
       )
       pendingCommentScrollRef.current = true
-      setComments((prev) => [...prev, created])
+      const nextComments = [...comments, created]
+      setComments(nextComments)
+      updateTaskCommentCount(nextComments.length)
       setCommentValue('')
       setCommentMentions([])
       setCommentAttachments([])
@@ -1749,7 +1767,9 @@ export default function TaskDetailPanel({
   const handleDeleteComment = async (commentId: string) => {
     try {
       await deleteComment(task.guid, commentId)
-      setComments((prev) => prev.filter((c) => c.comment_id !== commentId))
+      const nextComments = comments.filter((c) => c.comment_id !== commentId)
+      setComments(nextComments)
+      updateTaskCommentCount(nextComments.length)
       message.success('评论已删除')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')

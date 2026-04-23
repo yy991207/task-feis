@@ -21,7 +21,16 @@ async function testGroupTerminology() {
   assert.match(sidebar, /输入清单分组名称/, '左侧边栏输入占位应明确为“清单分组名称”')
 
   assert.match(taskTable, /任务分组/, '主页面清单内 section 文案应明确为“任务分组”')
-  assert.match(taskTable, /删除任务分组/, '主页面 section 删除文案应明确为“任务分组”')
+  assert.match(
+    taskTable,
+    /key: 'delete'[\s\S]*label: '删除'/,
+    '主页面 section 更多菜单里的删除项应直接显示为“删除”',
+  )
+  assert.doesNotMatch(
+    taskTable,
+    /key: 'delete'[\s\S]*label: '删除任务分组'/,
+    '主页面 section 更多菜单里的删除项不应再显示“删除任务分组”',
+  )
 
   assert.match(taskDetail, /选择任务分组/, '任务详情里的 section 选择入口应明确为“任务分组”')
 }

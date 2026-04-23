@@ -500,16 +500,26 @@
       flex-shrink: 0;
     }
 
-    .subtask-tag {
-      margin: 0 !important;
-      padding: 0 4px !important;
-      border: none !important;
-      border-radius: 8px !important;
-      background: transparent !important;
-      color: #8f959e !important;
-      font-size: 11px !important;
-      line-height: 16px !important;
+    .task-meta-stats {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       flex-shrink: 0;
+      color: #8f959e;
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .task-meta-stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+
+      .anticon {
+        color: #a8adb7;
+        font-size: 12px;
+      }
     }
 
     .task-detail-hotspot {
