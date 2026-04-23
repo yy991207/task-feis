@@ -225,6 +225,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     },
     mode: 2,
     priority: (priorityStringToNum[api.priority] ?? 0) as Priority,
+    tags: [...api.tags],
     is_milestone: false,
     source: 1,
     parent_task_guid: api.parent_task_id ?? '',

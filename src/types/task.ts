@@ -103,6 +103,7 @@ export interface Task {
   creator: { id: string; type: MemberType; name?: string; avatar?: string }
   mode: TaskMode
   priority: Priority
+  tags: string[]
   is_milestone: boolean
   source: number
   parent_task_guid: string

@@ -123,7 +123,10 @@ type ExtraColumnKey =
   | 'subtaskProgress'
   | 'taskSource'
   | 'assigner'
+  | 'participants'
   | 'followers'
+  | 'tags'
+  | 'description'
   | 'completed'
   | 'updated'
   | 'taskId'
@@ -243,7 +246,10 @@ const extraColumnLabelMap: Record<ExtraColumnKey, string> = {
   subtaskProgress: '子任务进度',
   taskSource: '任务来源',
   assigner: '分配人',
+  participants: '参与人',
   followers: '关注人',
+  tags: '标签',
+  description: '描述',
   completed: '完成时间',
   updated: '更新时间',
   taskId: '任务 ID',
@@ -254,7 +260,10 @@ const extraFieldColumns: ExtraColumnKey[] = [
   'subtaskProgress',
   'taskSource',
   'assigner',
+  'participants',
   'followers',
+  'tags',
+  'description',
   'completed',
   'updated',
   'taskId',
@@ -267,8 +276,11 @@ const systemFieldIdToColumnKeyMap: Partial<Record<string, ExtendedColumnKey>> = 
   assignee_ids: 'assignee',
   start_date: 'start',
   due_date: 'due',
+  tags: 'tags',
+  participant_ids: 'participants',
   creator_id: 'creator',
   created_at: 'created',
+  description: 'description',
   follower_ids: 'followers',
   completed_at: 'completed',
   updated_at: 'updated',
@@ -1518,10 +1530,13 @@ export default function TaskTable({
     setRawCustomFields(fields)
     setVisibleColumnKeys((prev) => {
       const persistedKeys = buildVisibleColumnKeys(fields)
-      const extraVisibleKeys = prev.filter(
-        (key) => !fields.some((field) => resolveRawFieldColumnKey(field) === key),
-      )
-      const nextKeys = new Set([...persistedKeys, ...extraVisibleKeys])
+      const isBackendFieldLoaded = fields.length > 0
+      const nextKeys = new Set([...persistedKeys])
+      if (!isBackendFieldLoaded) {
+        prev
+          .filter((key) => !fields.some((field) => resolveRawFieldColumnKey(field) === key))
+          .forEach((key) => nextKeys.add(key))
+      }
       if (options?.extraVisibleColumnKey) {
         nextKeys.add(options.extraVisibleColumnKey)
       }
@@ -3895,6 +3910,26 @@ export default function TaskTable({
       return
     }
 
+    if (columnKey === 'participants') {
+      taskColumns.push(withResizableHeader({
+        key: 'participants',
+        dataIndex: 'participant_ids',
+        title: renderAdjustableColumnTitle('participants', <span>参与人</span>),
+        render: (_value, record) => {
+          if (!isTaskTableTaskRow(record)) {
+            return null
+          }
+          const participantNames = (record.participant_ids ?? []).map((id) => {
+            const matchedUser = users.find((user) => user.id === id)
+            const matchedMember = record.members.find((member) => member.id === id)
+            return matchedUser?.name ?? matchedMember?.name ?? id
+          })
+          return renderOverflowText(participantNames.length > 0 ? participantNames.join('、') : '-')
+        },
+      }, 'participants'))
+      return
+    }
+
     if (columnKey === 'followers') {
       taskColumns.push(withResizableHeader({
         key: 'followers',
@@ -3913,6 +3948,32 @@ export default function TaskTable({
           return renderOverflowText(followerCount || '-')
         },
       }, 'followers'))
+      return
+    }
+
+    if (columnKey === 'tags') {
+      taskColumns.push(withResizableHeader({
+        key: 'tags',
+        dataIndex: 'tags',
+        title: renderAdjustableColumnTitle('tags', <span>标签</span>),
+        render: (_value, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText(record.tags.length > 0 ? record.tags.join('、') : '-')
+          ) : null,
+      }, 'tags'))
+      return
+    }
+
+    if (columnKey === 'description') {
+      taskColumns.push(withResizableHeader({
+        key: 'description',
+        dataIndex: 'description',
+        title: renderAdjustableColumnTitle('description', <span>描述</span>),
+        render: (value: string, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText(value?.replace(/<[^>]+>/g, '').trim() || '-')
+          ) : null,
+      }, 'description'))
       return
     }
 
