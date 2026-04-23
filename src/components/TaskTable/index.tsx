@@ -184,7 +184,7 @@ const allConfigurableColumns: ConfigurableColumnKey[] = [
 const DEFAULT_COLUMN_WIDTH = 120
 const DEFAULT_CUSTOM_FIELD_COLUMN_WIDTH = DEFAULT_COLUMN_WIDTH
 const DEFAULT_COLUMN_WIDTHS: Partial<Record<ResizableColumnKey, number>> = {
-  title: 140,
+  title: 407,
 }
 const MIN_COLUMN_WIDTH = 42
 const MIN_TITLE_COLUMN_WIDTH = 140
@@ -3308,7 +3308,7 @@ export default function TaskTable({
           <span>任务标题</span>
         </span>
       ),
-      width: 140,
+      width: 407,
       render: (_value, record) => {
         if (record.rowKind === 'section') {
           return renderSectionRow(record.section, record.sectionTasks)

@@ -14,8 +14,13 @@ async function testTitleColumnFixedAndRightFieldsScrollable() {
 
   assert.match(
     source,
-    /title: 140,/,
-    '任务标题列默认宽度应该直接等于当前最小宽度，避免左侧固定区默认占用过多空间',
+    /title: 407,/,
+    '任务标题列默认宽度应该使用当前截图中的 407px 显示宽度',
+  )
+  assert.match(
+    source,
+    /key: 'title'[\s\S]*width: 407,/,
+    '任务标题列对象自身也应该声明 407px 默认宽度，避免和默认宽度映射不一致',
   )
   assert.match(
     source,
@@ -45,7 +50,7 @@ async function testNonTitleColumnsUseUnifiedDefaultWidth() {
   assert.match(
     source,
     /const MIN_TITLE_COLUMN_WIDTH = 140/,
-    '任务标题列最小拖拽宽度应该改成原来的一半',
+    '任务标题列最小拖拽宽度应该继续保持 140px，默认更宽但允许拖小',
   )
   assert.match(
     source,
