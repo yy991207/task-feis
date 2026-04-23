@@ -57,7 +57,7 @@ async function testCustomFieldCellCanEditValues() {
 async function testCustomFieldTypeMenuAnchorsInsidePanel() {
   const source = await readTaskTableSource()
   const panelStart = source.indexOf('const fieldConfigPanel = (')
-  const panelEnd = source.indexOf('const createTaskInlineRow =')
+  const panelEnd = source.indexOf('const quickAddFieldPanel = (')
   const panelSource = source.slice(panelStart, panelEnd)
 
   assert.doesNotMatch(
@@ -89,6 +89,21 @@ async function testCustomFieldTypeMenuAnchorsInsidePanel() {
     source,
     /field-config-side-panel field-config-type-menu/,
     '右侧字段类型列表应该有独立侧边面板容器',
+  )
+  assert.match(
+    panelSource,
+    /field-config-side-item field-config-side-item-link[\s\S]*选择已创建的字段/,
+    '字段配置主菜单右侧类型面板底部也应该提供“选择已创建的字段”入口',
+  )
+  assert.match(
+    panelSource,
+    /onClick=\{handleOpenExistingFieldPicker\}/,
+    '字段配置主菜单右侧类型面板里的“选择已创建的字段”入口应该复用现有打开逻辑',
+  )
+  assert.match(
+    source,
+    /const handleOpenExistingFieldPicker = \(\) => \{[\s\S]*closeFieldConfig\(\)[\s\S]*closeHeaderQuickAdd\(\)[\s\S]*setEditorInitialTab\('existing'\)[\s\S]*setEditorOpen\(true\)/,
+    '点击“选择已创建的字段”后应该先关闭字段配置浮层，再打开已创建字段弹窗',
   )
 }
 
@@ -189,6 +204,21 @@ async function testQuickAddFieldStyleExists() {
   )
 }
 
+async function testSystemBuiltInFieldDoesNotShowEditAction() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /const isSystemBuiltInField = cfRaw\?\.creator_id === 'system'/,
+    '字段配置行应该先识别 system 创建的系统内置字段，避免把权限判断散在 JSX 里',
+  )
+  assert.match(
+    source,
+    /\{cfRaw && !isSystemBuiltInField && \(/,
+    'creator_id 为 system 的字段不应该显示编辑铅笔入口',
+  )
+}
+
 async function main() {
   await testCreatedCustomFieldBecomesVisibleColumn()
   await testCustomFieldCellCanEditValues()
@@ -196,6 +226,7 @@ async function main() {
   await testTableHeaderDoesNotRenderStandaloneAddFieldPlus()
   await testQuickAddFieldPanelOnlyShowsTypeMenu()
   await testQuickAddFieldStyleExists()
+  await testSystemBuiltInFieldDoesNotShowEditAction()
   console.log('custom field configuration regressions ok')
 }
 

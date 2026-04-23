@@ -1141,6 +1141,10 @@ function renderOverflowTooltip(
   )
 }
 
+function renderOverflowText(value: React.ReactNode) {
+  return renderOverflowTooltip(value, <span className="custom-field-text">{value}</span>)
+}
+
 type ResizableHeaderCellProps = React.ThHTMLAttributes<HTMLTableCellElement> & {
   columnKey?: ResizableColumnKey
   width?: number
@@ -2815,6 +2819,7 @@ export default function TaskTable({
   }
 
   const handleOpenExistingFieldPicker = () => {
+    closeFieldConfig()
     closeHeaderQuickAdd()
     setEditorField(null)
     setEditorInitialType('text')
@@ -2872,6 +2877,7 @@ export default function TaskTable({
         ? field.key.slice(7)
         : null
     const cfRaw = cfGuid ? rawCustomFields.find((r) => r.field_id === cfGuid) : null
+    const isSystemBuiltInField = cfRaw?.creator_id === 'system'
     return (
       <div
         key={field.key}
@@ -2899,7 +2905,7 @@ export default function TaskTable({
         </span>
         <span className="field-config-row-icon">{getFieldIcon(field.key)}</span>
         <span className="field-config-row-label">{field.label}</span>
-        {cfRaw && (
+        {cfRaw && !isSystemBuiltInField && (
           <Button
             type="text"
             size="small"
@@ -2971,6 +2977,16 @@ export default function TaskTable({
                 <span className="field-config-side-item-label">{item.label}</span>
               </div>
             ))}
+          </div>
+          <div className="field-config-side-divider" />
+          <div
+            className="field-config-side-item field-config-side-item-link"
+            onClick={handleOpenExistingFieldPicker}
+          >
+            <span className="field-config-side-item-icon">
+              <ReloadOutlined />
+            </span>
+            <span className="field-config-side-item-label">选择已创建的字段</span>
           </div>
         </div>
       )}
@@ -3547,7 +3563,7 @@ export default function TaskTable({
         isInlineCreateRow(record) ? (
           <div className="inline-create-field-cell cell cell-created" />
         ) : isTaskTableTaskRow(record) ? (
-          dayjs(Number(value)).format('M月D日 HH:mm')
+          renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
         ) : null,
     }, 'created'))
   }
@@ -3559,7 +3575,7 @@ export default function TaskTable({
       title: <span>子任务进度</span>,
       render: (value: number, record) =>
         isTaskTableTaskRow(record) ? (
-          <span className="custom-field-text">{value > 0 ? `0 / ${value}` : '-'}</span>
+          renderOverflowText(value > 0 ? `0 / ${value}` : '-')
         ) : null,
     }, 'subtaskProgress'))
   }
@@ -3570,7 +3586,7 @@ export default function TaskTable({
       dataIndex: 'source',
       title: <span>任务来源</span>,
       render: (_value, record) =>
-        isTaskTableTaskRow(record) ? <span className="custom-field-text">任务</span> : null,
+        isTaskTableTaskRow(record) ? renderOverflowText('任务') : null,
     }, 'taskSource'))
   }
 
@@ -3584,7 +3600,7 @@ export default function TaskTable({
           return null
         }
         const creatorUser = users.find((u) => u.id === record.creator.id)
-        return <span className="custom-field-text">{creatorUser?.name ?? '-'}</span>
+        return renderOverflowText(creatorUser?.name ?? '-')
       },
     }, 'assigner'))
   }
@@ -3604,7 +3620,7 @@ export default function TaskTable({
             .filter((member) => member.role === 'follower')
             .map((member) => member.id),
         ]).size
-        return <span className="custom-field-text">{followerCount || '-'}</span>
+        return renderOverflowText(followerCount || '-')
       },
     }, 'followers'))
   }
@@ -3616,9 +3632,7 @@ export default function TaskTable({
       title: <span>完成时间</span>,
       render: (value: string, record) =>
         isTaskTableTaskRow(record) ? (
-          <span className="custom-field-text">
-            {value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-'}
-          </span>
+          renderOverflowText(value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-')
         ) : null,
     }, 'completed'))
   }
@@ -3630,9 +3644,7 @@ export default function TaskTable({
       title: <span>更新时间</span>,
       render: (value: string, record) =>
         isTaskTableTaskRow(record) ? (
-          <span className="custom-field-text">
-            {dayjs(Number(value)).format('M月D日 HH:mm')}
-          </span>
+          renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
         ) : null,
     }, 'updated'))
   }
@@ -3644,7 +3656,7 @@ export default function TaskTable({
       title: <span>任务 ID</span>,
       render: (value: string, record) =>
         isTaskTableTaskRow(record) ? (
-          <span className="custom-field-text">{value}</span>
+          renderOverflowText(value)
         ) : null,
     }, 'taskId'))
   }
@@ -3656,7 +3668,7 @@ export default function TaskTable({
       title: <span>来源类别</span>,
       render: (_value, record) =>
         isTaskTableTaskRow(record) ? (
-          <span className="custom-field-text">任务列表</span>
+          renderOverflowText('任务列表')
         ) : null,
     }, 'sourceCategory'))
   }

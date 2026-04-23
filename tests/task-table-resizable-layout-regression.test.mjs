@@ -128,6 +128,21 @@ async function testEllipsisContentUsesBlackTooltip() {
   )
   assert.match(
     source,
+    /function renderOverflowText\(value: React\.ReactNode\)[\s\S]*renderOverflowTooltip\(value, <span className="custom-field-text">\{value\}<\/span>\)/,
+    '普通字段文本值也应该统一接入完整内容 Tooltip',
+  )
+  assert.match(
+    source,
+    /renderOverflowText\(dayjs\(Number\(value\)\)\.format\('M月D日 HH:mm'\)\)/,
+    '创建/更新时间这类普通日期文本值省略时应该悬浮显示完整值',
+  )
+  assert.match(
+    source,
+    /renderOverflowText\(value\)/,
+    '任务 ID 等普通文本字段值省略时应该悬浮显示完整值',
+  )
+  assert.match(
+    source,
     /renderOverflowTooltip\(\s*PriorityLabel\[task\.priority\],[\s\S]*<span>\{PriorityLabel\[task\.priority\]\}<\/span>/,
     '优先级标签省略时应该悬浮显示完整优先级文案',
   )

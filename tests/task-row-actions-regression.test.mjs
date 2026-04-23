@@ -72,11 +72,73 @@ async function testTaskTableSpacerCellDoesNotDisableRowClick() {
   )
 }
 
+async function testTaskRowShowsMetricIconsForAttachmentCommentAndSubtask() {
+  const source = await readTaskTableSource()
+  const styleSource = await readFile(new URL('../src/components/TaskTable/index.less', import.meta.url), 'utf8')
+  const taskRowStart = source.indexOf('function TaskTitleCell(')
+  const taskRowEnd = source.indexOf('function formatCustomFieldValue(')
+  const taskRowSource = source.slice(taskRowStart, taskRowEnd)
+
+  assert.match(
+    taskRowSource,
+    /className="task-meta-stats"/,
+    '任务标题右侧应该有独立的统计信息容器，用来承载附件、评论和子任务计数',
+  )
+  assert.match(
+    taskRowSource,
+    /task\.attachment_count > 0[\s\S]*<PaperClipOutlined[\s\S]*task\.attachment_count/,
+    '任务标题右侧应该显示附件图标和附件数量',
+  )
+  assert.match(
+    taskRowSource,
+    /task\.comment_count > 0[\s\S]*<MessageOutlined[\s\S]*task\.comment_count/,
+    '任务标题右侧应该显示评论图标和评论数量',
+  )
+  assert.match(
+    taskRowSource,
+    /task\.subtask_count > 0[\s\S]*<SubnodeOutlined[\s\S]*\{loadedSubtaskCount \?\? 0\} \/ \{task\.subtask_count\}/,
+    '任务标题右侧应该把子任务进度改成带图标的统计项',
+  )
+  assert.match(
+    styleSource,
+    /\.task-meta-stats \{/,
+    '任务表格样式里应该提供统计信息容器样式',
+  )
+}
+
+async function testTaskApiCountsMapIntoTaskModel() {
+  const taskServiceSource = await readFile(new URL('../src/services/taskService.ts', import.meta.url), 'utf8')
+  const taskTypeSource = await readFile(new URL('../src/types/task.ts', import.meta.url), 'utf8')
+
+  assert.match(
+    taskTypeSource,
+    /attachment_count: number/,
+    '任务类型应该接住附件数量，任务行才能直接显示附件图标计数',
+  )
+  assert.match(
+    taskTypeSource,
+    /comment_count: number/,
+    '任务类型应该接住评论数量，任务行才能直接显示评论图标计数',
+  )
+  assert.match(
+    taskServiceSource,
+    /attachment_count: api\.attachment_count,/,
+    '任务接口映射应该把 attachment_count 接进前端任务对象',
+  )
+  assert.match(
+    taskServiceSource,
+    /comment_count: api\.comment_count,/,
+    '任务接口映射应该把 comment_count 接进前端任务对象',
+  )
+}
+
 async function main() {
   await testTaskRowDoesNotRenderPlusOrMoreActions()
   await testTaskRowUsesBlankHotspotToOpenDetail()
   await testTaskRowBlankAreaUsesOnRowToOpenDetail()
   await testTaskTableSpacerCellDoesNotDisableRowClick()
+  await testTaskRowShowsMetricIconsForAttachmentCommentAndSubtask()
+  await testTaskApiCountsMapIntoTaskModel()
   console.log('task row actions regressions ok')
 }
 

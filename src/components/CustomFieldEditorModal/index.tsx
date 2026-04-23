@@ -8,12 +8,15 @@ import Tabs from 'antd/es/tabs'
 import List from 'antd/es/list'
 import Tag from 'antd/es/tag'
 import Popconfirm from 'antd/es/popconfirm'
+import Radio from 'antd/es/radio'
+import Empty from 'antd/es/empty'
 import message from 'antd/es/message'
 import {
   DeleteOutlined,
   PlusOutlined,
   HolderOutlined,
-  EditOutlined,
+  SearchOutlined,
+  RightOutlined,
 } from '@ant-design/icons'
 import {
   createCustomField,
@@ -77,6 +80,8 @@ export default function CustomFieldEditorModal({
   const [type, setType] = useState<CustomFieldType>(field?.field_type ?? initialType ?? 'text')
   const [name, setName] = useState(field?.name ?? '')
   const [options, setOptions] = useState<FieldOption[]>(() => getEnabledFieldOptions(field))
+  const [existingKeyword, setExistingKeyword] = useState('')
+  const [selectedExistingFieldId, setSelectedExistingFieldId] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -85,6 +90,8 @@ export default function CustomFieldEditorModal({
       setType(field?.field_type ?? initialType ?? 'text')
       setName(field?.name ?? initialDraft?.name ?? '')
       setOptions(field ? getEnabledFieldOptions(field) : (initialDraft?.options ?? []))
+      setExistingKeyword('')
+      setSelectedExistingFieldId('')
     }
   }, [open, field, initialType, initialTab, initialDraft])
 
@@ -153,16 +160,6 @@ export default function CustomFieldEditorModal({
     }
   }
 
-  const handleDeleteExisting = async (f: ApiCustomField) => {
-    try {
-      await deleteCustomField(f.field_id)
-      message.success('已删除字段')
-      onDeleted?.(f.field_id)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除失败')
-    }
-  }
-
   const handleDeleteCurrentField = async () => {
     if (!field) {
       return
@@ -179,6 +176,22 @@ export default function CustomFieldEditorModal({
 
   const typeLabel = (t: CustomFieldType) =>
     TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t
+
+  const filteredExistingFields = existingFields.filter((item) =>
+    item.name.toLowerCase().includes(existingKeyword.trim().toLowerCase()),
+  )
+
+  const handleConfirmPickExisting = () => {
+    if (!selectedExistingFieldId) {
+      return
+    }
+    const targetField = existingFields.find((item) => item.field_id === selectedExistingFieldId)
+    if (!targetField) {
+      return
+    }
+    onPickExisting?.(targetField)
+    onClose()
+  }
 
   const newFieldForm = (
     <Form layout="vertical">
@@ -254,60 +267,105 @@ export default function CustomFieldEditorModal({
   )
 
   const existingList = (
-    <List
-      dataSource={existingFields}
-      locale={{ emptyText: '暂无已创建字段' }}
-      renderItem={(f) => (
-        <List.Item
-          actions={[
-            <Button
-              key="use"
-              type="link"
-              size="small"
-              onClick={() => {
-                onPickExisting?.(f)
-                onClose()
-              }}
-            >
-              使用
-            </Button>,
-            <Button
-              key="edit"
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => {
-                onPickExisting?.(f)
-              }}
-            />,
-            <Popconfirm
-              key="del"
-              title="删除该字段？"
-              okText="删除"
-              cancelText="取消"
-              onConfirm={() => handleDeleteExisting(f)}
-            >
-              <Button type="text" size="small" icon={<DeleteOutlined />} />
-            </Popconfirm>,
-          ]}
-        >
-          <List.Item.Meta
-            title={
-              <span>
-                {f.name}
-                <Tag style={{ marginLeft: 8 }}>{typeLabel(f.field_type)}</Tag>
-                {f.required && <Tag color="red">必填</Tag>}
-              </span>
-            }
-            description={
-              f.options && f.options.length > 0
-                ? f.options.map((o) => o.label).join(' / ')
-                : undefined
-            }
-          />
-        </List.Item>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Input
+        value={existingKeyword}
+        onChange={(event) => setExistingKeyword(event.target.value)}
+        placeholder="搜索已创建的字段"
+        prefix={<SearchOutlined style={{ color: '#8f959e' }} />}
+        allowClear
+      />
+      {filteredExistingFields.length > 0 ? (
+        <List
+          dataSource={filteredExistingFields}
+          locale={{ emptyText: '暂无已创建字段' }}
+          renderItem={(f) => {
+            const selected = selectedExistingFieldId === f.field_id
+            return (
+              <List.Item
+                style={{
+                  padding: 0,
+                  border: 'none',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedExistingFieldId(f.field_id)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 12px',
+                    borderRadius: 10,
+                    border: selected ? '1px solid #adc6ff' : '1px solid transparent',
+                    background: selected ? '#f0f5ff' : '#fff',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <Radio
+                    checked={selected}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        color: '#1f2329',
+                        fontSize: 14,
+                        lineHeight: '22px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {f.name}
+                      </span>
+                      <Tag style={{ marginInlineEnd: 0 }}>{typeLabel(f.field_type)}</Tag>
+                    </div>
+                    {f.options && f.options.length > 0 ? (
+                      <div
+                        style={{
+                          marginTop: 4,
+                          color: '#646a73',
+                          fontSize: 12,
+                          lineHeight: '20px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {f.options.map((o) => o.label).join(' / ')}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#8f959e',
+                      fontSize: 12,
+                      lineHeight: '20px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <RightOutlined />
+                  </div>
+                </button>
+              </List.Item>
+            )
+          }}
+        />
+      ) : (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="暂无匹配字段"
+          style={{ marginBlock: 32 }}
+        />
       )}
-    />
+    </div>
   )
 
   return (
@@ -316,7 +374,18 @@ export default function CustomFieldEditorModal({
       open={open}
       onCancel={onClose}
       footer={
-        activeTab === 'new' ? (
+        activeTab === 'existing' && !isEdit ? (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button onClick={onClose}>取消</Button>
+            <Button
+              type="primary"
+              onClick={handleConfirmPickExisting}
+              disabled={!selectedExistingFieldId}
+            >
+              添加到清单
+            </Button>
+          </div>
+        ) : activeTab === 'new' ? (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             {isEdit && (
               <Popconfirm

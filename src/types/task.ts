@@ -107,6 +107,8 @@ export interface Task {
   source: number
   parent_task_guid: string
   depth?: number
+  attachment_count: number
+  comment_count: number
   subtask_count: number
   participant_ids?: string[]
   members: Member[]
