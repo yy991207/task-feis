@@ -29,6 +29,7 @@ import {
   AlignLeftOutlined,
   UsergroupAddOutlined,
   EyeOutlined,
+  RightOutlined,
   DownloadOutlined,
   DownOutlined,
   UnorderedListOutlined,
@@ -2443,11 +2444,10 @@ export default function TaskDetailPanel({
                           type="text"
                           size="small"
                           className="subtask-detail-btn"
-                          icon={<EyeOutlined />}
+                          aria-label="查看详情"
                           onClick={() => handleOpenSubtaskDetail(subtask)}
-                        >
-                          详情
-                        </Button>
+                          icon={<RightOutlined />}
+                        />
                       </div>
                     </div>
                   </div>

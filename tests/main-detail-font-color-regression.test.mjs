@@ -59,18 +59,23 @@ async function testDetailPageTextUsesDeepBlackAndSubtaskDetailCopy() {
   )
   assert.match(
     styleSource,
-    /\.subtask-detail-btn \{[\s\S]*color: #3370ff;/,
-    '任务详情页子任务的“详情”按钮应该保持蓝色',
+    /\.subtask-detail-btn \{[\s\S]*color: #8f959e;/,
+    '任务详情页子任务的箭头入口应该使用更轻的灰色图标风格',
   )
   assert.doesNotMatch(
     detailSource,
     /子任务详情/,
     '任务详情页子任务入口文案不能再显示“子任务详情”',
   )
-  assert.match(
+  assert.doesNotMatch(
     detailSource,
     /className="subtask-detail-btn"[\s\S]*>\s*详情\s*<\/Button>/,
-    '任务详情页子任务入口文案应该统一显示为“详情”',
+    '任务详情页子任务入口不应该再显示“详情”文字，应改成箭头按钮',
+  )
+  assert.match(
+    detailSource,
+    /className="subtask-detail-btn"[\s\S]*aria-label="查看详情"/,
+    '任务详情页子任务入口改成箭头按钮后，仍然应该保留 aria-label',
   )
 }
 

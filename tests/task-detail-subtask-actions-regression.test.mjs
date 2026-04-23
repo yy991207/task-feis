@@ -16,8 +16,8 @@ async function testSubtaskRowHasDedicatedDetailEntry() {
 
   assert.match(
     source,
-    /className="subtask-detail-btn"[\s\S]*?>\s*详情\s*<\/Button>/,
-    '子任务行应该提供显式“详情”按钮，避免只能点整行猜交互',
+    /className="subtask-detail-btn"[\s\S]*aria-label="查看详情"/,
+    '子任务行应该提供显式的箭头详情按钮，并保留 aria-label 说明用途',
   )
 }
 
@@ -41,6 +41,12 @@ async function testSubtaskDueCanBeEditedInline() {
     /title="设置子任务截止时间"[\s\S]*className="subtask-meta-trigger subtask-date-trigger"/,
     '子任务行应该提供显式的截止时间触发器，而不是只展示纯文本日期',
   )
+
+  assert.match(
+    source,
+    /className="subtask-meta-trigger subtask-date-trigger"[\s\S]*>\s*\{dueDate \? dueDate\.format\('M月D日'\) : null\}\s*<\/Button>/,
+    '子任务没有截止时间时，按钮里不应该再显示“截止时间”四个字，只保留日历图标',
+  )
 }
 
 async function testSubtaskAssigneeCanBeEditedInline() {
@@ -60,8 +66,29 @@ async function testSubtaskAssigneeCanBeEditedInline() {
 
   assert.match(
     source,
-    /title="设置子任务负责人"[\s\S]*className="subtask-meta-trigger subtask-assignee-trigger"/,
+    /className="subtask-meta-trigger subtask-assignee-trigger"/,
     '子任务行应该提供显式的负责人触发器，而不是只展示头像',
+  )
+
+  assert.match(
+    source,
+    /className="subtask-meta-trigger subtask-assignee-trigger"[\s\S]*aria-label="设置子任务负责人"/,
+    '子任务负责人入口去掉文字占位后，仍然应该保留 aria-label 说明按钮用途',
+  )
+}
+
+async function testSubtaskMetaTriggersDoNotUseCapsuleBorder() {
+  const source = await readSource('../src/components/TaskDetailPanel/index.less')
+
+  assert.match(
+    source,
+    /\.subtask-meta-trigger\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;/,
+    '子任务截止时间和负责人入口应该去掉外层胶囊边框，只保留内部 UI',
+  )
+  assert.doesNotMatch(
+    source,
+    /\.subtask-meta-trigger\s*\{[\s\S]*border-radius:\s*999px;[\s\S]*border:\s*1px solid #e5e6eb;/,
+    '子任务截止时间和负责人入口不应该继续保留外层曲形边框',
   )
 }
 
@@ -69,6 +96,7 @@ async function main() {
   await testSubtaskRowHasDedicatedDetailEntry()
   await testSubtaskDueCanBeEditedInline()
   await testSubtaskAssigneeCanBeEditedInline()
+  await testSubtaskMetaTriggersDoNotUseCapsuleBorder()
   console.log('task detail subtask actions regressions ok')
 }
 
