@@ -279,6 +279,14 @@ const systemFieldIdToColumnKeyMap: Partial<Record<string, ExtendedColumnKey>> = 
 
 const toCustomFieldColumnKey = (guid: string): CustomFieldColumnKey => `custom:${guid}`
 
+function mergeRawCustomFieldList(fields: ApiCustomField[], field: ApiCustomField): ApiCustomField[] {
+  const nextFields = fields.some((item) => item.field_id === field.field_id)
+    ? fields.map((item) => (item.field_id === field.field_id ? field : item))
+    : [...fields, field]
+
+  return [...nextFields].sort((a, b) => a.sort_order - b.sort_order)
+}
+
 type StatusFilterKey = 'all' | 'todo' | 'done'
 type SortModeKey = 'custom' | 'due' | 'start' | 'created'
 type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
@@ -1503,6 +1511,39 @@ export default function TaskTable({
     [],
   )
 
+  const applyCustomFieldList = (
+    fields: ApiCustomField[],
+    options?: { extraVisibleColumnKey?: ExtendedColumnKey | null },
+  ) => {
+    setRawCustomFields(fields)
+    setVisibleColumnKeys((prev) => {
+      const persistedKeys = buildVisibleColumnKeys(fields)
+      const extraVisibleKeys = prev.filter(
+        (key) => !fields.some((field) => resolveRawFieldColumnKey(field) === key),
+      )
+      const nextKeys = new Set([...persistedKeys, ...extraVisibleKeys])
+      if (options?.extraVisibleColumnKey) {
+        nextKeys.add(options.extraVisibleColumnKey)
+      }
+      return Array.from(nextKeys)
+    })
+
+    if (!tasklist) {
+      return
+    }
+
+    const defs = [...fields]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(apiToCustomFieldDef)
+    const prev = tasklist.custom_fields ?? []
+    const changed =
+      prev.length !== defs.length ||
+      prev.some((p, i) => p.guid !== defs[i]?.guid || p.name !== defs[i]?.name)
+    if (changed) {
+      onTasklistUpdated?.({ ...tasklist, custom_fields: defs })
+    }
+  }
+
   // 加载项目自定义字段
   useEffect(() => {
     if (!tasklist) return
@@ -1510,24 +1551,7 @@ export default function TaskTable({
     void listCustomFields(tasklist.guid, { includeDisabledOptions: true })
       .then((list) => {
         if (cancelled) return
-        setRawCustomFields(list)
-        setVisibleColumnKeys((prev) => {
-          const persistedKeys = buildVisibleColumnKeys(list)
-          const extraVisibleKeys = prev.filter(
-            (key) => !list.some((field) => resolveRawFieldColumnKey(field) === key),
-          )
-          return Array.from(new Set([...persistedKeys, ...extraVisibleKeys]))
-        })
-        const defs = [...list]
-          .sort((a, b) => a.sort_order - b.sort_order)
-          .map(apiToCustomFieldDef)
-        const prev = tasklist.custom_fields ?? []
-        const changed =
-          prev.length !== defs.length ||
-          prev.some((p, i) => p.guid !== defs[i]?.guid || p.name !== defs[i]?.name)
-        if (changed) {
-          onTasklistUpdated?.({ ...tasklist, custom_fields: defs })
-        }
+        applyCustomFieldList(list)
       })
       .catch(() => undefined)
     return () => {
@@ -1536,26 +1560,26 @@ export default function TaskTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasklist?.guid])
 
-  const reloadCustomFields = async () => {
+  const reloadCustomFields = async (options?: {
+    fallbackField?: ApiCustomField
+    extraVisibleColumnKey?: ExtendedColumnKey | null
+  }) => {
     if (!tasklist) return
     try {
-      const list = await listCustomFields(tasklist.guid, { includeDisabledOptions: true })
-      setRawCustomFields(list)
-      setVisibleColumnKeys((prev) => {
-        const persistedKeys = buildVisibleColumnKeys(list)
-        const extraVisibleKeys = prev.filter(
-          (key) => !list.some((field) => resolveRawFieldColumnKey(field) === key),
-        )
-        return Array.from(new Set([...persistedKeys, ...extraVisibleKeys]))
-      })
-      onTasklistUpdated?.({
-        ...tasklist,
-        custom_fields: [...list]
-          .sort((a, b) => a.sort_order - b.sort_order)
-          .map(apiToCustomFieldDef),
+      const queriedList = await listCustomFields(tasklist.guid, { includeDisabledOptions: true })
+      const list = options?.fallbackField
+        ? mergeRawCustomFieldList(queriedList, options.fallbackField)
+        : queriedList
+      applyCustomFieldList(list, {
+        extraVisibleColumnKey: options?.extraVisibleColumnKey,
       })
     } catch {
-      // ignore
+      if (options?.fallbackField) {
+        applyCustomFieldList(
+          mergeRawCustomFieldList(rawCustomFields, options.fallbackField),
+          { extraVisibleColumnKey: options.extraVisibleColumnKey },
+        )
+      }
     }
   }
 
@@ -2366,7 +2390,7 @@ export default function TaskTable({
   const isTasklistView = Boolean(tasklist)
   const visibleCustomFieldDefMap = new Map(
     (tasklist?.custom_fields ?? [])
-      .filter((field) => String(field.guid).startsWith('cf_'))
+      .filter((field) => !systemFieldIdToColumnKeyMap[field.guid])
       .map((field) => [toCustomFieldColumnKey(field.guid), field]),
   )
   const persistedFieldOptionMap = new Map<ExtendedColumnKey, FieldOption>()
@@ -2496,11 +2520,14 @@ export default function TaskTable({
   }
 
   const handleCustomFieldSaved = async (field: ApiCustomField) => {
-    await reloadCustomFields()
     const columnKey = resolveRawFieldColumnKey(field)
+    const optimisticList = mergeRawCustomFieldList(rawCustomFields, field)
+    // 新建字段接口已经返回完整字段，先本地同步，避免刚写完立刻查询时因后端读写延迟导致页面不显示。
+    applyCustomFieldList(optimisticList, { extraVisibleColumnKey: columnKey })
     if (columnKey) {
       handleAddVisibleColumn(columnKey)
     }
+    await reloadCustomFields({ fallbackField: field, extraVisibleColumnKey: columnKey })
   }
 
   const handleCustomFieldDeleted = async (fieldId: string) => {

@@ -29,6 +29,26 @@ async function testCreatedCustomFieldBecomesVisibleColumn() {
   )
 }
 
+async function testSavedCustomFieldUsesResponseBeforeReload() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /function mergeRawCustomFieldList\(fields: ApiCustomField\[\], field: ApiCustomField\): ApiCustomField\[\]/,
+    '保存字段后应该能把接口返回的字段合并到本地字段列表，不能只等下一次查询',
+  )
+  assert.match(
+    source,
+    /const optimisticList = mergeRawCustomFieldList\(rawCustomFields, field\)[\s\S]*applyCustomFieldList\(optimisticList, \{ extraVisibleColumnKey: columnKey \}\)/,
+    '新建字段保存成功后应该先用返回字段做本地同步，避免查询短暂滞后导致页面不显示新列',
+  )
+  assert.match(
+    source,
+    /await reloadCustomFields\(\{ fallbackField: field, extraVisibleColumnKey: columnKey \}\)/,
+    '保存后重新查询字段列表时应该带上刚保存的字段兜底，避免旧查询结果覆盖实时新增列',
+  )
+}
+
 async function testCustomFieldCellCanEditValues() {
   const source = await readTaskTableSource()
 
@@ -51,6 +71,29 @@ async function testCustomFieldCellCanEditValues() {
     source,
     /if \(String\(columnKey\)\.startsWith\('custom:'\)\) \{[\s\S]*const field = visibleCustomFieldDefMap\.get\(columnKey as CustomFieldColumnKey\)[\s\S]*<CustomFieldCell[\s\S]*field=\{field\}[\s\S]*onChange=\{\(value\) => void handleCustomFieldValueChange\(record, field, value\)\}/,
     '自定义字段列渲染时应该按当前列顺序取字段定义，并在 antd Table 列里接入可编辑单元格',
+  )
+}
+
+async function testCustomFieldRenderDoesNotDependOnIdPrefix() {
+  const source = await readTaskTableSource()
+  const mapStart = source.indexOf('const visibleCustomFieldDefMap = new Map(')
+  const mapEnd = source.indexOf('const persistedFieldOptionMap', mapStart)
+  const mapSource = source.slice(mapStart, mapEnd)
+
+  assert.notEqual(
+    mapStart,
+    -1,
+    '任务表格应该构建自定义字段定义映射，供动态列实时渲染',
+  )
+  assert.doesNotMatch(
+    mapSource,
+    /startsWith\('cf_'\)/,
+    '自定义字段列渲染不能依赖 cf_ 前缀，否则后端返回其他 field_id 时新增字段会查到但不显示',
+  )
+  assert.match(
+    mapSource,
+    /filter\(\(field\) => !systemFieldIdToColumnKeyMap\[field\.guid\]\)/,
+    '自定义字段列只需要排除系统字段，不能按字段 id 前缀猜测后端数据',
   )
 }
 
@@ -221,7 +264,9 @@ async function testSystemBuiltInFieldDoesNotShowEditAction() {
 
 async function main() {
   await testCreatedCustomFieldBecomesVisibleColumn()
+  await testSavedCustomFieldUsesResponseBeforeReload()
   await testCustomFieldCellCanEditValues()
+  await testCustomFieldRenderDoesNotDependOnIdPrefix()
   await testCustomFieldTypeMenuAnchorsInsidePanel()
   await testTableHeaderDoesNotRenderStandaloneAddFieldPlus()
   await testQuickAddFieldPanelOnlyShowsTypeMenu()
