@@ -2382,9 +2382,9 @@ export default function TaskDetailPanel({
                               type="text"
                               size="small"
                               className="subtask-meta-trigger subtask-date-trigger"
-                              icon={<CalendarOutlined />}
+                              icon={dueDate ? undefined : <CalendarOutlined />}
                             >
-                              {dueDate ? dueDate.format('M月D日') : null}
+                              {dueDate ? `${dueDate.format('M月D日')} 截止` : null}
                             </Button>
                           </Tooltip>
                         </Popover>

@@ -193,7 +193,16 @@
     overflow-x: auto;
   }
 
+  .ant-table-cell-fix-left {
+    background: #fff;
+  }
+
+  .ant-table-cell-fix-left-last::after {
+    box-shadow: inset 8px 0 8px -8px rgba(31, 35, 41, 0.16) !important;
+  }
+
   .ant-table-thead > tr > th {
+    position: relative;
     height: 38px;
     padding: 0 12px;
     background: #fff;
@@ -201,6 +210,46 @@
     font-size: 12px;
     font-weight: 400;
     border-bottom: 1px solid #eef1f6;
+  }
+
+  .task-resizable-column-header {
+    overflow: visible;
+  }
+
+  .task-column-header-content {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .task-column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    z-index: 3;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+
+    &::after {
+      position: absolute;
+      top: 8px;
+      right: 3px;
+      width: 1px;
+      height: 22px;
+      background: transparent;
+      content: '';
+      transition: background 0.15s ease;
+    }
+
+    &:hover::after {
+      background: #3370ff;
+    }
   }
 
   .ant-table-tbody > tr > td {
@@ -219,6 +268,17 @@
     padding: 0 !important;
   }
 
+  .task-table-spacer-cell {
+    padding: 0 !important;
+    background: #fff !important;
+    border-bottom: 1px solid #f2f3f5;
+    pointer-events: none;
+  }
+
+  .ant-table-thead > tr > .task-table-spacer-cell {
+    border-bottom: 1px solid #eef1f6;
+  }
+
   .toolbar-quick-add-field-btn {
     width: 28px !important;
     height: 28px !important;
@@ -233,6 +293,15 @@
       border-color: #b7c9ff !important;
       background: #f5f8ff !important;
     }
+  }
+}
+
+.task-column-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+
+  * {
+    cursor: col-resize !important;
   }
 }
 

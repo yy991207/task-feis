@@ -3313,16 +3313,17 @@ export default function TaskTable({
   )
 
   const taskColumns: ColumnsType<TaskTableDisplayRow> = [
-    {
+    withResizableHeader({
       key: 'title',
       dataIndex: 'summary',
+      fixed: 'left',
       title: (
         <span className="table-column-title table-column-title-main">
           <FontSizeOutlined />
           <span>任务标题</span>
         </span>
       ),
-      width: 420,
+      width: 140,
       render: (_value, record) => {
         if (record.rowKind === 'section') {
           return renderSectionRow(record.section, record.sectionTasks)
@@ -3356,11 +3357,11 @@ export default function TaskTable({
           />
         )
       },
-    },
+    }, 'title'),
   ]
 
   if (showColumn('priority')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'priority',
       dataIndex: 'priority',
       title: <span>优先级</span>,
@@ -3371,11 +3372,11 @@ export default function TaskTable({
         ) : isTaskTableTaskRow(record) ? (
           <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />
         ) : null,
-    })
+    }, 'priority'))
   }
 
   if (showColumn('assignee')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'assignee',
       dataIndex: 'members',
       title: (
@@ -3398,11 +3399,11 @@ export default function TaskTable({
             onAssigneePickerOpenChange={setActiveAssigneePickerKey}
           />
         ) : null,
-    })
+    }, 'assignee'))
   }
 
   if (showColumn('estimate')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'estimate',
       dataIndex: 'estimate',
       title: <span>预估工时</span>,
@@ -3415,11 +3416,11 @@ export default function TaskTable({
         ) : (
           <span className="custom-field-text">-</span>
         ),
-    })
+    }, 'estimate'))
   }
 
   if (showColumn('start')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'start',
       dataIndex: 'start',
       title: (
@@ -3435,11 +3436,11 @@ export default function TaskTable({
         ) : isTaskTableTaskRow(record) ? (
           <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
         ) : null,
-    })
+    }, 'start'))
   }
 
   if (showColumn('due')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'due',
       dataIndex: 'due',
       title: (
@@ -3455,11 +3456,11 @@ export default function TaskTable({
         ) : isTaskTableTaskRow(record) ? (
           <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
         ) : null,
-    })
+    }, 'due'))
   }
 
   if (showColumn('creator')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'creator',
       dataIndex: 'creator',
       title: (
@@ -3493,11 +3494,11 @@ export default function TaskTable({
           </Tooltip>
         ) : null
       },
-    })
+    }, 'creator'))
   }
 
   if (showColumn('created')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'created',
       dataIndex: 'created_at',
       title: <span>创建时间</span>,
@@ -3508,11 +3509,11 @@ export default function TaskTable({
         ) : isTaskTableTaskRow(record) ? (
           dayjs(Number(value)).format('M月D日 HH:mm')
         ) : null,
-    })
+    }, 'created'))
   }
 
   if (visibleColumnKeys.includes('subtaskProgress')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'subtaskProgress',
       dataIndex: 'subtask_count',
       title: <span>子任务进度</span>,
@@ -3521,22 +3522,22 @@ export default function TaskTable({
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">{value > 0 ? `0 / ${value}` : '-'}</span>
         ) : null,
-    })
+    }, 'subtaskProgress'))
   }
 
   if (visibleColumnKeys.includes('taskSource')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'taskSource',
       dataIndex: 'source',
       title: <span>任务来源</span>,
       width: 120,
       render: (_value, record) =>
         isTaskTableTaskRow(record) ? <span className="custom-field-text">任务</span> : null,
-    })
+    }, 'taskSource'))
   }
 
   if (visibleColumnKeys.includes('assigner')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'assigner',
       dataIndex: 'creator',
       title: <span>分配人</span>,
@@ -3548,11 +3549,11 @@ export default function TaskTable({
         const creatorUser = users.find((u) => u.id === record.creator.id)
         return <span className="custom-field-text">{creatorUser?.name ?? '-'}</span>
       },
-    })
+    }, 'assigner'))
   }
 
   if (visibleColumnKeys.includes('followers')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'followers',
       dataIndex: 'members',
       title: <span>关注人</span>,
@@ -3569,11 +3570,11 @@ export default function TaskTable({
         ]).size
         return <span className="custom-field-text">{followerCount || '-'}</span>
       },
-    })
+    }, 'followers'))
   }
 
   if (visibleColumnKeys.includes('completed')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'completed',
       dataIndex: 'completed_at',
       title: <span>完成时间</span>,
@@ -3584,11 +3585,11 @@ export default function TaskTable({
             {value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-'}
           </span>
         ) : null,
-    })
+    }, 'completed'))
   }
 
   if (visibleColumnKeys.includes('updated')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'updated',
       dataIndex: 'updated_at',
       title: <span>更新时间</span>,
@@ -3599,11 +3600,11 @@ export default function TaskTable({
             {dayjs(Number(value)).format('M月D日 HH:mm')}
           </span>
         ) : null,
-    })
+    }, 'updated'))
   }
 
   if (visibleColumnKeys.includes('taskId')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'taskId',
       dataIndex: 'task_id',
       title: <span>任务 ID</span>,
@@ -3612,11 +3613,11 @@ export default function TaskTable({
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">{value}</span>
         ) : null,
-    })
+    }, 'taskId'))
   }
 
   if (visibleColumnKeys.includes('sourceCategory')) {
-    taskColumns.push({
+    taskColumns.push(withResizableHeader({
       key: 'sourceCategory',
       dataIndex: 'sourceCategory',
       title: <span>来源类别</span>,
@@ -3625,12 +3626,13 @@ export default function TaskTable({
         isTaskTableTaskRow(record) ? (
           <span className="custom-field-text">任务列表</span>
         ) : null,
-    })
+    }, 'sourceCategory'))
   }
 
   visibleCustomFieldDefs.forEach((field) => {
-    taskColumns.push({
-      key: field.guid,
+    const columnKey = toCustomFieldColumnKey(field.guid)
+    taskColumns.push(withResizableHeader({
+      key: columnKey,
       dataIndex: field.guid,
       title: <span>{field.name}</span>,
       width: 160,
@@ -3644,7 +3646,7 @@ export default function TaskTable({
             onStatusChange={(task, nextStatus) => void handleTaskStatusFieldChange(task, nextStatus)}
           />
         ) : null,
-    })
+    }, columnKey))
   })
 
   if (isTasklistView) {
@@ -3675,6 +3677,14 @@ export default function TaskTable({
       render: () => null,
     })
   }
+
+  taskColumns.push({
+    key: 'tableLayoutSpacer',
+    dataIndex: '__tableLayoutSpacer',
+    title: null,
+    className: 'task-table-spacer-cell',
+    render: () => null,
+  })
 
   const buildTableRows = () => {
     const rows: TaskTableDisplayRow[] = []
@@ -3713,6 +3723,13 @@ export default function TaskTable({
     return rows
   }
   const tableRows = buildTableRows()
+  const tableScrollX = taskColumns.reduce((sum, column) => {
+    if (column.key === 'tableLayoutSpacer') {
+      return sum
+    }
+    const width = Number(column.width)
+    return sum + (Number.isFinite(width) ? width : DEFAULT_COLUMN_WIDTH)
+  }, 0)
 
   const renderTaskTable = () => (
     <Table<TaskTableDisplayRow>
@@ -3723,7 +3740,9 @@ export default function TaskTable({
       showHeader={config.showColumnHeader !== false}
       columns={taskColumns}
       dataSource={tableRows}
-      scroll={{ x: 'max-content' }}
+      scroll={{ x: tableScrollX }}
+      components={{ header: { cell: ResizableHeaderCell } }}
+      tableLayout="fixed"
       expandable={{
         expandedRowKeys: collectExpandedRowKeys(tableRows, expandedTaskGuids),
         showExpandColumn: false,
