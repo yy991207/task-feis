@@ -3,7 +3,6 @@ import Modal from 'antd/es/modal'
 import Form from 'antd/es/form'
 import Input from 'antd/es/input'
 import Select from 'antd/es/select'
-import Switch from 'antd/es/switch'
 import Button from 'antd/es/button'
 import List from 'antd/es/list'
 import Tag from 'antd/es/tag'
@@ -45,7 +44,6 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
   const [form] = Form.useForm<{
     name: string
     field_type: CustomFieldType
-    required: boolean
     options?: string
   }>()
 
@@ -84,7 +82,6 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
       if (editing) {
         await updateCustomField(editing.field_id, {
           name: values.name,
-          required: values.required,
           options,
         })
         message.success('已更新')
@@ -92,7 +89,6 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
         await createCustomField(projectId, {
           name: values.name,
           field_type: values.field_type,
-          required: values.required,
           options,
         })
         message.success('已创建')
@@ -124,7 +120,6 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
     form.setFieldsValue({
       name: it.name,
       field_type: it.field_type,
-      required: it.required,
       options: (it.options ?? []).map((o) => o.label).join('\n'),
     })
   }
@@ -133,7 +128,7 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
     setEditing(null)
     setCreating(true)
     form.resetFields()
-    form.setFieldsValue({ field_type: 'text', required: false })
+    form.setFieldsValue({ field_type: 'text' })
   }
 
   return (
@@ -230,9 +225,6 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
                 </Form.Item>
               ) : null
             }}
-          </Form.Item>
-          <Form.Item name="required" label="是否必填" valuePropName="checked">
-            <Switch />
           </Form.Item>
           <Space>
             <Button type="primary" onClick={handleSubmit}>

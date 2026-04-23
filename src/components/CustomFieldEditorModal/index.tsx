@@ -3,7 +3,6 @@ import Modal from 'antd/es/modal'
 import Form from 'antd/es/form'
 import Input from 'antd/es/input'
 import Select from 'antd/es/select'
-import Switch from 'antd/es/switch'
 import Button from 'antd/es/button'
 import Tabs from 'antd/es/tabs'
 import List from 'antd/es/list'
@@ -32,7 +31,6 @@ interface Props {
   initialTab?: 'new' | 'existing'
   initialDraft?: {
     name?: string
-    required?: boolean
     options?: FieldOption[]
   } | null
   field?: ApiCustomField | null
@@ -78,7 +76,6 @@ export default function CustomFieldEditorModal({
   const [activeTab, setActiveTab] = useState<'new' | 'existing'>('new')
   const [type, setType] = useState<CustomFieldType>(field?.field_type ?? initialType ?? 'text')
   const [name, setName] = useState(field?.name ?? '')
-  const [required, setRequired] = useState(field?.required ?? false)
   const [options, setOptions] = useState<FieldOption[]>(() => getEnabledFieldOptions(field))
   const [submitting, setSubmitting] = useState(false)
 
@@ -87,7 +84,6 @@ export default function CustomFieldEditorModal({
       setActiveTab(field ? 'new' : initialTab)
       setType(field?.field_type ?? initialType ?? 'text')
       setName(field?.name ?? initialDraft?.name ?? '')
-      setRequired(field?.required ?? initialDraft?.required ?? false)
       setOptions(field ? getEnabledFieldOptions(field) : (initialDraft?.options ?? []))
     }
   }, [open, field, initialType, initialTab, initialDraft])
@@ -137,7 +133,6 @@ export default function CustomFieldEditorModal({
       if (isEdit && field) {
         saved = await updateCustomField(field.field_id, {
           name: trimmed,
-          required,
           options: finalOptions,
         })
         message.success('已更新字段')
@@ -145,7 +140,6 @@ export default function CustomFieldEditorModal({
         saved = await createCustomField(projectId, {
           name: trimmed,
           field_type: type,
-          required,
           options: finalOptions,
         })
         message.success('已创建字段')
@@ -256,13 +250,6 @@ export default function CustomFieldEditorModal({
           </div>
         </Form.Item>
       )}
-
-      <Form.Item label="是否必填">
-        <Switch checked={required} onChange={setRequired} />
-        <span style={{ color: '#86909c', fontSize: 12, marginLeft: 8 }}>
-          开启后该字段必须填写
-        </span>
-      </Form.Item>
     </Form>
   )
 

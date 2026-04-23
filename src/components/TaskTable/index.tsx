@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, isValidElement } from 'react'
 import Input from 'antd/es/input'
 import Checkbox from 'antd/es/checkbox'
 import Popover from 'antd/es/popover'
@@ -1086,6 +1086,61 @@ function isInlineCreateFloatingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(INLINE_CREATE_FLOATING_SELECTOR))
 }
 
+function getTooltipTextFromNode(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') {
+    return ''
+  }
+
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node)
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(getTooltipTextFromNode).join('').trim()
+  }
+
+  if (isValidElement<{ children?: React.ReactNode }>(node)) {
+    return getTooltipTextFromNode(node.props.children)
+  }
+
+  return ''
+}
+
+function getColumnTooltipTitle(children: React.ReactNode): React.ReactNode {
+  const text = getTooltipTextFromNode(children).trim()
+  if (text) {
+    return text
+  }
+
+  if (typeof children === 'string' || typeof children === 'number') {
+    return children
+  }
+
+  return null
+}
+
+function renderOverflowTooltip(
+  title: React.ReactNode,
+  content: React.ReactElement,
+  key?: React.Key,
+) {
+  if (title === null || title === undefined || title === '') {
+    return content
+  }
+
+  return (
+    <Tooltip
+      key={key}
+      title={title}
+      placement="top"
+      color="#000"
+      overlayInnerStyle={{ color: '#fff' }}
+    >
+      {content}
+    </Tooltip>
+  )
+}
+
 type ResizableHeaderCellProps = React.ThHTMLAttributes<HTMLTableCellElement> & {
   columnKey?: ResizableColumnKey
   width?: number
@@ -1141,7 +1196,14 @@ function ResizableHeaderCell({
         .filter(Boolean)
         .join(' ')}
     >
-      <span className="task-column-header-content">{children}</span>
+      <Tooltip
+        title={getColumnTooltipTitle(children)}
+        placement="top"
+        color="#000"
+        overlayInnerStyle={{ color: '#fff' }}
+      >
+        <span className="task-column-header-content">{children}</span>
+      </Tooltip>
       {columnKey && onResize ? (
         <span
           className="task-column-resize-handle"
@@ -4083,7 +4145,7 @@ function CustomFieldCell({
 
     return renderReadTrigger(
       hasValue ? (
-        <span className="custom-field-text">{displayValue}</span>
+        renderOverflowTooltip(displayValue, <span className="custom-field-text">{displayValue}</span>)
       ) : (
         renderPlaceholder('点击填写')
       ),
@@ -4246,9 +4308,12 @@ function CustomFieldCell({
   }
 
   return (
-    <span className="custom-field-text">
-      {formatCustomFieldValue(task, field, users)}
-    </span>
+    renderOverflowTooltip(
+      formatCustomFieldValue(task, field, users),
+      <span className="custom-field-text">
+        {formatCustomFieldValue(task, field, users)}
+      </span>,
+    )
   )
 }
 
@@ -4400,18 +4465,21 @@ function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
         }}
       >
         {showPriority ? (
-          <Tag
-            variant="filled"
-            className="priority-tag priority-tag-editable"
-            style={{
-              color: PriorityColor[task.priority],
-              backgroundColor: `${PriorityColor[task.priority]}1a`,
-              cursor: 'pointer',
-            }}
-          >
-            <FlagFilled />
-            <span>{PriorityLabel[task.priority]}</span>
-          </Tag>
+          renderOverflowTooltip(
+            PriorityLabel[task.priority],
+            <Tag
+              variant="filled"
+              className="priority-tag priority-tag-editable"
+              style={{
+                color: PriorityColor[task.priority],
+                backgroundColor: `${PriorityColor[task.priority]}1a`,
+                cursor: 'pointer',
+              }}
+            >
+              <FlagFilled />
+              <span>{PriorityLabel[task.priority]}</span>
+            </Tag>,
+          )
         ) : (
           <span
             className="priority-placeholder"
@@ -4530,7 +4598,7 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
           title="子任务开始时间跟随父任务，不能单独修改"
         >
           {date ? (
-            <span className="date-text">{date.format('M月D日')}</span>
+            renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
           ) : (
             <CalendarOutlined className="empty-date-icon" />
           )}
@@ -4567,7 +4635,7 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
         >
           <div className="date-trigger">
             {date ? (
-              <span className="date-text">{date.format('M月D日')}</span>
+              renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
             ) : (
               <CalendarOutlined className="empty-date-icon" />
             )}
@@ -4591,22 +4659,25 @@ function renderSelectFieldTags(field: CustomFieldDef, values: string[]) {
         const label = option?.name ?? value
         const isDisabled = option?.is_disabled === true
         return (
-          <Tag
-            key={value}
-            className={`custom-field-value-tag ${
-              isDisabled ? 'custom-field-value-tag-disabled' : ''
-            }`}
-            style={
-              !isDisabled && option?.color
-                ? {
-                  color: option.color,
-                  backgroundColor: `${option.color}24`,
-                }
-                : undefined
-            }
-          >
-            {label}
-          </Tag>
+          renderOverflowTooltip(
+            label,
+            <Tag
+              className={`custom-field-value-tag ${
+                isDisabled ? 'custom-field-value-tag-disabled' : ''
+              }`}
+              style={
+                !isDisabled && option?.color
+                  ? {
+                    color: option.color,
+                    backgroundColor: `${option.color}24`,
+                  }
+                  : undefined
+              }
+            >
+              {label}
+            </Tag>,
+            value,
+          )
         )
       })}
     </span>

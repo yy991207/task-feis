@@ -108,6 +108,46 @@ async function testNarrowDefaultContentUsesEllipsis() {
   )
 }
 
+async function testEllipsisContentUsesBlackTooltip() {
+  const source = await readTaskTableSource()
+
+  assert.match(
+    source,
+    /<Tooltip[\s\S]*title=\{getColumnTooltipTitle\(children\)\}[\s\S]*color="#000"[\s\S]*overlayInnerStyle=\{\{ color: '#fff' \}\}[\s\S]*<span className="task-column-header-content">\{children\}<\/span>[\s\S]*<\/Tooltip>/,
+    '字段表头默认宽度放不下完整标题时，鼠标滑过应该用黑底白字浮窗显示完整标题',
+  )
+  assert.match(
+    source,
+    /function renderOverflowTooltip\([\s\S]*color="#000"[\s\S]*overlayInnerStyle=\{\{ color: '#fff' \}\}/,
+    '表格省略文本应该统一使用黑底白字 Tooltip',
+  )
+  assert.match(
+    source,
+    /renderOverflowTooltip\(displayValue, <span className="custom-field-text">\{displayValue\}<\/span>\)/,
+    '自定义字段文本值省略时应该悬浮显示完整值',
+  )
+  assert.match(
+    source,
+    /renderOverflowTooltip\(\s*PriorityLabel\[task\.priority\],[\s\S]*<span>\{PriorityLabel\[task\.priority\]\}<\/span>/,
+    '优先级标签省略时应该悬浮显示完整优先级文案',
+  )
+  assert.match(
+    source,
+    /renderOverflowTooltip\(date\.format\('M月D日'\), <span className="date-text">\{date\.format\('M月D日'\)\}<\/span>\)/,
+    '开始/截止日期省略时应该悬浮显示完整日期',
+  )
+  assert.match(
+    source,
+    /renderOverflowTooltip\(\s*label,[\s\S]*<Tag[\s\S]*\{label\}[\s\S]*<\/Tag>/,
+    '自定义字段标签值省略时应该悬浮显示完整标签',
+  )
+  assert.match(
+    source,
+    /function getTooltipTextFromNode\([\s\S]*isValidElement[\s\S]*node\.props\.children/,
+    '表头 Tooltip 应该能从嵌套节点里提取完整文案，覆盖带图标表头和自定义字段表头',
+  )
+}
+
 async function testColumnsCanResizeFromAntdHeaderCell() {
   const source = await readTaskTableSource()
 
@@ -162,6 +202,7 @@ async function main() {
   await testTitleColumnFixedAndRightFieldsScrollable()
   await testNonTitleColumnsUseUnifiedDefaultWidth()
   await testNarrowDefaultContentUsesEllipsis()
+  await testEllipsisContentUsesBlackTooltip()
   await testColumnsCanResizeFromAntdHeaderCell()
   await testResizeHandleHasVisibleHitArea()
   console.log('task table resizable layout regressions ok')

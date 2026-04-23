@@ -56,10 +56,27 @@ async function testTaskRowBlankAreaUsesOnRowToOpenDetail() {
   )
 }
 
+async function testTaskTableSpacerCellDoesNotDisableRowClick() {
+  const source = await readTaskTableSource()
+  const styleSource = await readFile(new URL('../src/components/TaskTable/index.less', import.meta.url), 'utf8')
+
+  assert.match(
+    source,
+    /key: 'tableLayoutSpacer'[\s\S]*className: 'task-table-spacer-cell'/,
+    '任务表格要保留右侧补白列，用来撑满剩余宽度',
+  )
+  assert.doesNotMatch(
+    styleSource,
+    /\.task-table-spacer-cell\s*\{[\s\S]*pointer-events:\s*none;/,
+    '右侧补白列不能再禁用 pointer events，不然点击这块空白时行级 onClick 接不到事件',
+  )
+}
+
 async function main() {
   await testTaskRowDoesNotRenderPlusOrMoreActions()
   await testTaskRowUsesBlankHotspotToOpenDetail()
   await testTaskRowBlankAreaUsesOnRowToOpenDetail()
+  await testTaskTableSpacerCellDoesNotDisableRowClick()
   console.log('task row actions regressions ok')
 }
 
