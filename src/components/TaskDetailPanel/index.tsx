@@ -11,7 +11,6 @@ import Card from 'antd/es/card'
 import Dropdown from 'antd/es/dropdown'
 import message from 'antd/es/message'
 import Modal from 'antd/es/modal'
-import List from 'antd/es/list'
 import Tooltip from 'antd/es/tooltip'
 import Breadcrumb from 'antd/es/breadcrumb'
 import Empty from 'antd/es/empty'
@@ -659,6 +658,8 @@ export default function TaskDetailPanel({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentValue, setEditingCommentValue] = useState('')
   const [editingCommentMentions, setEditingCommentMentions] = useState<string[]>([])
+  const [titleDraft, setTitleDraft] = useState(task.summary)
+  const [titleEditing, setTitleEditing] = useState(false)
   const [descriptionDraft, setDescriptionDraft] = useState(task.description)
   const [descriptionEditing, setDescriptionEditing] = useState(false)
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
@@ -671,14 +672,14 @@ export default function TaskDetailPanel({
   const [detailTasklistSectionsLoading, setDetailTasklistSectionsLoading] = useState(false)
   const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
   const [activeSubtaskAssigneeGuid, setActiveSubtaskAssigneeGuid] = useState<string | null>(null)
-  const [selectedFollowerId, setSelectedFollowerId] = useState<string>()
   const [followersPopoverOpen, setFollowersPopoverOpen] = useState(false)
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
   const subtaskInteractingRef = useRef(false)
   const subtaskSubmittingRef = useRef(false)
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const pendingCommentScrollRef = useRef(false)
-  const [, setAttachmentCount] = useState(0)
+  const attachmentCountRef = useRef(task.attachment_count)
+  const commentCountRef = useRef(task.comment_count)
   const [attachments, setAttachments] = useState<ApiAttachment[]>([])
   const [attachmentUploading, setAttachmentUploading] = useState(false)
   const [commentAttachments, setCommentAttachments] = useState<ApiAttachment[]>([])
@@ -704,6 +705,9 @@ export default function TaskDetailPanel({
     startX: 0,
     startWidth: DETAIL_PANEL_DEFAULT_WIDTH,
   })
+  const titleSubmittingRef = useRef(false)
+  const titleComposingRef = useRef(false)
+  const titleSkipBlurSubmitRef = useRef(false)
   const assignees = task.members.filter((m) => m.role === 'assignee')
   const isSubtask = Boolean(task.parent_task_guid)
   const creator: User = {
@@ -737,15 +741,21 @@ export default function TaskDetailPanel({
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
   const updateTaskAttachmentCount = (nextCount: number) => {
+    const safeCount = Math.max(0, nextCount)
+    attachmentCountRef.current = safeCount
     onTaskUpdated?.({
       ...task,
-      attachment_count: Math.max(0, nextCount),
+      attachment_count: attachmentCountRef.current,
+      comment_count: commentCountRef.current,
     })
   }
   const updateTaskCommentCount = (nextCount: number) => {
+    const safeCount = Math.max(0, nextCount)
+    commentCountRef.current = safeCount
     onTaskUpdated?.({
       ...task,
-      comment_count: Math.max(0, nextCount),
+      attachment_count: attachmentCountRef.current,
+      comment_count: commentCountRef.current,
     })
   }
   const resolveHistoryUserLabel = (userId: string): string => {
@@ -769,9 +779,12 @@ export default function TaskDetailPanel({
     setCommentAttachmentOrigins({})
     setCommentAttachmentMap({})
     setAttachments([])
-    setAttachmentCount(0)
+    attachmentCountRef.current = task.attachment_count
+    commentCountRef.current = task.comment_count
     setAttachmentUploading(false)
     setCommentAttachmentUploading(false)
+    setTitleDraft(task.summary)
+    setTitleEditing(false)
     setDescriptionDraft(task.description)
     setDescriptionEditing(false)
     setSubtaskDrafts([])
@@ -785,7 +798,6 @@ export default function TaskDetailPanel({
     setDetailTasklistSectionsLoading(Boolean(task.tasklists[0]?.tasklist_guid))
     setActiveSubtaskDueGuid(null)
     setActiveSubtaskAssigneeGuid(null)
-    setSelectedFollowerId(undefined)
     // 切换任务时才关闭关注人弹层，添加关注人成功后保持弹层打开方便继续操作。
     setFollowersPopoverOpen(false)
     setPreviewAttachment(null)
@@ -797,6 +809,8 @@ export default function TaskDetailPanel({
     pendingCommentScrollRef.current = false
     subtaskInteractingRef.current = false
     subtaskSubmittingRef.current = false
+    titleSubmittingRef.current = false
+    titleSkipBlurSubmitRef.current = false
     if (detailScrollRef.current) {
       detailScrollRef.current.scrollTo({ top: 0 })
     }
@@ -962,6 +976,10 @@ export default function TaskDetailPanel({
   }, [task.guid])
 
   useEffect(() => {
+    setTitleDraft(task.summary)
+  }, [task.summary, task.guid])
+
+  useEffect(() => {
     setDescriptionDraft(task.description)
   }, [task.description, task.guid])
 
@@ -1005,13 +1023,13 @@ export default function TaskDetailPanel({
       .then((items) => {
         if (!cancelled) {
           setAttachments(items)
-          setAttachmentCount(items.length)
+          attachmentCountRef.current = items.length
         }
       })
       .catch(() => {
         if (!cancelled) {
           setAttachments([])
-          setAttachmentCount(0)
+          attachmentCountRef.current = 0
         }
       })
     return () => {
@@ -1102,14 +1120,8 @@ export default function TaskDetailPanel({
       .filter((member) => member.role === 'follower')
       .map((member) => member.id),
   ]))
-  const followedUserIdsKey = followedUserIds.join(',')
   const followedUsers = followedUserIds.map((userId) => resolveTaskUserById(userId))
   const visibleFollowedUsers = followedUsers.slice(0, 3)
-  const availableFollowerUsers = availableUsers.filter((user) => !followedUserIds.includes(user.id))
-
-  useEffect(() => {
-    setSelectedFollowerId(undefined)
-  }, [task.guid, followedUserIdsKey])
 
   const handleTaskPatch = async (
     patch: Partial<Task>,
@@ -1143,6 +1155,35 @@ export default function TaskDetailPanel({
     }
   }
 
+  const handleTitleSubmit = async () => {
+    const nextSummary = titleDraft.trim()
+    if (!nextSummary) {
+      message.warning('任务标题不能为空')
+      setTitleDraft(task.summary)
+      return
+    }
+    if (nextSummary === task.summary) {
+      setTitleEditing(false)
+      return
+    }
+    if (titleSubmittingRef.current) {
+      return
+    }
+
+    // 标题输入按回车时通常还会紧跟 blur，这里加提交锁，避免同一轮编辑发两次更新请求。
+    titleSubmittingRef.current = true
+    try {
+      await handleTaskPatch({
+        summary: nextSummary,
+      })
+      setTitleEditing(false)
+    } catch (err) {
+      message.error(getActionErrorMessage(err, '更新任务标题失败'))
+    } finally {
+      titleSubmittingRef.current = false
+    }
+  }
+
   const handleAssigneeChange = async (values: string[]) => {
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
     const defaultParticipantIds = buildDefaultParticipantIds(task.creator.id, nextAssigneeIds)
@@ -1160,38 +1201,26 @@ export default function TaskDetailPanel({
     }
   }
 
-  const handleAddFollowers = async () => {
-    const toAdd = selectedFollowerId && !followedUserIds.includes(selectedFollowerId)
-      ? [selectedFollowerId]
-      : []
-    if (toAdd.length === 0) {
-      setFollowersPopoverOpen(false)
+  const handleFollowersChange = async (nextFollowerIds: string[]) => {
+    const nextUniqueFollowerIds = Array.from(new Set(nextFollowerIds.filter(Boolean)))
+    const currentFollowerIds = followedUserIds
+    const toAdd = nextUniqueFollowerIds.filter((id) => !currentFollowerIds.includes(id))
+    const toRemove = currentFollowerIds.filter((id) => !nextUniqueFollowerIds.includes(id))
+    if (toAdd.length === 0 && toRemove.length === 0) {
       return
     }
 
     try {
-      await addParticipants(task.guid, toAdd)
+      await Promise.all([
+        ...toAdd.map((id) => addParticipants(task.guid, [id])),
+        ...toRemove.map((id) => removeParticipant(task.guid, id)),
+      ])
       const fresh = await getTask(task.guid)
       const nextTask = apiTaskToTask(fresh)
       onTaskUpdated?.(nextTask)
       if (!onTaskUpdated) onRefresh?.()
-      setSelectedFollowerId(undefined)
-      message.success('已添加关注人')
     } catch (err) {
-      message.error(getActionErrorMessage(err, '添加关注人失败'))
-    }
-  }
-
-  const handleRemoveFollower = async (targetUserId: string) => {
-    try {
-      await removeParticipant(task.guid, targetUserId)
-      const fresh = await getTask(task.guid)
-      const nextTask = apiTaskToTask(fresh)
-      onTaskUpdated?.(nextTask)
-      if (!onTaskUpdated) onRefresh?.()
-      message.success('已移除关注人')
-    } catch (err) {
-      message.error(getActionErrorMessage(err, '移除关注人失败'))
+      message.error(getActionErrorMessage(err, '更新关注人失败'))
     }
   }
 
@@ -1212,60 +1241,16 @@ export default function TaskDetailPanel({
         className="followers-popover-card"
         variant="borderless"
       >
-        <Space direction="vertical" size={12} className="followers-popover-body">
+        <Space direction="vertical" size={0} className="followers-popover-body">
           <div className="followers-toolbar">
-            <div className="followers-picker-inline">
-              <UserSearchSelect
-                className="followers-search"
-                size="middle"
-                placeholder="搜索并选择要新增的人"
-                value={selectedFollowerId}
-                onChange={(value) =>
-                  setSelectedFollowerId(Array.isArray(value) ? value[0] : value)
-                }
-                users={availableFollowerUsers}
-              />
-              <Button
-                type="primary"
-                size="middle"
-                icon={<PlusOutlined />}
-                disabled={!selectedFollowerId}
-                onClick={() => void handleAddFollowers()}
-              >
-                添加
-              </Button>
-            </div>
-          </div>
-          <div className="followers-list-panel">
-            <List
-              className="followers-list"
-              dataSource={followedUsers}
-              locale={{ emptyText: '暂无关注的人' }}
-              renderItem={(user) => (
-                <List.Item
-                  className="followers-list-item"
-                  actions={[
-                    <Button
-                      key="remove"
-                      type="text"
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => void handleRemoveFollower(user.id)}
-                    >
-                      删除
-                    </Button>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    avatar={renderUserAvatar(user, {
-                      size: 30,
-                      style: { backgroundColor: '#7b67ee', color: '#fff' },
-                    })}
-                    title={<Text className="followers-user-name">{getUserDisplayName(user)}</Text>}
-                  />
-                </List.Item>
-              )}
+            <UserSearchSelect
+              className="followers-search"
+              size="middle"
+              mode="multiple"
+              placeholder="搜索并选择要新增的人"
+              value={followedUserIds}
+              onChange={(value) => void handleFollowersChange(Array.isArray(value) ? value : [])}
+              users={availableUsers}
             />
           </div>
         </Space>
@@ -1496,10 +1481,9 @@ export default function TaskDetailPanel({
     setAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file)
-      const nextAttachments = [...attachments, created]
-      setAttachments(nextAttachments)
-      setAttachmentCount(nextAttachments.length)
-      updateTaskAttachmentCount(nextAttachments.length)
+      const nextAttachmentCount = attachmentCountRef.current + 1
+      setAttachments((prev) => [...prev, created])
+      updateTaskAttachmentCount(nextAttachmentCount)
       message.success('附件已上传')
       return created
     } catch (err) {
@@ -1536,10 +1520,9 @@ export default function TaskDetailPanel({
   const handleAttachmentDelete = async (attachmentId: string) => {
     try {
       await deleteAttachment(attachmentId)
-      const nextAttachments = attachments.filter((a) => a.attachment_id !== attachmentId)
-      setAttachments(nextAttachments)
-      setAttachmentCount(nextAttachments.length)
-      updateTaskAttachmentCount(nextAttachments.length)
+      const nextAttachmentCount = Math.max(0, attachmentCountRef.current - 1)
+      setAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
+      updateTaskAttachmentCount(nextAttachmentCount)
       message.success('附件已删除')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')
@@ -1746,9 +1729,9 @@ export default function TaskDetailPanel({
         attachmentIds.length > 0 ? attachmentIds : undefined,
       )
       pendingCommentScrollRef.current = true
-      const nextComments = [...comments, created]
-      setComments(nextComments)
-      updateTaskCommentCount(nextComments.length)
+      const nextCommentCount = commentCountRef.current + 1
+      setComments((prev) => [...prev, created])
+      updateTaskCommentCount(nextCommentCount)
       setCommentValue('')
       setCommentMentions([])
       setCommentAttachments([])
@@ -1767,9 +1750,9 @@ export default function TaskDetailPanel({
   const handleDeleteComment = async (commentId: string) => {
     try {
       await deleteComment(task.guid, commentId)
-      const nextComments = comments.filter((c) => c.comment_id !== commentId)
-      setComments(nextComments)
-      updateTaskCommentCount(nextComments.length)
+      const nextCommentCount = Math.max(0, commentCountRef.current - 1)
+      setComments((prev) => prev.filter((c) => c.comment_id !== commentId))
+      updateTaskCommentCount(nextCommentCount)
       message.success('评论已删除')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')
@@ -1995,7 +1978,49 @@ export default function TaskDetailPanel({
                 }}
               />
             </Tooltip>
-            <div className="detail-title">{task.summary}</div>
+            {titleEditing ? (
+              <Input
+                className="detail-title-editor"
+                size="large"
+                autoFocus
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onCompositionStart={() => {
+                  titleComposingRef.current = true
+                }}
+                onCompositionEnd={() => {
+                  titleComposingRef.current = false
+                }}
+                onPressEnter={() => {
+                  if (titleComposingRef.current) {
+                    return
+                  }
+                  void handleTitleSubmit()
+                }}
+                onBlur={() => {
+                  if (titleSkipBlurSubmitRef.current) {
+                    titleSkipBlurSubmitRef.current = false
+                    return
+                  }
+                  void handleTitleSubmit()
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    titleSkipBlurSubmitRef.current = true
+                    setTitleDraft(task.summary)
+                    setTitleEditing(false)
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="detail-title-button"
+                onClick={() => setTitleEditing(true)}
+              >
+                <span className="detail-title">{task.summary}</span>
+              </button>
+            )}
           </div>
 
           {/* Assignee row */}

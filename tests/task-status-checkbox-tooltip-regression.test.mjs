@@ -33,8 +33,8 @@ async function testTaskDetailUsesCheckboxBeforeTitle() {
 
   assert.match(
     source,
-    /<div className=\{`detail-title-row \$\{task\.status === 'done' \? 'is-done' : ''\}`\}>[\s\S]*<Tooltip[\s\S]*title=\{task\.status === 'done' \? '标记未完成' : '标记已完成'\}[\s\S]*placement="top"[\s\S]*color="#000"[\s\S]*overlayInnerStyle=\{\{ color: '#fff' \}\}[\s\S]*<Checkbox[\s\S]*className="detail-title-checkbox"[\s\S]*checked=\{task\.status === 'done'\}[\s\S]*<div className="detail-title">\{task\.summary\}<\/div>/,
-    '详情页应该把任务状态方框放到标题前面，并和主视图使用同一套黑底白字提示',
+    /<div className=\{`detail-title-row \$\{task\.status === 'done' \? 'is-done' : ''\}`\}>[\s\S]*<Tooltip[\s\S]*title=\{task\.status === 'done' \? '标记未完成' : '标记已完成'\}[\s\S]*placement="top"[\s\S]*color="#000"[\s\S]*overlayInnerStyle=\{\{ color: '#fff' \}\}[\s\S]*<Checkbox[\s\S]*className="detail-title-checkbox"[\s\S]*checked=\{task\.status === 'done'\}[\s\S]*titleEditing \? \([\s\S]*className="detail-title-editor"[\s\S]*\) : \([\s\S]*className="detail-title-button"[\s\S]*<span className="detail-title">\{task\.summary\}<\/span>/,
+    '详情页应该把任务状态方框放到标题前面，并保留标题只读态和编辑态的切换结构',
   )
 
   assert.doesNotMatch(

@@ -60,6 +60,16 @@ async function testPickerShowsAvatarAndCheckedStateInList() {
     '人员列表应该在已选人员右侧显示对勾',
   )
   assert.match(
+    source,
+    /USER_AVATAR_FALLBACK_COLOR = '#7b67ee'/,
+    '人员列表没有头像地址时，兜底头像颜色应该和页面上的紫色负责人头像一致',
+  )
+  assert.doesNotMatch(
+    source,
+    /avatarColors|getAvatarColor/,
+    '人员列表不应该再用多色随机兜底头像，避免和页面负责人头像风格不一致',
+  )
+  assert.match(
     style,
     /\.user-search-option-selected\s*\{[\s\S]*background:\s*#eaf3ff;/,
     '已选人员行应该用浅蓝背景标识选中态',

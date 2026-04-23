@@ -40,8 +40,8 @@ async function testSharedAssigneePickerSupportsMultipleUsers() {
   )
   assert.match(
     source,
-    /mode=\{mode\}/,
-    '共享选人控件应该把 mode 透传给 antd Select',
+    /if \(mode === 'multiple'\) \{[\s\S]*onChange\(nextSelectedIds\)/,
+    '共享选人控件应该继续按 mode 支持多人选择，并回传完整人员数组',
   )
 }
 

@@ -40,28 +40,23 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /const handleAddFollowers = async \(\) => \{/,
-    '详情页应该有单独的添加关注人处理函数',
+    /const handleFollowersChange = async \(nextFollowerIds: string\[\]\) => \{/,
+    '详情页关注人应该和负责人一样通过共享选人组件直接增删',
   )
   assert.match(
     detailSource,
-    /await addParticipants\(task\.guid, toAdd\)/,
-    '添加关注人时应该走 participants 接口',
-  )
-  assert.doesNotMatch(
-    detailSource,
-    /setSelectedFollowerId\(undefined\)\s*setFollowersPopoverOpen\(false\)/,
-    '添加关注人成功后不应该关闭关注人弹层，应该和删除关注人一样保持打开方便继续操作',
+    /const toAdd = nextUniqueFollowerIds\.filter\(\(id\) => !currentFollowerIds\.includes\(id\)\)/,
+    '关注人变更时应该对比新旧数组，找出需要新增的人',
   )
   assert.match(
     detailSource,
-    /const handleRemoveFollower = async \(targetUserId: string\) => \{/,
-    '详情页应该支持删除单个关注人',
+    /await Promise\.all\(\[[\s\S]*toAdd\.map\(\(id\) => addParticipants\(task\.guid, \[id\]\)\)[\s\S]*toRemove\.map\(\(id\) => removeParticipant\(task\.guid, id\)\)/,
+    '关注人增删应该在同一个变更函数里分别调用新增和删除接口',
   )
   assert.match(
     detailSource,
-    /await removeParticipant\(task\.guid, targetUserId\)/,
-    '删除关注人时应该走 remove participant 接口',
+    /message\.error\(getActionErrorMessage\(err, '更新关注人失败'\)\)/,
+    '关注人统一增删失败时应该给出标准错误提示',
   )
   assert.match(
     detailSource,
@@ -80,8 +75,8 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.match(
     detailSource,
-    /<List/,
-    '上拉层里应该用 antd List 展示全部关注人',
+    /<UserSearchSelect[\s\S]*className="followers-search"[\s\S]*mode="multiple"[\s\S]*value=\{followedUserIds\}[\s\S]*onChange=\{\(value\) => void handleFollowersChange\(Array\.isArray\(value\) \? value : \[\]\)\}/,
+    '关注人弹层应该复用多人选人组件，点击列表人员完成增删',
   )
   assert.match(
     detailSource,
@@ -108,10 +103,10 @@ async function testDetailFollowersSupportAddAndRemove() {
     /AutoComplete/,
     '关注人的选人组件不应该再用单独的 AutoComplete，避免和主页面负责人选择控件不一致',
   )
-  assert.match(
+  assert.doesNotMatch(
     detailSource,
     /className="followers-picker-inline"/,
-    '添加关注人的搜索框和添加按钮应该在同一行显示',
+    '关注人弹层不应该再保留单独添加按钮行，避免和负责人选人逻辑不一致',
   )
   assert.doesNotMatch(
     followersPopoverSource,
@@ -120,13 +115,8 @@ async function testDetailFollowersSupportAddAndRemove() {
   )
   assert.doesNotMatch(
     followersPopoverSource,
-    /mode="multiple"|followers-picker-actions|followers-picker-row|followers-list-title|followers-section-label/,
-    '添加关注人不应该再用多选 Select、独立按钮行或上下分块标题，避免布局上下堆叠',
-  )
-  assert.match(
-    detailSource,
-    /actions=\{\[\s*<Button[\s\S]*DeleteOutlined/,
-    '关注人列表删除操作应该继续保留，并使用 antd List 的 actions 区域承载',
+    /followers-picker-actions|followers-picker-row|followers-list-title|followers-section-label|<List|DeleteOutlined|handleAddFollowers|handleRemoveFollower/,
+    '关注人弹层不应该再保留独立添加按钮、删除列表或旧分块标题',
   )
   assert.doesNotMatch(
     detailSource,

@@ -359,14 +359,52 @@ body.detail-panel-resizing {
   }
 
   .detail-title {
-    flex: 1;
-    min-width: 0;
     font-size: 18px;
     font-weight: 600;
     color: #1f2329;
     line-height: 1.4;
     margin: 0;
     word-break: break-word;
+  }
+
+  .detail-title-button {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background: #f5f6f7;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #3370ff;
+      outline-offset: 2px;
+    }
+
+    .detail-title {
+      display: block;
+      padding: 2px 4px;
+    }
+  }
+
+  .detail-title-editor {
+    flex: 1;
+    min-width: 0;
+
+    .ant-input {
+      padding: 2px 4px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2329;
+      line-height: 1.4;
+      border-radius: 8px;
+    }
   }
 
   .detail-title-checkbox {
@@ -828,92 +866,15 @@ body.detail-panel-resizing {
 
 .followers-toolbar {
   display: flex;
-  align-items: center;
-  gap: 8px;
   width: 100%;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f0f1f5;
 
-  .ant-select {
+  .followers-search {
     width: 100%;
   }
 
-  .ant-select-selector,
-  .ant-select-single {
-    border-radius: 8px !important;
-  }
-
-  .ant-select-selector {
-    border-radius: 8px !important;
-  }
-}
-
-.followers-picker-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-
-  .followers-search {
-    flex: 1;
-    min-width: 0;
-  }
-
   .user-search-select {
-    flex: 1;
     min-width: 0;
   }
-
-  .ant-btn {
-    flex: none;
-  }
-}
-
-.followers-list-panel {
-  border-radius: 12px;
-}
-
-.followers-list {
-  max-height: 220px;
-  overflow-y: auto;
-  padding-right: 4px;
-
-  .ant-list-item {
-    align-items: center;
-    padding: 9px 8px;
-    border-block-end: none !important;
-    border-radius: 10px;
-    transition: background 0.2s;
-
-    &:hover {
-      background: #f7f8fb;
-    }
-  }
-
-  .ant-list-item-meta {
-    align-items: center;
-    margin-bottom: 0;
-  }
-
-  .ant-list-item-meta-title {
-    margin-bottom: 0;
-    color: #1f2329;
-    font-size: 13px;
-  }
-
-  .ant-list-item-action {
-    margin-inline-start: 12px;
-  }
-
-  .ant-btn {
-    padding-inline: 4px;
-  }
-}
-
-.followers-user-name {
-  color: #1f2329;
-  font-size: 13px;
 }
 
 .detail-attachment-list {

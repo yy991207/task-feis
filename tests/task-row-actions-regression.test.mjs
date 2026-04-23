@@ -132,6 +132,31 @@ async function testTaskApiCountsMapIntoTaskModel() {
   )
 }
 
+async function testTaskDetailCountChangesSyncBackToTaskList() {
+  const detailSource = await readFile(new URL('../src/components/TaskDetailPanel/index.tsx', import.meta.url), 'utf8')
+
+  assert.match(
+    detailSource,
+    /const attachmentCountRef = useRef\(task\.attachment_count\)/,
+    '任务详情页应该用当前任务附件数量初始化本地计数，避免只依赖附件列表长度',
+  )
+  assert.match(
+    detailSource,
+    /const commentCountRef = useRef\(task\.comment_count\)/,
+    '任务详情页应该用当前任务评论数量初始化本地计数，避免只依赖评论列表长度',
+  )
+  assert.match(
+    detailSource,
+    /updateTaskAttachmentCount\(nextAttachmentCount\)/,
+    '任务详情增删附件后应该同步更新任务列表里的附件数量',
+  )
+  assert.match(
+    detailSource,
+    /updateTaskCommentCount\(nextCommentCount\)/,
+    '任务详情增删评论后应该同步更新任务列表里的评论数量',
+  )
+}
+
 async function main() {
   await testTaskRowDoesNotRenderPlusOrMoreActions()
   await testTaskRowUsesBlankHotspotToOpenDetail()
@@ -139,6 +164,7 @@ async function main() {
   await testTaskTableSpacerCellDoesNotDisableRowClick()
   await testTaskRowShowsMetricIconsForAttachmentCommentAndSubtask()
   await testTaskApiCountsMapIntoTaskModel()
+  await testTaskDetailCountChangesSyncBackToTaskList()
   console.log('task row actions regressions ok')
 }
 

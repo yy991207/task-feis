@@ -49,8 +49,8 @@ async function testCustomFieldCellCanEditValues() {
   )
   assert.match(
     source,
-    /visibleCustomFieldDefs\.forEach\(\(field\) => \{[\s\S]*<CustomFieldCell[\s\S]*field=\{field\}[\s\S]*onChange=\{\(value\) => void handleCustomFieldValueChange\(record, field, value\)\}/,
-    '自定义字段列渲染时应该在 antd Table 列里接入可编辑单元格，而不是只输出格式化文本',
+    /if \(String\(columnKey\)\.startsWith\('custom:'\)\) \{[\s\S]*const field = visibleCustomFieldDefMap\.get\(columnKey as CustomFieldColumnKey\)[\s\S]*<CustomFieldCell[\s\S]*field=\{field\}[\s\S]*onChange=\{\(value\) => void handleCustomFieldValueChange\(record, field, value\)\}/,
+    '自定义字段列渲染时应该按当前列顺序取字段定义，并在 antd Table 列里接入可编辑单元格',
   )
 }
 

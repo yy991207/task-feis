@@ -168,6 +168,7 @@ type ResizableColumnKey = 'title' | ExtendedColumnKey
 
 interface FieldOption {
   key: ExtendedColumnKey
+  fieldId?: string
   label: string
   isVisible: boolean
   sortOrder?: number
@@ -259,6 +260,22 @@ const extraFieldColumns: ExtraColumnKey[] = [
   'taskId',
   'sourceCategory',
 ]
+
+const systemFieldIdToColumnKeyMap: Partial<Record<string, ExtendedColumnKey>> = {
+  title: 'title',
+  priority: 'priority',
+  assignee_ids: 'assignee',
+  start_date: 'start',
+  due_date: 'due',
+  creator_id: 'creator',
+  created_at: 'created',
+  follower_ids: 'followers',
+  completed_at: 'completed',
+  updated_at: 'updated',
+  task_id: 'taskId',
+  source: 'taskSource',
+  source_category: 'sourceCategory',
+}
 
 const toCustomFieldColumnKey = (guid: string): CustomFieldColumnKey => `custom:${guid}`
 
@@ -1447,16 +1464,34 @@ export default function TaskTable({
     })),
   })
 
+  function resolveRawFieldColumnKey(field: ApiCustomField): ExtendedColumnKey | null {
+    const mappedSystemColumnKey = systemFieldIdToColumnKeyMap[field.field_id]
+    if (mappedSystemColumnKey) {
+      return mappedSystemColumnKey
+    }
+    if (field.creator_id === 'system') {
+      return null
+    }
+    return toCustomFieldColumnKey(field.field_id)
+  }
+
   const buildVisibleColumnKeys = useCallback(
     (fields: ApiCustomField[]) => {
-      const nextKeys = new Set<ExtendedColumnKey>(config.columns)
+      const nextKeys = new Set<ExtendedColumnKey>()
+      nextKeys.add('title')
       fields
-        .filter((field) => field.is_visible !== false)
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .forEach((field) => nextKeys.add(toCustomFieldColumnKey(field.field_id)))
+        .map((field) => ({
+          field,
+          columnKey: resolveRawFieldColumnKey(field),
+        }))
+      .filter((item): item is { field: ApiCustomField; columnKey: ExtendedColumnKey } =>
+          item.columnKey !== null && item.field.is_visible !== false,
+        )
+        .sort((a, b) => a.field.sort_order - b.field.sort_order)
+        .forEach(({ columnKey }) => nextKeys.add(columnKey))
       return Array.from(nextKeys)
     },
-    [config.columns],
+    [],
   )
 
   // 加载项目自定义字段
@@ -2320,29 +2355,42 @@ export default function TaskTable({
   // ---- end drag & drop ----
 
   const isTasklistView = Boolean(tasklist)
-  const visibleCustomFieldDefs = (tasklist?.custom_fields ?? []).filter((field) =>
-    visibleColumnKeys.includes(toCustomFieldColumnKey(field.guid)),
+  const visibleCustomFieldDefMap = new Map(
+    (tasklist?.custom_fields ?? [])
+      .filter((field) => String(field.guid).startsWith('cf_'))
+      .map((field) => [toCustomFieldColumnKey(field.guid), field]),
   )
+  const persistedFieldOptionMap = new Map<ExtendedColumnKey, FieldOption>()
+  rawCustomFields.forEach((field) => {
+    const columnKey = resolveRawFieldColumnKey(field)
+    if (!columnKey || columnKey === 'title') {
+      return
+    }
+    persistedFieldOptionMap.set(columnKey, {
+      key: columnKey,
+      fieldId: field.field_id,
+      label: field.name,
+      isVisible: visibleColumnKeys.includes(columnKey),
+      sortOrder: field.sort_order,
+    })
+  })
   const allFieldOptions: FieldOption[] = [
-    ...allConfigurableColumns.map((column) => ({
-      key: column as ExtendedColumnKey,
-      label: columnLabelMap[column],
-      isVisible: visibleColumnKeys.includes(column),
-    })),
+    ...allConfigurableColumns.map((column) =>
+      persistedFieldOptionMap.get(column) ?? {
+        key: column as ExtendedColumnKey,
+        label: columnLabelMap[column],
+        isVisible: visibleColumnKeys.includes(column),
+      }),
     ...extraFieldColumns.map((column) => ({
       key: column as ExtendedColumnKey,
       label: extraColumnLabelMap[column],
       isVisible: visibleColumnKeys.includes(column),
     })),
-    ...(tasklist?.custom_fields ?? []).map((field) => ({
-      key: toCustomFieldColumnKey(field.guid),
-      label: field.name,
-      isVisible: visibleColumnKeys.includes(toCustomFieldColumnKey(field.guid)),
-      sortOrder: rawCustomFields.find((item) => item.field_id === field.guid)?.sort_order,
-    })),
+    ...[...persistedFieldOptionMap.values()]
+      .filter((field) => String(field.key).startsWith('custom:'))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
   ]
-
-  const showColumn = (col: ColumnKey) => visibleColumnKeys.includes(col)
+  const orderedVisibleColumnKeys = visibleColumnKeys.filter((key) => key !== 'title')
 
   const getColumnDefaultWidth = (columnKey: ResizableColumnKey) =>
     DEFAULT_COLUMN_WIDTHS[columnKey] ??
@@ -2373,6 +2421,60 @@ export default function TaskTable({
     }) as React.ThHTMLAttributes<HTMLTableCellElement>,
   })
 
+  const persistVisibleColumnOrder = async (nextVisibleKeys: ExtendedColumnKey[]) => {
+    const sortableFields = [...rawCustomFields]
+      .filter((field) => {
+        const columnKey = resolveRawFieldColumnKey(field)
+        return columnKey !== null && columnKey !== 'title'
+      })
+      .sort((a, b) => a.sort_order - b.sort_order)
+    if (sortableFields.length === 0) {
+      return
+    }
+
+    const visiblePersistedKeys = nextVisibleKeys.filter((columnKey) =>
+      sortableFields.some((field) => resolveRawFieldColumnKey(field) === columnKey),
+    )
+    const hiddenPersistedKeys = sortableFields
+      .map((field) => resolveRawFieldColumnKey(field))
+      .filter((columnKey): columnKey is ExtendedColumnKey =>
+        columnKey !== null && !nextVisibleKeys.includes(columnKey),
+      )
+    const reorderedVisibleKeys = [...visiblePersistedKeys, ...hiddenPersistedKeys]
+    const reorderedFields = reorderedVisibleKeys
+      .map((columnKey) =>
+        sortableFields.find((field) => resolveRawFieldColumnKey(field) === columnKey),
+      )
+      .filter((field): field is ApiCustomField => Boolean(field))
+      .map((field, index) => ({
+        ...field,
+        sort_order: index + 1,
+        is_visible: nextVisibleKeys.includes(resolveRawFieldColumnKey(field) as ExtendedColumnKey),
+      }))
+    const nextRawFields = rawCustomFields.map((field) => {
+      const updatedField = reorderedFields.find((item) => item.field_id === field.field_id)
+      return updatedField ?? field
+    })
+
+    setRawCustomFields(nextRawFields)
+
+    try {
+      await Promise.all(
+        reorderedFields.map((field) =>
+          updateCustomField(field.field_id, {
+            sort_order: field.sort_order,
+            is_visible: field.is_visible,
+          }),
+        ),
+      )
+      await reloadCustomFields()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '更新字段顺序失败'
+      message.error(msg)
+      await reloadCustomFields()
+    }
+  }
+
   const handleAddVisibleColumn = (column: ExtendedColumnKey) => {
     setVisibleColumnKeys((prev) => {
       if (prev.includes(column)) {
@@ -2384,12 +2486,17 @@ export default function TaskTable({
 
   const handleCustomFieldSaved = async (field: ApiCustomField) => {
     await reloadCustomFields()
-    handleAddVisibleColumn(toCustomFieldColumnKey(field.field_id))
+    const columnKey = resolveRawFieldColumnKey(field)
+    if (columnKey) {
+      handleAddVisibleColumn(columnKey)
+    }
   }
 
   const handleCustomFieldDeleted = async (fieldId: string) => {
+    const deletedField = rawCustomFields.find((field) => field.field_id === fieldId)
+    const columnKey = deletedField ? resolveRawFieldColumnKey(deletedField) : toCustomFieldColumnKey(fieldId)
     setVisibleColumnKeys((prev) =>
-      prev.filter((key) => key !== toCustomFieldColumnKey(fieldId)),
+      prev.filter((key) => key !== columnKey),
     )
     await reloadCustomFields()
   }
@@ -2401,13 +2508,63 @@ export default function TaskTable({
     setVisibleColumnKeys((prev) => prev.filter((item) => item !== column))
   }
 
+  const moveVisibleColumnKeys = (
+    keys: ExtendedColumnKey[],
+    columnKey: ExtendedColumnKey,
+    direction: 'left' | 'right',
+  ) => {
+    const orderedKeys = keys.filter((key) => key !== 'title')
+    const currentIndex = orderedKeys.indexOf(columnKey)
+    if (currentIndex === -1) {
+      return keys
+    }
+    const targetIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1
+    if (targetIndex < 0 || targetIndex >= orderedKeys.length) {
+      return keys
+    }
+    const nextOrderedKeys = [...orderedKeys]
+    const [movedColumn] = nextOrderedKeys.splice(currentIndex, 1)
+    nextOrderedKeys.splice(targetIndex, 0, movedColumn)
+    return ['title', ...nextOrderedKeys]
+  }
+
+  const handleMoveVisibleColumn = async (columnKey: ExtendedColumnKey, direction: 'left' | 'right') => {
+    const nextVisibleKeys = moveVisibleColumnKeys(visibleColumnKeys, columnKey, direction)
+    if (nextVisibleKeys === visibleColumnKeys) {
+      return
+    }
+    setVisibleColumnKeys(nextVisibleKeys)
+    await persistVisibleColumnOrder(nextVisibleKeys)
+  }
+
+  const handleHideVisibleColumn = async (columnKey: ExtendedColumnKey) => {
+    const nextVisibleKeys = visibleColumnKeys.filter((key) => key !== columnKey)
+    setVisibleColumnKeys(nextVisibleKeys)
+    const targetField = rawCustomFields.find((field) => resolveRawFieldColumnKey(field) === columnKey)
+    if (!targetField) {
+      return
+    }
+    try {
+      await updateCustomField(targetField.field_id, { is_visible: false })
+      await reloadCustomFields()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '隐藏字段失败'
+      message.error(msg)
+      await reloadCustomFields()
+    }
+  }
+
   const handleToggleCustomFieldVisibility = async (field: ApiCustomField) => {
+    const columnKey = resolveRawFieldColumnKey(field)
+    if (!columnKey) {
+      return
+    }
     try {
       await updateCustomField(field.field_id, { is_visible: !field.is_visible })
       if (field.is_visible) {
-        handleRemoveVisibleColumn(toCustomFieldColumnKey(field.field_id))
+        handleRemoveVisibleColumn(columnKey)
       } else {
-        handleAddVisibleColumn(toCustomFieldColumnKey(field.field_id))
+        handleAddVisibleColumn(columnKey)
       }
       await reloadCustomFields()
     } catch (err: unknown) {
@@ -2421,7 +2578,12 @@ export default function TaskTable({
       return
     }
 
-    const orderedFields = [...rawCustomFields].sort((a, b) => a.sort_order - b.sort_order)
+    const orderedFields = [...rawCustomFields]
+      .filter((field) => {
+        const columnKey = resolveRawFieldColumnKey(field)
+        return columnKey !== null && columnKey !== 'title'
+      })
+      .sort((a, b) => a.sort_order - b.sort_order)
     const fromIndex = orderedFields.findIndex((field) => field.field_id === dragFieldId)
     const toIndex = orderedFields.findIndex((field) => field.field_id === dropFieldId)
     if (fromIndex === -1 || toIndex === -1) {
@@ -2437,7 +2599,11 @@ export default function TaskTable({
       sort_order: index + 1,
     }))
 
-    setRawCustomFields(nextOrderedFields)
+    const nextRawFields = rawCustomFields.map((field) => {
+      const updatedField = nextOrderedFields.find((item) => item.field_id === field.field_id)
+      return updatedField ?? field
+    })
+    setRawCustomFields(nextRawFields)
 
     try {
       await Promise.all(
@@ -2874,31 +3040,29 @@ export default function TaskTable({
   const filteredFieldOptions = allFieldOptions
 
   const renderFieldConfigRow = (field: FieldOption) => {
-    const cfGuid =
-      typeof field.key === 'string' && field.key.startsWith('custom:')
-        ? field.key.slice(7)
-        : null
-    const cfRaw = cfGuid ? rawCustomFields.find((r) => r.field_id === cfGuid) : null
+    const cfRaw = field.fieldId
+      ? rawCustomFields.find((r) => r.field_id === field.fieldId)
+      : null
     const isSystemBuiltInField = cfRaw?.creator_id === 'system'
     return (
       <div
         key={field.key}
         className="field-config-row-v2"
-        draggable={!!cfRaw}
+        draggable={Boolean(field.fieldId)}
         onDragStart={(event) => {
-          if (!cfRaw) return
-          event.dataTransfer.setData('application/x-custom-field', cfRaw.field_id)
+          if (!field.fieldId) return
+          event.dataTransfer.setData('application/x-custom-field', field.fieldId)
         }}
         onDragOver={(event) => {
-          if (!cfRaw) return
+          if (!field.fieldId) return
           event.preventDefault()
         }}
         onDrop={(event) => {
-          if (!cfRaw) return
+          if (!field.fieldId) return
           event.preventDefault()
           const dragFieldId = event.dataTransfer.getData('application/x-custom-field')
           if (dragFieldId) {
-            void handleCustomFieldSort(dragFieldId, cfRaw.field_id)
+            void handleCustomFieldSort(dragFieldId, field.fieldId)
           }
         }}
       >
@@ -2994,6 +3158,48 @@ export default function TaskTable({
       )}
     </div>
   )
+
+  function renderAdjustableColumnTitle(
+    columnKey: ExtendedColumnKey,
+    title: React.ReactNode,
+  ): React.ReactNode {
+    const orderedKeys = visibleColumnKeys.filter((key) => key !== 'title')
+    const currentIndex = orderedKeys.indexOf(columnKey)
+    const disableMoveLeft = currentIndex <= 0
+    const disableMoveRight = currentIndex === -1 || currentIndex >= orderedKeys.length - 1
+
+    return (
+      <Dropdown
+        trigger={['click']}
+        menu={{
+          items: [
+            {
+              key: 'move-left',
+              label: '向左移动',
+              disabled: disableMoveLeft,
+              onClick: () => void handleMoveVisibleColumn(columnKey, 'left'),
+            },
+            {
+              key: 'move-right',
+              label: '向右移动',
+              disabled: disableMoveRight,
+              onClick: () => void handleMoveVisibleColumn(columnKey, 'right'),
+            },
+            { type: 'divider' as const },
+            {
+              key: 'hide',
+              label: '隐藏字段',
+              onClick: () => void handleHideVisibleColumn(columnKey),
+            },
+          ],
+        }}
+      >
+        <span className="table-column-title-dropdown" onClick={(event) => event.stopPropagation()}>
+          {title}
+        </span>
+      </Dropdown>
+    )
+  }
 
   const quickAddFieldPanel = (
     <div className="field-config-side-panel field-config-type-menu field-config-type-menu-standalone">
@@ -3424,274 +3630,297 @@ export default function TaskTable({
       },
     }, 'title'),
   ]
+  orderedVisibleColumnKeys.forEach((columnKey) => {
+    if (String(columnKey).startsWith('custom:')) {
+      const field = visibleCustomFieldDefMap.get(columnKey as CustomFieldColumnKey)
+      if (!field) {
+        return
+      }
+      taskColumns.push(withResizableHeader({
+        key: columnKey,
+        dataIndex: field.guid,
+        title: renderAdjustableColumnTitle(columnKey, <span>{field.name}</span>),
+        render: (_value, record) =>
+          isTaskTableTaskRow(record) ? (
+            <CustomFieldCell
+              field={field}
+              task={record}
+              users={users}
+              onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
+              onStatusChange={(task, nextStatus) => void handleTaskStatusFieldChange(task, nextStatus)}
+            />
+          ) : null,
+      }, columnKey))
+      return
+    }
 
-  if (showColumn('priority')) {
-    taskColumns.push(withResizableHeader({
-      key: 'priority',
-      dataIndex: 'priority',
-      title: <span>优先级</span>,
-      render: (_value, record) =>
-        isInlineCreateRow(record) ? (
-          renderInlineCreatePriorityCell(record.section.guid)
-        ) : isTaskTableTaskRow(record) ? (
-          <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />
-        ) : null,
-    }, 'priority'))
-  }
+    if (columnKey === 'priority') {
+      taskColumns.push(withResizableHeader({
+        key: 'priority',
+        dataIndex: 'priority',
+        title: renderAdjustableColumnTitle('priority', <span>优先级</span>),
+        render: (_value, record) =>
+          isInlineCreateRow(record) ? (
+            renderInlineCreatePriorityCell(record.section.guid)
+          ) : isTaskTableTaskRow(record) ? (
+            <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />
+          ) : null,
+      }, 'priority'))
+      return
+    }
 
-  if (showColumn('assignee')) {
-    taskColumns.push(withResizableHeader({
-      key: 'assignee',
-      dataIndex: 'members',
-      title: (
-        <span className="table-column-title">
-          <UserOutlined />
-          <span>负责人</span>
-        </span>
-      ),
-      render: (_value, record) =>
-        isInlineCreateRow(record) ? (
-          renderInlineCreateAssigneeCell(record.section.guid)
-        ) : isTaskTableTaskRow(record) ? (
-          <TaskAssigneeCell
-            task={record}
-            users={users}
-            isTasklistView={isTasklistView}
-            activeAssigneePickerKey={activeAssigneePickerKey}
-            onUpdate={handleTaskUpdate}
-            onAssigneePickerOpenChange={setActiveAssigneePickerKey}
-          />
-        ) : null,
-    }, 'assignee'))
-  }
-
-  if (showColumn('estimate')) {
-    taskColumns.push(withResizableHeader({
-      key: 'estimate',
-      dataIndex: 'estimate',
-      title: <span>预估工时</span>,
-      render: (_value, record) =>
-        isInlineCreateRow(record) ? (
-          <div className="inline-create-field-cell cell cell-estimate">
-            <span className="custom-field-text">-</span>
-          </div>
-        ) : (
-          <span className="custom-field-text">-</span>
+    if (columnKey === 'assignee') {
+      taskColumns.push(withResizableHeader({
+        key: 'assignee',
+        dataIndex: 'members',
+        title: renderAdjustableColumnTitle(
+          'assignee',
+          <span className="table-column-title">
+            <UserOutlined />
+            <span>负责人</span>
+          </span>,
         ),
-    }, 'estimate'))
-  }
+        render: (_value, record) =>
+          isInlineCreateRow(record) ? (
+            renderInlineCreateAssigneeCell(record.section.guid)
+          ) : isTaskTableTaskRow(record) ? (
+            <TaskAssigneeCell
+              task={record}
+              users={users}
+              isTasklistView={isTasklistView}
+              activeAssigneePickerKey={activeAssigneePickerKey}
+              onUpdate={handleTaskUpdate}
+              onAssigneePickerOpenChange={setActiveAssigneePickerKey}
+            />
+          ) : null,
+      }, 'assignee'))
+      return
+    }
 
-  if (showColumn('start')) {
-    taskColumns.push(withResizableHeader({
-      key: 'start',
-      dataIndex: 'start',
-      title: (
-        <span className="table-column-title">
-          <ClockCircleOutlined />
-          <span>开始时间</span>
-        </span>
-      ),
-      render: (_value, record) =>
-        isInlineCreateRow(record) ? (
-          renderInlineCreateDateCell(record.section.guid, 'start')
-        ) : isTaskTableTaskRow(record) ? (
-          <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
-        ) : null,
-    }, 'start'))
-  }
+    if (columnKey === 'estimate') {
+      taskColumns.push(withResizableHeader({
+        key: 'estimate',
+        dataIndex: 'estimate',
+        title: renderAdjustableColumnTitle('estimate', <span>预估工时</span>),
+        render: (_value, record) =>
+          isInlineCreateRow(record) ? (
+            <div className="inline-create-field-cell cell cell-estimate">
+              <span className="custom-field-text">-</span>
+            </div>
+          ) : (
+            <span className="custom-field-text">-</span>
+          ),
+      }, 'estimate'))
+      return
+    }
 
-  if (showColumn('due')) {
-    taskColumns.push(withResizableHeader({
-      key: 'due',
-      dataIndex: 'due',
-      title: (
-        <span className="table-column-title">
-          <CalendarOutlined />
-          <span>截止时间</span>
-        </span>
-      ),
-      render: (_value, record) =>
-        isInlineCreateRow(record) ? (
-          renderInlineCreateDateCell(record.section.guid, 'due')
-        ) : isTaskTableTaskRow(record) ? (
-          <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
-        ) : null,
-    }, 'due'))
-  }
+    if (columnKey === 'start') {
+      taskColumns.push(withResizableHeader({
+        key: 'start',
+        dataIndex: 'start',
+        title: renderAdjustableColumnTitle(
+          'start',
+          <span className="table-column-title">
+            <ClockCircleOutlined />
+            <span>开始时间</span>
+          </span>,
+        ),
+        render: (_value, record) =>
+          isInlineCreateRow(record) ? (
+            renderInlineCreateDateCell(record.section.guid, 'start')
+          ) : isTaskTableTaskRow(record) ? (
+            <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
+          ) : null,
+      }, 'start'))
+      return
+    }
 
-  if (showColumn('creator')) {
-    taskColumns.push(withResizableHeader({
-      key: 'creator',
-      dataIndex: 'creator',
-      title: (
-        <span className="table-column-title">
-          <UserOutlined />
-          <span>创建人</span>
-        </span>
-      ),
-      render: (_value, record) => {
-        if (isInlineCreateRow(record)) {
-          return renderInlineCreateCreatorCell()
-        }
-        if (!isTaskTableTaskRow(record)) {
-          return null
-        }
-        const creatorUser = {
-          id: record.creator.id,
-          name: record.creator.name ?? users.find((u) => u.id === record.creator.id)?.name ?? record.creator.id,
-          avatar: record.creator.avatar ?? users.find((u) => u.id === record.creator.id)?.avatar,
-        }
-        return creatorUser ? (
-          <Tooltip title={creatorUser.name}>
-            <Avatar
-              src={creatorUser.avatar}
-              size={20}
-              style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
-            >
-              {creatorUser.name.slice(0, 1)}
-            </Avatar>
-          </Tooltip>
-        ) : null
-      },
-    }, 'creator'))
-  }
+    if (columnKey === 'due') {
+      taskColumns.push(withResizableHeader({
+        key: 'due',
+        dataIndex: 'due',
+        title: renderAdjustableColumnTitle(
+          'due',
+          <span className="table-column-title">
+            <CalendarOutlined />
+            <span>截止时间</span>
+          </span>,
+        ),
+        render: (_value, record) =>
+          isInlineCreateRow(record) ? (
+            renderInlineCreateDateCell(record.section.guid, 'due')
+          ) : isTaskTableTaskRow(record) ? (
+            <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
+          ) : null,
+      }, 'due'))
+      return
+    }
 
-  if (showColumn('created')) {
-    taskColumns.push(withResizableHeader({
-      key: 'created',
-      dataIndex: 'created_at',
-      title: <span>创建时间</span>,
-      render: (value: string, record) =>
-        isInlineCreateRow(record) ? (
-          <div className="inline-create-field-cell cell cell-created" />
-        ) : isTaskTableTaskRow(record) ? (
-          renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
-        ) : null,
-    }, 'created'))
-  }
+    if (columnKey === 'creator') {
+      taskColumns.push(withResizableHeader({
+        key: 'creator',
+        dataIndex: 'creator',
+        title: renderAdjustableColumnTitle(
+          'creator',
+          <span className="table-column-title">
+            <UserOutlined />
+            <span>创建人</span>
+          </span>,
+        ),
+        render: (_value, record) => {
+          if (isInlineCreateRow(record)) {
+            return renderInlineCreateCreatorCell()
+          }
+          if (!isTaskTableTaskRow(record)) {
+            return null
+          }
+          const creatorUser = {
+            id: record.creator.id,
+            name: record.creator.name ?? users.find((u) => u.id === record.creator.id)?.name ?? record.creator.id,
+            avatar: record.creator.avatar ?? users.find((u) => u.id === record.creator.id)?.avatar,
+          }
+          return creatorUser ? (
+            <Tooltip title={creatorUser.name}>
+              <Avatar
+                src={creatorUser.avatar}
+                size={20}
+                style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
+              >
+                {creatorUser.name.slice(0, 1)}
+              </Avatar>
+            </Tooltip>
+          ) : null
+        },
+      }, 'creator'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('subtaskProgress')) {
-    taskColumns.push(withResizableHeader({
-      key: 'subtaskProgress',
-      dataIndex: 'subtask_count',
-      title: <span>子任务进度</span>,
-      render: (value: number, record) =>
-        isTaskTableTaskRow(record) ? (
-          renderOverflowText(value > 0 ? `0 / ${value}` : '-')
-        ) : null,
-    }, 'subtaskProgress'))
-  }
+    if (columnKey === 'created') {
+      taskColumns.push(withResizableHeader({
+        key: 'created',
+        dataIndex: 'created_at',
+        title: renderAdjustableColumnTitle('created', <span>创建时间</span>),
+        render: (value: string, record) =>
+          isInlineCreateRow(record) ? (
+            <div className="inline-create-field-cell cell cell-created" />
+          ) : isTaskTableTaskRow(record) ? (
+            renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
+          ) : null,
+      }, 'created'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('taskSource')) {
-    taskColumns.push(withResizableHeader({
-      key: 'taskSource',
-      dataIndex: 'source',
-      title: <span>任务来源</span>,
-      render: (_value, record) =>
-        isTaskTableTaskRow(record) ? renderOverflowText('任务') : null,
-    }, 'taskSource'))
-  }
+    if (columnKey === 'subtaskProgress') {
+      taskColumns.push(withResizableHeader({
+        key: 'subtaskProgress',
+        dataIndex: 'subtask_count',
+        title: renderAdjustableColumnTitle('subtaskProgress', <span>子任务进度</span>),
+        render: (value: number, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText(value > 0 ? `0 / ${value}` : '-')
+          ) : null,
+      }, 'subtaskProgress'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('assigner')) {
-    taskColumns.push(withResizableHeader({
-      key: 'assigner',
-      dataIndex: 'creator',
-      title: <span>分配人</span>,
-      render: (_value, record) => {
-        if (!isTaskTableTaskRow(record)) {
-          return null
-        }
-        const creatorUser = users.find((u) => u.id === record.creator.id)
-        return renderOverflowText(creatorUser?.name ?? '-')
-      },
-    }, 'assigner'))
-  }
+    if (columnKey === 'taskSource') {
+      taskColumns.push(withResizableHeader({
+        key: 'taskSource',
+        dataIndex: 'source',
+        title: renderAdjustableColumnTitle('taskSource', <span>任务来源</span>),
+        render: (_value, record) =>
+          isTaskTableTaskRow(record) ? renderOverflowText('任务') : null,
+      }, 'taskSource'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('followers')) {
-    taskColumns.push(withResizableHeader({
-      key: 'followers',
-      dataIndex: 'members',
-      title: <span>关注人</span>,
-      render: (_value, record) => {
-        if (!isTaskTableTaskRow(record)) {
-          return null
-        }
-        const followerCount = new Set([
-          ...(record.participant_ids ?? []),
-          ...record.members
-            .filter((member) => member.role === 'follower')
-            .map((member) => member.id),
-        ]).size
-        return renderOverflowText(followerCount || '-')
-      },
-    }, 'followers'))
-  }
+    if (columnKey === 'assigner') {
+      taskColumns.push(withResizableHeader({
+        key: 'assigner',
+        dataIndex: 'creator',
+        title: renderAdjustableColumnTitle('assigner', <span>分配人</span>),
+        render: (_value, record) => {
+          if (!isTaskTableTaskRow(record)) {
+            return null
+          }
+          const creatorUser = users.find((u) => u.id === record.creator.id)
+          return renderOverflowText(creatorUser?.name ?? '-')
+        },
+      }, 'assigner'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('completed')) {
-    taskColumns.push(withResizableHeader({
-      key: 'completed',
-      dataIndex: 'completed_at',
-      title: <span>完成时间</span>,
-      render: (value: string, record) =>
-        isTaskTableTaskRow(record) ? (
-          renderOverflowText(value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-')
-        ) : null,
-    }, 'completed'))
-  }
+    if (columnKey === 'followers') {
+      taskColumns.push(withResizableHeader({
+        key: 'followers',
+        dataIndex: 'members',
+        title: renderAdjustableColumnTitle('followers', <span>关注人</span>),
+        render: (_value, record) => {
+          if (!isTaskTableTaskRow(record)) {
+            return null
+          }
+          const followerCount = new Set([
+            ...(record.participant_ids ?? []),
+            ...record.members
+              .filter((member) => member.role === 'follower')
+              .map((member) => member.id),
+          ]).size
+          return renderOverflowText(followerCount || '-')
+        },
+      }, 'followers'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('updated')) {
-    taskColumns.push(withResizableHeader({
-      key: 'updated',
-      dataIndex: 'updated_at',
-      title: <span>更新时间</span>,
-      render: (value: string, record) =>
-        isTaskTableTaskRow(record) ? (
-          renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
-        ) : null,
-    }, 'updated'))
-  }
+    if (columnKey === 'completed') {
+      taskColumns.push(withResizableHeader({
+        key: 'completed',
+        dataIndex: 'completed_at',
+        title: renderAdjustableColumnTitle('completed', <span>完成时间</span>),
+        render: (value: string, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText(value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-')
+          ) : null,
+      }, 'completed'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('taskId')) {
-    taskColumns.push(withResizableHeader({
-      key: 'taskId',
-      dataIndex: 'task_id',
-      title: <span>任务 ID</span>,
-      render: (value: string, record) =>
-        isTaskTableTaskRow(record) ? (
-          renderOverflowText(value)
-        ) : null,
-    }, 'taskId'))
-  }
+    if (columnKey === 'updated') {
+      taskColumns.push(withResizableHeader({
+        key: 'updated',
+        dataIndex: 'updated_at',
+        title: renderAdjustableColumnTitle('updated', <span>更新时间</span>),
+        render: (value: string, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
+          ) : null,
+      }, 'updated'))
+      return
+    }
 
-  if (visibleColumnKeys.includes('sourceCategory')) {
-    taskColumns.push(withResizableHeader({
-      key: 'sourceCategory',
-      dataIndex: 'sourceCategory',
-      title: <span>来源类别</span>,
-      render: (_value, record) =>
-        isTaskTableTaskRow(record) ? (
-          renderOverflowText('任务列表')
-        ) : null,
-    }, 'sourceCategory'))
-  }
+    if (columnKey === 'taskId') {
+      taskColumns.push(withResizableHeader({
+        key: 'taskId',
+        dataIndex: 'task_id',
+        title: renderAdjustableColumnTitle('taskId', <span>任务 ID</span>),
+        render: (value: string, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText(value)
+          ) : null,
+      }, 'taskId'))
+      return
+    }
 
-  visibleCustomFieldDefs.forEach((field) => {
-    const columnKey = toCustomFieldColumnKey(field.guid)
-    taskColumns.push(withResizableHeader({
-      key: columnKey,
-      dataIndex: field.guid,
-      title: <span>{field.name}</span>,
-      render: (_value, record) =>
-        isTaskTableTaskRow(record) ? (
-          <CustomFieldCell
-            field={field}
-            task={record}
-            users={users}
-            onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
-            onStatusChange={(task, nextStatus) => void handleTaskStatusFieldChange(task, nextStatus)}
-          />
-        ) : null,
-    }, columnKey))
+    if (columnKey === 'sourceCategory') {
+      taskColumns.push(withResizableHeader({
+        key: 'sourceCategory',
+        dataIndex: 'sourceCategory',
+        title: renderAdjustableColumnTitle('sourceCategory', <span>来源类别</span>),
+        render: (_value, record) =>
+          isTaskTableTaskRow(record) ? (
+            renderOverflowText('任务列表')
+          ) : null,
+      }, 'sourceCategory'))
+    }
   })
 
   if (isTasklistView) {
