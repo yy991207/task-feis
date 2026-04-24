@@ -669,6 +669,8 @@ export default function TaskDetailPanel({
   const [descriptionDraft, setDescriptionDraft] = useState(task.description)
   const [descriptionEditing, setDescriptionEditing] = useState(false)
   const [subtaskDrafts, setSubtaskDrafts] = useState<Task[]>([])
+  const [editingSubtaskGuid, setEditingSubtaskGuid] = useState<string | null>(null)
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('')
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
@@ -716,6 +718,9 @@ export default function TaskDetailPanel({
   const titleSubmittingRef = useRef(false)
   const titleComposingRef = useRef(false)
   const titleSkipBlurSubmitRef = useRef(false)
+  const subtaskTitleSubmittingRef = useRef(false)
+  const subtaskTitleComposingRef = useRef(false)
+  const subtaskTitleSkipBlurSubmitRef = useRef(false)
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const commentInputUsers = availableUsers
@@ -800,6 +805,8 @@ export default function TaskDetailPanel({
     setDescriptionDraft(task.description)
     setDescriptionEditing(false)
     setSubtaskDrafts([])
+    setEditingSubtaskGuid(null)
+    setEditingSubtaskTitle('')
     setSubtaskCreating(false)
     setSubtaskTitle('')
     setSubtaskAssigneeIds([])
@@ -824,6 +831,8 @@ export default function TaskDetailPanel({
     subtaskSubmittingRef.current = false
     titleSubmittingRef.current = false
     titleSkipBlurSubmitRef.current = false
+    subtaskTitleSubmittingRef.current = false
+    subtaskTitleSkipBlurSubmitRef.current = false
     if (detailScrollRef.current) {
       detailScrollRef.current.scrollTo({ top: 0 })
     }
@@ -1340,10 +1349,11 @@ export default function TaskDetailPanel({
 
   const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
   const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
-  const subtaskCreatePreviewTotal = subtaskDrafts.length + (subtaskCreating ? 1 : 0)
-  const subtaskCreatePreviewPercent =
-    subtaskCreatePreviewTotal > 0
-      ? Math.round((subtaskDrafts.length / subtaskCreatePreviewTotal) * 100)
+  const subtaskCompletionCount = subtaskDrafts.filter((item) => item.status === 'done').length
+  const visibleSubtaskCount = subtaskDrafts.length
+  const subtaskProgressPercent =
+    visibleSubtaskCount > 0
+      ? Math.round((subtaskCompletionCount / visibleSubtaskCount) * 100)
       : 0
 
   const cancelEmptySubtaskCreate = () => {
@@ -1482,6 +1492,41 @@ export default function TaskDetailPanel({
 
   const handleOpenSubtaskDetail = (subtask: Task) => {
     onOpenTask?.(subtask)
+  }
+
+  const handleStartSubtaskTitleEdit = (subtask: Task) => {
+    setEditingSubtaskGuid(subtask.guid)
+    setEditingSubtaskTitle(subtask.summary)
+  }
+
+  const handleSubtaskTitleSubmit = async (subtask: Task) => {
+    const nextSummary = editingSubtaskTitle.trim()
+    if (!nextSummary) {
+      message.warning('子任务名称不能为空')
+      setEditingSubtaskTitle(subtask.summary)
+      return
+    }
+    if (nextSummary === subtask.summary) {
+      setEditingSubtaskGuid(null)
+      return
+    }
+    if (subtaskTitleSubmittingRef.current) {
+      return
+    }
+
+    // 子任务标题支持单击进入行内编辑，回车和失焦都可能触发提交，这里加锁避免重复请求。
+    subtaskTitleSubmittingRef.current = true
+    try {
+      const apiTask = await updateTaskApi(subtask.guid, { title: nextSummary })
+      const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+      setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
+      onTaskUpdated?.(next)
+      setEditingSubtaskGuid(null)
+    } catch (err) {
+      message.error(getActionErrorMessage(err, '更新子任务名称失败'))
+    } finally {
+      subtaskTitleSubmittingRef.current = false
+    }
   }
 
   const handleOpenParentTask = (parentTask: Task) => {
@@ -2008,7 +2053,7 @@ export default function TaskDetailPanel({
                     title={isCurrentTaskCompleted ? '重启任务' : '标记已完成'}
                     placement="top"
                     color="#000"
-                    styles={{ body: { color: '#fff' } }}
+                    styles={{ container: { color: '#fff' } }}
                   >
                     <Checkbox
                       className="detail-title-checkbox"
@@ -2027,7 +2072,7 @@ export default function TaskDetailPanel({
                 title={isCurrentTaskCompleted ? '重启任务' : '标记已完成'}
                 placement="top"
                 color="#000"
-                styles={{ body: { color: '#fff' } }}
+                styles={{ container: { color: '#fff' } }}
               >
                 <Checkbox
                   className="detail-title-checkbox"
@@ -2436,7 +2481,22 @@ export default function TaskDetailPanel({
               <BranchesOutlined className="field-icon" />
             </Tooltip>
             <div className="field-content">
-              <span className="field-placeholder">子任务</span>
+              {visibleSubtaskCount > 0 ? (
+                <div className="detail-subtask-summary" aria-label={`子任务完成进度 ${subtaskCompletionCount}/${visibleSubtaskCount}`}>
+                  <span className="detail-subtask-summary-count">
+                    {subtaskCompletionCount}/{visibleSubtaskCount}
+                  </span>
+                  <Progress
+                    percent={subtaskProgressPercent}
+                    showInfo={false}
+                    size={{ height: 8 }}
+                    strokeColor={subtaskCompletionCount > 0 ? '#34a853' : '#b8bcc5'}
+                    trailColor="#e5e6eb"
+                  />
+                </div>
+              ) : (
+                <span className="field-placeholder">子任务</span>
+              )}
             </div>
           </div>
           <div className="detail-field-indent">
@@ -2444,6 +2504,7 @@ export default function TaskDetailPanel({
               {subtaskDrafts.map((subtask) => {
                 const isDone = subtask.status === 'done'
                 const isSubtaskCompleted = isCurrentUserAssigneeCompleted(subtask)
+                const isSubtaskTitleEditing = editingSubtaskGuid === subtask.guid
                 const subtaskStatusActions = getTaskCompletionActions(subtask, teamMembers)
                 const primarySubtaskStatusAction = subtaskStatusActions[0]
                 const assigneeUsers = subtask.members
@@ -2483,7 +2544,7 @@ export default function TaskDetailPanel({
                             title={isSubtaskCompleted ? '重启任务' : '标记已完成'}
                             placement="top"
                             color="#000"
-                            styles={{ body: { color: '#fff' } }}
+                            styles={{ container: { color: '#fff' } }}
                           >
                             <span
                               className={`subtask-check ${isSubtaskCompleted ? 'checked' : ''}`}
@@ -2499,7 +2560,7 @@ export default function TaskDetailPanel({
                         title={isSubtaskCompleted ? '重启任务' : '标记已完成'}
                         placement="top"
                         color="#000"
-                        styles={{ body: { color: '#fff' } }}
+                        styles={{ container: { color: '#fff' } }}
                       >
                         <span
                           className={`subtask-check ${isSubtaskCompleted ? 'checked' : ''}`}
@@ -2513,13 +2574,50 @@ export default function TaskDetailPanel({
                       </Tooltip>
                     )}
                     <div className="subtask-main">
-                      <button
-                        type="button"
-                        className="subtask-title-btn"
-                        onClick={() => handleOpenSubtaskDetail(subtask)}
-                      >
-                        <span className="subtask-title">{subtask.summary}</span>
-                      </button>
+                      {isSubtaskTitleEditing ? (
+                        <Input
+                          className="subtask-title-editor"
+                          size="small"
+                          autoFocus
+                          bordered={false}
+                          value={editingSubtaskTitle}
+                          onChange={(event) => setEditingSubtaskTitle(event.target.value)}
+                          onCompositionStart={() => {
+                            subtaskTitleComposingRef.current = true
+                          }}
+                          onCompositionEnd={() => {
+                            subtaskTitleComposingRef.current = false
+                          }}
+                          onPressEnter={() => {
+                            if (subtaskTitleComposingRef.current) {
+                              return
+                            }
+                            void handleSubtaskTitleSubmit(subtask)
+                          }}
+                          onBlur={() => {
+                            if (subtaskTitleSkipBlurSubmitRef.current) {
+                              subtaskTitleSkipBlurSubmitRef.current = false
+                              return
+                            }
+                            void handleSubtaskTitleSubmit(subtask)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              subtaskTitleSkipBlurSubmitRef.current = true
+                              setEditingSubtaskTitle(subtask.summary)
+                              setEditingSubtaskGuid(null)
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className="subtask-title-btn"
+                          onClick={() => handleStartSubtaskTitleEdit(subtask)}
+                        >
+                          <span className="subtask-title">{subtask.summary}</span>
+                        </button>
+                      )}
                       <div
                         className="subtask-meta"
                         onClick={(e) => e.stopPropagation()}
@@ -2681,18 +2779,6 @@ export default function TaskDetailPanel({
               })}
               {canCreateSubtask && subtaskCreating && (
                 <div className="detail-subtask-creator-card">
-                  <div className="detail-subtask-creator-progress" aria-hidden="true">
-                    <span className="detail-subtask-creator-count">
-                      {subtaskDrafts.length}/{subtaskCreatePreviewTotal}
-                    </span>
-                    <Progress
-                      percent={subtaskCreatePreviewPercent}
-                      showInfo={false}
-                      size={{ height: 8 }}
-                      strokeColor="#b8bcc5"
-                      trailColor="#e5e6eb"
-                    />
-                  </div>
                   <div
                     ref={subtaskCreateRowRef}
                     className="detail-subtask-row is-creating"

@@ -96,7 +96,7 @@ export default function UserSearchSelect({
         return
       }
       const isClickInsideInlinePanel =
-        optionsVariant === 'inline' &&
+        isInlineAlwaysOpen &&
         target instanceof Element &&
         rootRef.current?.closest('.ant-popover')?.contains(target)
 

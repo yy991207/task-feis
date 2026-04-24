@@ -1,7 +1,13 @@
 import { request } from './request'
 import { appConfig } from '@/config/appConfig'
 import type { Project } from '@/types/project'
-import type { ProjectSummaryDistributionItem } from '@/types/task'
+
+export interface ProjectSummaryDistributionItem {
+  key: string
+  label: string
+  count: number
+  [key: string]: unknown
+}
 
 export interface ProjectSummary {
   priority_distribution: ProjectSummaryDistributionItem[]

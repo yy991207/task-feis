@@ -460,6 +460,38 @@ body.detail-panel-resizing {
   margin-bottom: 4px;
 }
 
+.detail-subtask-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #1f2329;
+  line-height: 24px;
+
+  .detail-subtask-summary-count {
+    font-size: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ant-progress {
+    margin: 0;
+    width: 54px;
+    min-width: 54px;
+    line-height: 1;
+  }
+
+  .ant-progress-inner {
+    background: #e5e6eb;
+    border-radius: 999px;
+  }
+
+  .ant-progress-bg {
+    border-radius: 999px;
+  }
+}
+
 /* ── Assignee ── */
 .assignee-tag {
   padding: 2px 8px !important;
@@ -1163,9 +1195,23 @@ body.detail-panel-resizing {
     padding: 0;
     border: 0;
     background: transparent;
-    cursor: pointer;
+    cursor: text;
     text-align: left;
     color: inherit;
+  }
+
+  .subtask-title-editor {
+    flex: 1 1 150px;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+
+    .ant-input {
+      padding: 0;
+      font-size: 13px;
+      line-height: 20px;
+      color: #1f2329;
+    }
   }
 
   .subtask-meta {
@@ -1202,8 +1248,10 @@ body.detail-panel-resizing {
   }
 
   .subtask-date-trigger {
-    min-width: 90px;
-    justify-content: center;
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: flex-start;
   }
 
   .subtask-assignee-trigger {
@@ -1228,13 +1276,17 @@ body.detail-panel-resizing {
 }
 
 .detail-subtask-add {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   min-height: 34px;
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid transparent;
-  background: #f7f8fa;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
+  background: transparent;
   color: #8f959e;
   cursor: pointer;
   box-shadow: none;
@@ -1247,9 +1299,9 @@ body.detail-panel-resizing {
   }
 
   &:hover {
-    background: #fff;
-    border-color: #eef0f3;
-    box-shadow: 0 4px 12px rgba(31, 35, 41, 0.06);
+    background: #f7f8fa;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(31, 35, 41, 0.06);
     color: #5f6672;
   }
 
@@ -1258,7 +1310,7 @@ body.detail-panel-resizing {
     border-color: #b9cdfc;
     box-shadow:
       0 0 0 2px rgba(51, 112, 255, 0.12),
-      0 4px 12px rgba(31, 35, 41, 0.06);
+      0 2px 8px rgba(31, 35, 41, 0.06);
   }
 
   .subtask-add-text {
@@ -1300,37 +1352,6 @@ body.detail-panel-resizing {
   flex-direction: column;
   gap: 6px;
   padding: 4px 0 2px;
-}
-
-.detail-subtask-creator-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: fit-content;
-  color: #4e5969;
-  line-height: 18px;
-
-  .detail-subtask-creator-count {
-    font-size: 13px;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .ant-progress {
-    margin: 0;
-    width: 48px;
-    min-width: 48px;
-    line-height: 1;
-  }
-
-  .ant-progress-inner {
-    background: #e5e6eb;
-    border-radius: 999px;
-  }
-
-  .ant-progress-bg {
-    border-radius: 999px;
-  }
 }
 
 .detail-subtask-row.is-creating {
@@ -1389,8 +1410,7 @@ body.detail-panel-resizing {
 .detail-subtask-row.is-creating,
 .detail-subtask-add {
   .subtask-add-text,
-  .ant-input,
-  .detail-subtask-creator-count {
+  .ant-input {
     letter-spacing: 0;
   }
 }

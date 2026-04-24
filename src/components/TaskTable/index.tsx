@@ -1232,7 +1232,7 @@ function renderOverflowTooltip(
       title={title}
       placement="top"
       color="#000"
-      styles={{ body: { color: '#fff' } }}
+      styles={{ container: { color: '#fff' } }}
     >
       {content}
     </Tooltip>
@@ -1572,7 +1572,7 @@ export default function TaskTable({
         ? 'datetime'
         : (f.field_type as CustomFieldDef['type']),
     options: (f.options ?? []).map((o) => ({
-      guid: o.value,
+      guid: o.id ?? o.label,
       name: o.label,
       color: o.color,
       is_disabled: o.is_disabled,
@@ -3652,28 +3652,33 @@ export default function TaskTable({
       <div className="cell cell-checkbox">
         <Checkbox disabled />
       </div>
-      <div className="cell cell-title" style={{ overflow: 'visible' }}>
+      <div
+        className={`cell cell-title ${inlineCreateFocusedField === 'title' ? 'active' : ''}`}
+        style={{ overflow: 'visible' }}
+      >
         <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
-          <Input
-            size="small"
-            className="inline-title-input"
-            placeholder="输入标题，回车确认"
-            value={newTaskTitle}
-            onChange={(e) => setNewTaskTitle(e.target.value)}
-            onPressEnter={() => handleInlineCreate(sectionGuid)}
-            onFocus={() => setInlineCreateFocusedField('title')}
-            onBlur={() => {
-              if (inlineCreateInteractingRef.current) {
-                inlineCreateInteractingRef.current = false
-                return
-              }
-              if (inlineCreateFocusedField !== 'title') {
-                return
-              }
-              void handleInlineCreate(sectionGuid)
-            }}
-            autoFocus
-          />
+          <div className="inline-create-title-box">
+            <Input
+              size="middle"
+              className="inline-title-input"
+              placeholder="输入标题，回车确认"
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              onPressEnter={() => handleInlineCreate(sectionGuid)}
+              onFocus={() => setInlineCreateFocusedField('title')}
+              onBlur={() => {
+                if (inlineCreateInteractingRef.current) {
+                  inlineCreateInteractingRef.current = false
+                  return
+                }
+                if (inlineCreateFocusedField !== 'title') {
+                  return
+                }
+                void handleInlineCreate(sectionGuid)
+              }}
+              autoFocus
+            />
+          </div>
         </Tooltip>
       </div>
     </div>
@@ -3681,94 +3686,106 @@ export default function TaskTable({
 
   const renderInlineCreatePriorityCell = (sectionGuid: string) => (
     <div
-      className="inline-create-field-cell cell cell-priority"
+      className={`inline-create-field-cell cell cell-priority ${
+        inlineCreateFocusedField === 'priority' ? 'active' : ''
+      }`}
       onMouseDownCapture={markInlineCreateInteracting}
       data-section-guid={sectionGuid}
     >
-      <Select
-        size="small"
-        variant="borderless"
-        value={newTaskPriority}
-        onChange={(value) => setNewTaskPriority(value)}
-        onDropdownVisibleChange={(open) => {
-          if (open) markInlineCreateInteracting()
-          setInlineCreateFocusedField(open ? 'priority' : null)
-        }}
-        style={{ width: '100%' }}
-        options={[
-          { label: '无优先级', value: Priority.None },
-          { label: '低', value: Priority.Low },
-          { label: '中', value: Priority.Medium },
-          { label: '高', value: Priority.High },
-          { label: '紧急', value: Priority.Urgent },
-        ]}
-      />
+      <div className="inline-create-field-shell">
+        <Select
+          size="middle"
+          variant="borderless"
+          className="inline-create-priority-select"
+          value={newTaskPriority}
+          onChange={(value) => setNewTaskPriority(value)}
+          onDropdownVisibleChange={(open) => {
+            if (open) markInlineCreateInteracting()
+            setInlineCreateFocusedField(open ? 'priority' : null)
+          }}
+          style={{ width: '100%' }}
+          options={[
+            { label: '无优先级', value: Priority.None },
+            { label: '低', value: Priority.Low },
+            { label: '中', value: Priority.Medium },
+            { label: '高', value: Priority.High },
+            { label: '紧急', value: Priority.Urgent },
+          ]}
+        />
+      </div>
     </div>
   )
 
   const renderInlineCreateAssigneeCell = (sectionGuid: string) => (
-    <div className="inline-create-field-cell cell cell-assignee">
-      <AssigneePicker
-        pickerKey={`inline-assignee-${sectionGuid}`}
-        open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
-        task={{
-          guid: '__inline-create__',
-          task_id: '__inline-create__',
-          summary: '',
-          description: '',
-          status: 'todo',
-          completed_at: '0',
-          created_at: '0',
-          updated_at: '0',
-          creator: { id: currentUser.id, type: 'user', name: currentUser.name },
-          mode: newTaskCompletionMode === 'all' ? 1 : 2,
-          completion_mode: newTaskCompletionMode,
-          assignee_completions: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
-            user_id: id,
-            is_completed: false,
-            completed_at: null,
-            user_name: users.find((user) => user.id === id)?.name ?? id,
-            avatar_url: users.find((user) => user.id === id)?.avatar ?? null,
-          })),
-          priority: Priority.None,
-          tags: [],
-          is_milestone: false,
-          source: 1,
-          parent_task_guid: '',
-          attachment_count: 0,
-          comment_count: 0,
-          subtask_count: 0,
-          participant_ids: [],
-          members: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
-            id,
-            role: 'assignee' as const,
-            type: 'user' as const,
-            name: users.find((user) => user.id === id)?.name ?? id,
-            avatar: users.find((user) => user.id === id)?.avatar,
-          })),
-          tasklists: [],
-          dependencies: [],
-          custom_fields: [],
-          reminders: [],
-          url: '',
-        }}
-        value={newTaskAssigneeIds}
-        users={users}
-        isTasklistView={isTasklistView}
-        placeholderIcon={
-          <UserAddOutlined
-            className="empty-assignee"
-            style={{ color: '#b8bcc5', fontSize: 16 }}
-          />
-        }
-        onChange={setNewTaskAssigneeIds}
-        onCompletionModeChange={setNewTaskCompletionMode}
-        onInteract={markInlineCreateInteracting}
-        onOpenChange={(open) => {
-          setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
-          setInlineCreateFocusedField(open ? 'assignee' : null)
-        }}
-      />
+    <div
+      className={`inline-create-field-cell cell cell-assignee ${
+        inlineCreateFocusedField === 'assignee' ? 'active' : ''
+      }`}
+    >
+      <div className="inline-create-field-shell">
+        <AssigneePicker
+          pickerKey={`inline-assignee-${sectionGuid}`}
+          open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
+          task={{
+            guid: '__inline-create__',
+            task_id: '__inline-create__',
+            summary: '',
+            description: '',
+            status: 'todo',
+            completed_at: '0',
+            created_at: '0',
+            updated_at: '0',
+            creator: { id: currentUser.id, type: 'user', name: currentUser.name },
+            mode: newTaskCompletionMode === 'all' ? 1 : 2,
+            completion_mode: newTaskCompletionMode,
+            assignee_completions: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
+              user_id: id,
+              is_completed: false,
+              completed_at: null,
+              user_name: users.find((user) => user.id === id)?.name ?? id,
+              avatar_url: users.find((user) => user.id === id)?.avatar ?? null,
+            })),
+            priority: Priority.None,
+            tags: [],
+            is_milestone: false,
+            source: 1,
+            parent_task_guid: '',
+            attachment_count: 0,
+            comment_count: 0,
+            subtask_count: 0,
+            participant_ids: [],
+            members: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
+              id,
+              role: 'assignee' as const,
+              type: 'user' as const,
+              name: users.find((user) => user.id === id)?.name ?? id,
+              avatar: users.find((user) => user.id === id)?.avatar,
+            })),
+            tasklists: [],
+            dependencies: [],
+            custom_fields: [],
+            reminders: [],
+            url: '',
+          }}
+          value={newTaskAssigneeIds}
+          users={users}
+          isTasklistView={isTasklistView}
+          triggerClassName="inline-create-assignee-trigger"
+          placeholderIcon={
+            <UserAddOutlined
+              className="empty-assignee"
+              style={{ color: '#b8bcc5', fontSize: 16 }}
+            />
+          }
+          onChange={setNewTaskAssigneeIds}
+          onCompletionModeChange={setNewTaskCompletionMode}
+          onInteract={markInlineCreateInteracting}
+          onOpenChange={(open) => {
+            setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
+            setInlineCreateFocusedField(open ? 'assignee' : null)
+          }}
+        />
+      </div>
     </div>
   )
 
@@ -3776,7 +3793,11 @@ export default function TaskTable({
     const date = field === 'start' ? newTaskStart : newTaskDue
 
     return (
-      <div className={`inline-create-field-cell cell cell-${field}`}>
+      <div
+        className={`inline-create-field-cell cell cell-${field} ${
+          inlineCreateFocusedField === field ? 'active' : ''
+        }`}
+      >
         <Popover
           trigger="click"
           placement="bottomLeft"
@@ -3794,13 +3815,15 @@ export default function TaskTable({
             setInlineCreateFocusedField(open ? field : null)
           }}
         >
-          <div
-            className="date-trigger"
-            onMouseDown={markInlineCreateInteracting}
-            data-section-guid={sectionGuid}
-          >
-            <span className="date-text">{date ? date.format('M月D日') : ''}</span>
-            <CalendarOutlined className="empty-date-icon" />
+          <div className={`inline-create-field-shell ${field === 'start' ? 'inline-create-date-shell-start' : 'inline-create-date-shell-due'}`}>
+            <div
+              className="date-trigger"
+              onMouseDown={markInlineCreateInteracting}
+              data-section-guid={sectionGuid}
+            >
+              <span className="date-text">{date ? date.format('M月D日') : ''}</span>
+              <CalendarOutlined className="empty-date-icon" />
+            </div>
           </div>
         </Popover>
       </div>
@@ -4072,14 +4095,13 @@ export default function TaskTable({
         }
         if (record.rowKind === 'newTask') {
           return (
-            <Button
-              type="text"
-              className="new-task-btn"
+            <button
+              type="button"
+              className="new-task-entry"
               onClick={() => startInlineCreate(record.section.guid)}
-              block
             >
-              新建任务
-            </Button>
+              <span className="new-task-entry-label">新建任务</span>
+            </button>
           )
         }
 
@@ -4526,7 +4548,8 @@ export default function TaskTable({
             section,
             content: createTaskInlineRow(section.guid),
           })
-        } else if (config.toolbar.showCreate && isSectionGroupMode) {
+        // 任务分组里的“新建任务”是分组内入口，不跟顶部总按钮共用开关。
+        } else if (isTasklistView && isSectionGroupMode) {
           rows.push({
             key: `new-task-${section.guid}`,
             guid: `new-task-${section.guid}`,
@@ -5191,7 +5214,7 @@ function TaskTitleCell({
                   title={statusToggleTooltip}
                   placement="top"
                   color="#000"
-                  styles={{ body: { color: '#fff' } }}
+                  styles={{ container: { color: '#fff' } }}
                 >
                   <Checkbox
                     checked={isSelfCompleted}
@@ -5209,7 +5232,7 @@ function TaskTitleCell({
               title={statusToggleTooltip}
               placement="top"
               color="#000"
-              styles={{ body: { color: '#fff' } }}
+              styles={{ container: { color: '#fff' } }}
             >
               <Checkbox
                 checked={isSelfCompleted}
