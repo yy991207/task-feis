@@ -124,11 +124,48 @@ async function testOnlyActiveFieldUsesHighlightedEditorShell() {
   )
 }
 
+async function testTitleEditorUsesFullHeightRectStyle() {
+  const source = await readSource('src/components/TaskTable/index.tsx')
+  const style = await readSource('src/components/TaskTable/index.less')
+  const editableInputSource = await readSource('src/components/EditableInput/index.tsx')
+
+  assert.match(
+    style,
+    /\.inline-create-title-box \{[\s\S]*min-height: 36px[\s\S]*padding: 0[\s\S]*border-radius: 0/,
+    '新建任务标题输入框应该是矩形外框，且上下没有额外留白。',
+  )
+
+  assert.match(
+    style,
+    /\.inline-title-input \{[\s\S]*&\.ant-input \{[\s\S]*height: 100%[\s\S]*padding: 0 14px/,
+    '新建任务标题输入框内容应该撑满外框高度，只保留左右内边距。',
+  )
+
+  assert.match(
+    source,
+    /className="task-title-edit-box"/,
+    '已创建任务进入编辑态时应该有独立的 task-title-edit-box，和新建任务标题框保持统一。',
+  )
+
+  assert.match(
+    style,
+    /\.task-title-edit-box \{[\s\S]*min-height: 36px[\s\S]*padding: 0[\s\S]*border-radius: 0/,
+    '已创建任务编辑框也应该是矩形满高样式，不能继续保留旧的小输入框外观。',
+  )
+
+  assert.match(
+    editableInputSource,
+    /size="middle"/,
+    '已创建任务编辑态里的输入框应该至少切到 middle，不能继续用 small。',
+  )
+}
+
 async function main() {
   await testNewTaskEntryUsesBlockContainer()
   await testInlineCreateUsesLargeFieldShells()
   await testStylesPromoteBlockLayoutInsteadOfLightweightControls()
   await testOnlyActiveFieldUsesHighlightedEditorShell()
+  await testTitleEditorUsesFullHeightRectStyle()
   console.log('task table inline create style check ok')
 }
 

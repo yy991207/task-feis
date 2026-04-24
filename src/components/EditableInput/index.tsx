@@ -31,7 +31,7 @@ export default function EditableInput({
   return (
     <Input
       ref={inputRef}
-      size="small"
+      size="middle"
       autoFocus
       placeholder={placeholder}
       value={value}

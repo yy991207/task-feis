@@ -5262,13 +5262,15 @@ function TaskTitleCell({
           ) : null}
           {editingName ? (
             <div className="task-name-editor">
-              <EditableInput
-                placeholder="输入任务名称"
-                defaultValue={task.summary}
-                onSubmit={(value) => {
-                  void handleRenameSummary(value)
-                }}
-              />
+              <div className="task-title-edit-box">
+                <EditableInput
+                  placeholder="输入任务名称"
+                  defaultValue={task.summary}
+                  onSubmit={(value) => {
+                    void handleRenameSummary(value)
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <span
