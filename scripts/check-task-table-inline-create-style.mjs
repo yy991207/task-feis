@@ -75,11 +75,52 @@ async function testStylesPromoteBlockLayoutInsteadOfLightweightControls() {
     /\.inline-create-title-box \{[\s\S]*min-height: 36px[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
     '标题输入框外层应该是白底描边的大方框，而不是透明输入框。',
   )
+}
+
+async function testOnlyActiveFieldUsesHighlightedEditorShell() {
+  const source = await readSource('src/components/TaskTable/index.tsx')
+  const style = await readSource('src/components/TaskTable/index.less')
+
+  assert.match(
+    source,
+    /inlineCreateFocusedField === 'title' \? 'active' : ''/,
+    '标题输入框应该继续只在当前激活时带 active 状态。',
+  )
+
+  assert.match(
+    source,
+    /inlineCreateFocusedField === 'priority' \? 'active' : ''/,
+    '优先级字段应该继续只在当前激活时带 active 状态。',
+  )
+
+  assert.match(
+    source,
+    /inlineCreateFocusedField === 'assignee' \? 'active' : ''/,
+    '负责人字段应该继续只在当前激活时带 active 状态。',
+  )
+
+  assert.match(
+    source,
+    /inlineCreateFocusedField === field \? 'active' : ''/,
+    '日期字段应该继续只在当前激活时带 active 状态。',
+  )
+
+  assert.doesNotMatch(
+    style,
+    /\.inline-create-field-shell \{[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;[\s\S]*box-shadow: 0 1px 2px/,
+    '普通字段默认不应该全部渲染成白色编辑框，否则一整排都会像同时进入编辑态。',
+  )
 
   assert.match(
     style,
-    /\.inline-create-field-shell \{[\s\S]*min-height: 36px[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
-    '通用字段编辑态应该统一使用白底描边的大方框。',
+    /\.inline-create-field-shell \{[\s\S]*border: 1px solid transparent[\s\S]*background: transparent[\s\S]*box-shadow: none;/,
+    '普通字段默认应该是透明壳层，只保留轻量占位效果。',
+  )
+
+  assert.match(
+    style,
+    /\.inline-create-field-cell \{\s*[\s\S]*&\.active \{\s*[\s\S]*\.inline-create-field-shell \{\s*[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
+    '通用字段应该只在 active 状态时切成白底描边的大方框。',
   )
 }
 
@@ -87,6 +128,7 @@ async function main() {
   await testNewTaskEntryUsesBlockContainer()
   await testInlineCreateUsesLargeFieldShells()
   await testStylesPromoteBlockLayoutInsteadOfLightweightControls()
+  await testOnlyActiveFieldUsesHighlightedEditorShell()
   console.log('task table inline create style check ok')
 }
 
