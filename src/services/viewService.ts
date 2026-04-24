@@ -1,7 +1,8 @@
 import { request } from './request'
 import { appConfig } from '@/config/appConfig'
 
-export type ViewScope = 'team' | 'personal'
+export type ViewScope = 'shared' | 'personal'
+type ApiViewScope = ViewScope | 'team'
 
 export interface TaskView {
   view_id: string
@@ -26,46 +27,68 @@ export interface ViewFilters {
 
 export const DEFAULT_VIEW_NAME = '默认视图'
 
-export function listViews(projectId: string): Promise<TaskView[]> {
+function normalizeViewScope(scope: ApiViewScope | undefined): ViewScope {
+  return scope === 'team' || scope === 'shared' ? 'shared' : 'personal'
+}
+
+function normalizeTaskView(view: Omit<TaskView, 'scope'> & { scope: ApiViewScope }): TaskView {
+  // 后端灰度期间可能还会返回旧值 team，这里统一规整成 shared，避免页面各处重复兼容。
+  return {
+    ...view,
+    scope: normalizeViewScope(view.scope),
+  }
+}
+
+export async function listViews(projectId: string): Promise<TaskView[]> {
   const qs = new URLSearchParams({ user_id: appConfig.user_id })
-  return request<TaskView[]>(
+  const views = await request<Array<Omit<TaskView, 'scope'> & { scope: ApiViewScope }>>(
     `api/v1/task-center/projects/${projectId}/views?${qs}`,
   )
+  return views.map(normalizeTaskView)
 }
 
-export function getView(viewId: string): Promise<TaskView> {
+export async function getView(viewId: string): Promise<TaskView> {
   const qs = new URLSearchParams({ user_id: appConfig.user_id })
-  return request<TaskView>(
+  const view = await request<Omit<TaskView, 'scope'> & { scope: ApiViewScope }>(
     `api/v1/task-center/views/${viewId}?${qs}`,
   )
+  return normalizeTaskView(view)
 }
 
-export function createView(
+export async function createView(
   projectId: string,
   body: { name: string; scope?: ViewScope; filters: ViewFilters },
 ): Promise<TaskView> {
-  return request<TaskView>(`api/v1/task-center/projects/${projectId}/views`, {
+  const view = await request<Omit<TaskView, 'scope'> & { scope: ApiViewScope }>(`api/v1/task-center/projects/${projectId}/views`, {
     method: 'POST',
     body: JSON.stringify({
       user_id: appConfig.user_id,
       name: body.name,
-      scope: body.scope ?? 'personal',
+      scope: normalizeViewScope(body.scope),
       filters: body.filters,
     }),
   })
+  return normalizeTaskView(view)
 }
 
-export function updateView(
+export async function updateView(
   viewId: string,
   body: { name?: string; scope?: ViewScope; filters?: ViewFilters },
 ): Promise<TaskView> {
-  return request<TaskView>(`api/v1/task-center/views/${viewId}`, {
+  const normalizedBody = body.scope === undefined
+    ? body
+    : {
+        ...body,
+        scope: normalizeViewScope(body.scope),
+      }
+  const view = await request<Omit<TaskView, 'scope'> & { scope: ApiViewScope }>(`api/v1/task-center/views/${viewId}`, {
     method: 'PUT',
     body: JSON.stringify({
       user_id: appConfig.user_id,
-      ...body,
+      ...normalizedBody,
     }),
   })
+  return normalizeTaskView(view)
 }
 
 export function deleteView(viewId: string): Promise<void> {
