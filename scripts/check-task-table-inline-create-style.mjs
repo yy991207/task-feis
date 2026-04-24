@@ -172,12 +172,66 @@ async function testTitleEditorUsesFullHeightRectStyle() {
   )
 }
 
+async function testExistingTaskEditableCellsReuseRectEditorShell() {
+  const source = await readSource('src/components/TaskTable/index.tsx')
+  const style = await readSource('src/components/TaskTable/index.less')
+
+  assert.match(
+    source,
+    /className=\{`cell cell-priority task-edit-field-cell \$\{priorityMenuOpen \? 'active' : ''\}`\}/,
+    '已创建任务的优先级单元格也要挂 task-edit-field-cell，打开后才能和截图一样出现矩形编辑壳。',
+  )
+
+  assert.match(
+    source,
+    /triggerClassName="task-edit-field-trigger assignee-trigger"/,
+    '已创建任务的负责人触发器也要复用 task-edit-field-trigger，不能继续保留旧的小号 hover 壳。',
+  )
+
+  assert.match(
+    source,
+    /className=\{`cell cell-\$\{field\} task-edit-field-cell \$\{pickerOpen \? 'active' : ''\}`\}/,
+    '已创建任务的日期单元格也要在弹层打开时切到 task-edit-field-cell active，和截图里的白底蓝框一致。',
+  )
+
+  assert.match(
+    source,
+    /className="custom-field-trigger task-edit-field-trigger"/,
+    '已创建任务的自定义字段展示态也要走 task-edit-field-trigger，才能和标题框统一成满高矩形交互。',
+  )
+
+  assert.match(
+    source,
+    /className="custom-field-editor custom-field-editor-text task-edit-field-trigger"/,
+    '已创建任务的自定义字段输入态也要复用 task-edit-field-trigger，不能只有标题框是矩形壳。',
+  )
+
+  assert.match(
+    style,
+    /\.task-edit-field-cell \{[\s\S]*min-height: 40px[\s\S]*align-self: stretch;/,
+    '已创建任务的可编辑字段单元格需要统一撑满整行高度，不能继续各自保留不同的行高。',
+  )
+
+  assert.match(
+    style,
+    /\.task-edit-field-trigger \{[\s\S]*height: 100%[\s\S]*padding: 0 12px[\s\S]*border: 1px solid transparent[\s\S]*border-radius: 0/,
+    '已创建任务的可编辑字段触发器需要统一成满高矩形壳，不能继续是圆角轻量按钮。',
+  )
+
+  assert.match(
+    style,
+    /\.task-edit-field-cell \{[\s\S]*&\.active \{[\s\S]*\.task-edit-field-trigger \{[\s\S]*border-color: #3370ff[\s\S]*background: #fff;/,
+    '已创建任务字段进入编辑态时，也要像截图一样切到白底蓝框，不是只改标题框一处。',
+  )
+}
+
 async function main() {
   await testNewTaskEntryUsesBlockContainer()
   await testInlineCreateUsesLargeFieldShells()
   await testStylesPromoteBlockLayoutInsteadOfLightweightControls()
   await testOnlyActiveFieldUsesHighlightedEditorShell()
   await testTitleEditorUsesFullHeightRectStyle()
+  await testExistingTaskEditableCellsReuseRectEditorShell()
   console.log('task table inline create style check ok')
 }
 

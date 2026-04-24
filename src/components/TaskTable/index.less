@@ -763,12 +763,12 @@
     .assignee-cell {
       display: flex;
       align-items: center;
-      min-height: 24px;
-      padding: 2px 4px;
-      border-radius: 6px;
+      min-height: 34px;
+      padding: 0;
+      border-radius: 0;
 
       &:hover {
-        background: #f2f3f5;
+        background: transparent;
       }
     }
 
@@ -804,13 +804,13 @@
       display: flex;
       align-items: center;
       width: 100%;
-      min-height: 24px;
-      padding: 2px 4px;
-      border-radius: 4px;
+      min-height: 34px;
+      padding: 0;
+      border-radius: 0;
       cursor: pointer;
 
       &:hover {
-        background: #f2f3f5;
+        background: transparent;
       }
     }
 
@@ -904,18 +904,45 @@
     width: auto;
   }
 
-  .custom-field-trigger {
+  .task-edit-field-cell {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    align-self: stretch;
+
+    &.active {
+      .task-edit-field-trigger {
+        border-color: #3370ff;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.14);
+      }
+    }
+  }
+
+  .task-edit-field-trigger {
     display: flex;
     align-items: center;
     width: 100%;
-    min-height: 30px;
-    padding: 3px 8px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.15s ease, box-shadow 0.15s ease;
+    height: 100%;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 
     &:hover {
-      background: #f2f3f5;
+      background: rgba(255, 255, 255, 0.56);
+    }
+  }
+
+  .custom-field-trigger {
+    min-height: 30px;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.56);
     }
 
     &[data-has-value='true'] {
@@ -998,6 +1025,11 @@
     .ant-picker,
     .ant-select-selector {
       border-radius: 0 !important;
+    }
+
+    .ant-input,
+    .ant-picker {
+      min-height: 40px;
     }
 
     .ant-select-selector {

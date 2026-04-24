@@ -4955,7 +4955,7 @@ function CustomFieldCell({
 
   const renderReadTrigger = (content: React.ReactNode) => (
     <div
-      className="custom-field-trigger"
+      className="custom-field-trigger task-edit-field-trigger"
       data-has-value={hasValue ? 'true' : 'false'}
       onClick={enterEditing}
     >
@@ -4963,32 +4963,40 @@ function CustomFieldCell({
     </div>
   )
 
+  const renderCellShell = (content: React.ReactNode) => (
+    <div className={`task-edit-field-cell cell cell-custom ${editing ? 'active' : ''}`}>
+      {content}
+    </div>
+  )
+
   if (!editing) {
     if (field.type === 'single_select' && hasValue) {
-      return renderReadTrigger(renderSelectFieldTags(field, selectedSingleValues))
+      return renderCellShell(renderReadTrigger(renderSelectFieldTags(field, selectedSingleValues)))
     }
 
     if (field.type === 'multi_select' && multiValue.length > 0) {
-      return renderReadTrigger(renderSelectFieldTags(field, multiValue))
+      return renderCellShell(renderReadTrigger(renderSelectFieldTags(field, multiValue)))
     }
 
-    return renderReadTrigger(
-      hasValue ? (
-        renderOverflowTooltip(displayValue, <span className="custom-field-text">{displayValue}</span>)
-      ) : (
-        renderPlaceholder('点击填写')
+    return renderCellShell(
+      renderReadTrigger(
+        hasValue ? (
+          renderOverflowTooltip(displayValue, <span className="custom-field-text">{displayValue}</span>)
+        ) : (
+          renderPlaceholder('点击填写')
+        ),
       ),
     )
   }
 
   if (field.type === 'text') {
-    return (
+    return renderCellShell(
       <div
-        className="custom-field-editor custom-field-editor-text"
+        className="custom-field-editor custom-field-editor-text task-edit-field-trigger"
         onClick={(event) => event.stopPropagation()}
       >
         <Input
-          size="small"
+          size="middle"
           value={textValue}
           placeholder="输入文本"
           autoFocus
@@ -4996,18 +5004,18 @@ function CustomFieldCell({
           onBlur={exitEditing}
           onPressEnter={exitEditing}
         />
-      </div>
+      </div>,
     )
   }
 
   if (field.type === 'number') {
-    return (
+    return renderCellShell(
       <div
-        className="custom-field-editor custom-field-editor-number"
+        className="custom-field-editor custom-field-editor-number task-edit-field-trigger"
         onClick={(event) => event.stopPropagation()}
       >
         <Input
-          size="small"
+          size="middle"
           value={numberValue}
           placeholder="输入数字"
           autoFocus
@@ -5015,18 +5023,18 @@ function CustomFieldCell({
           onBlur={exitEditing}
           onPressEnter={exitEditing}
         />
-      </div>
+      </div>,
     )
   }
 
   if (field.type === 'datetime') {
-    return (
+    return renderCellShell(
       <div
-        className="custom-field-editor custom-field-editor-date"
+        className="custom-field-editor custom-field-editor-date task-edit-field-trigger"
         onClick={(event) => event.stopPropagation()}
       >
         <DatePicker
-          size="small"
+          size="middle"
           value={dateValue}
           placeholder="选择日期"
           autoFocus
@@ -5043,18 +5051,18 @@ function CustomFieldCell({
             }
           }}
         />
-      </div>
+      </div>,
     )
   }
 
   if (field.type === 'single_select') {
-    return (
+    return renderCellShell(
       <div
-        className="custom-field-editor custom-field-editor-select"
+        className="custom-field-editor custom-field-editor-select task-edit-field-trigger"
         onClick={(event) => event.stopPropagation()}
       >
         <Select
-          size="small"
+          size="middle"
           autoFocus
           value={field.guid === 'status' ? task.status : singleValue}
           placeholder="选择选项"
@@ -5074,19 +5082,19 @@ function CustomFieldCell({
             }
           }}
         />
-      </div>
+      </div>,
     )
   }
 
   if (field.type === 'multi_select') {
-    return (
+    return renderCellShell(
       <div
-        className="custom-field-editor custom-field-editor-select"
+        className="custom-field-editor custom-field-editor-select task-edit-field-trigger"
         onClick={(event) => event.stopPropagation()}
       >
         <Select
           mode="multiple"
-          size="small"
+          size="middle"
           autoFocus
           value={multiValue}
           placeholder="选择选项"
@@ -5099,19 +5107,19 @@ function CustomFieldCell({
             }
           }}
         />
-      </div>
+      </div>,
     )
   }
 
   if (field.type === 'member') {
-    return (
+    return renderCellShell(
       <div
-        className="custom-field-editor custom-field-editor-select"
+        className="custom-field-editor custom-field-editor-select task-edit-field-trigger"
         onClick={(event) => event.stopPropagation()}
       >
         <Select
           mode="multiple"
-          size="small"
+          size="middle"
           autoFocus
           value={memberValue}
           placeholder="选择成员"
@@ -5132,17 +5140,17 @@ function CustomFieldCell({
             }
           }}
         />
-      </div>
+      </div>,
     )
   }
 
-  return (
+  return renderCellShell(
     renderOverflowTooltip(
       formatCustomFieldValue(task, field, users),
       <span className="custom-field-text">
         {formatCustomFieldValue(task, field, users)}
       </span>,
-    )
+    ),
   )
 }
 
@@ -5321,6 +5329,7 @@ function TaskTitleCell({
 }
 
 function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
+  const [priorityMenuOpen, setPriorityMenuOpen] = useState(false)
   const showPriority = task.priority !== Priority.None
 
   const handlePriorityChange = async (nextPriority: Priority) => {
@@ -5339,9 +5348,14 @@ function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
   }
 
   return (
-    <div className="cell cell-priority" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={`cell cell-priority task-edit-field-cell ${priorityMenuOpen ? 'active' : ''}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       <Dropdown
         trigger={['click']}
+        open={priorityMenuOpen}
+        onOpenChange={setPriorityMenuOpen}
         menu={{
           selectable: true,
           selectedKeys: [String(task.priority)],
@@ -5353,34 +5367,37 @@ function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
             { key: String(Priority.Urgent), label: '紧急' },
           ],
           onClick: ({ key }) => {
+            setPriorityMenuOpen(false)
             void handlePriorityChange(Number(key) as Priority)
           },
         }}
       >
-        {showPriority ? (
-          renderOverflowTooltip(
-            PriorityLabel[task.priority],
-            <Tag
-              variant="filled"
-              className="priority-tag priority-tag-editable"
-              style={{
-                color: PriorityColor[task.priority],
-                backgroundColor: `${PriorityColor[task.priority]}1a`,
-                cursor: 'pointer',
-              }}
+        <div className="task-edit-field-trigger">
+          {showPriority ? (
+            renderOverflowTooltip(
+              PriorityLabel[task.priority],
+              <Tag
+                variant="filled"
+                className="priority-tag priority-tag-editable"
+                style={{
+                  color: PriorityColor[task.priority],
+                  backgroundColor: `${PriorityColor[task.priority]}1a`,
+                  cursor: 'pointer',
+                }}
+              >
+                <FlagFilled />
+                <span>{PriorityLabel[task.priority]}</span>
+              </Tag>,
+            )
+          ) : (
+            <span
+              className="priority-placeholder"
+              style={{ cursor: 'pointer', display: 'inline-block', minWidth: 24 }}
             >
-              <FlagFilled />
-              <span>{PriorityLabel[task.priority]}</span>
-            </Tag>,
-          )
-        ) : (
-          <span
-            className="priority-placeholder"
-            style={{ cursor: 'pointer', display: 'inline-block', minWidth: 24 }}
-          >
-            -
-          </span>
-        )}
+              -
+            </span>
+          )}
+        </div>
       </Dropdown>
     </div>
   )
@@ -5450,7 +5467,12 @@ function TaskAssigneeCell({
   }
 
   return (
-    <div className="cell cell-assignee" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={`cell cell-assignee task-edit-field-cell ${
+        activeAssigneePickerKey === assigneePickerKey ? 'active' : ''
+      }`}
+      onClick={(e) => e.stopPropagation()}
+    >
       <AssigneePicker
         pickerKey={assigneePickerKey}
         open={activeAssigneePickerKey === assigneePickerKey}
@@ -5459,7 +5481,7 @@ function TaskAssigneeCell({
         users={users}
         taskMembers={task.members.filter((m) => m.role === 'assignee')}
         isTasklistView={isTasklistView}
-        triggerClassName="assignee-trigger"
+        triggerClassName="task-edit-field-trigger assignee-trigger"
         placeholderIcon={<UserOutlined className="empty-assignee" />}
         onChange={(value) => void handleAssigneeChange(value)}
         onCompletionModeChange={(mode) => void handleCompletionModeChange(mode)}
@@ -5472,6 +5494,7 @@ function TaskAssigneeCell({
 }
 
 function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
+  const [pickerOpen, setPickerOpen] = useState(false)
   const isSubtask = Boolean(task.parent_task_guid)
   const date = task[field] ? dayjs(Number(task[field]!.timestamp)) : null
 
@@ -5501,10 +5524,13 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
   }
 
   return (
-    <div className={`cell cell-${field}`} onClick={(e) => e.stopPropagation()}>
+    <div
+      className={`cell cell-${field} task-edit-field-cell ${pickerOpen ? 'active' : ''}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       {field === 'start' && isSubtask ? (
         <div
-          className="date-trigger date-trigger-readonly"
+          className="task-edit-field-trigger date-trigger date-trigger-readonly"
           title="子任务开始时间跟随父任务，不能单独修改"
         >
           {date ? (
@@ -5517,6 +5543,7 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
         <Popover
           trigger="click"
           placement="bottomLeft"
+          open={pickerOpen}
           content={
             <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
               <Calendar
@@ -5542,8 +5569,9 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
               )}
             </div>
           }
+          onOpenChange={setPickerOpen}
         >
-          <div className="date-trigger">
+          <div className="task-edit-field-trigger date-trigger">
             {date ? (
               renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
             ) : (
