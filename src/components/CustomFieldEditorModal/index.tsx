@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Modal from 'antd/es/modal'
 import Form from 'antd/es/form'
 import Input from 'antd/es/input'
@@ -28,6 +28,12 @@ import {
   type UpdateFieldOption,
 } from '@/services/customFieldService'
 
+interface DraftOption {
+  key: string
+  label: string
+  color?: string | null
+}
+
 interface Props {
   open: boolean
   projectId: string
@@ -35,7 +41,7 @@ interface Props {
   initialTab?: 'new' | 'existing'
   initialDraft?: {
     name?: string
-    options?: FieldOption[]
+    options?: DraftOption[]
   } | null
   field?: ApiCustomField | null
   existingFields?: ApiCustomField[]
@@ -63,6 +69,14 @@ function getEnabledFieldOptions(field?: ApiCustomField | null): FieldOption[] {
   return (field?.options ?? []).filter((option) => !(option.is_disabled === true))
 }
 
+function toEditableDraftOption(option: FieldOption, index: number): DraftOption {
+  return {
+    key: option.id ?? `existing-${index}`,
+    label: option.label,
+    color: option.color,
+  }
+}
+
 export default function CustomFieldEditorModal({
   open,
   projectId,
@@ -77,24 +91,17 @@ export default function CustomFieldEditorModal({
   onPickExisting,
 }: Props) {
   const isEdit = !!field
-  const [activeTab, setActiveTab] = useState<'new' | 'existing'>('new')
+  const [activeTab, setActiveTab] = useState<'new' | 'existing'>(field ? 'new' : initialTab)
   const [type, setType] = useState<CustomFieldType>(field?.field_type ?? initialType ?? 'text')
-  const [name, setName] = useState(field?.name ?? '')
-  const [options, setOptions] = useState<FieldOption[]>(() => getEnabledFieldOptions(field))
+  const [name, setName] = useState(field?.name ?? initialDraft?.name ?? '')
+  const [options, setOptions] = useState<DraftOption[]>(() =>
+    field
+      ? getEnabledFieldOptions(field).map(toEditableDraftOption)
+      : (initialDraft?.options ?? []),
+  )
   const [existingKeyword, setExistingKeyword] = useState('')
   const [selectedExistingFieldId, setSelectedExistingFieldId] = useState('')
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setActiveTab(field ? 'new' : initialTab)
-      setType(field?.field_type ?? initialType ?? 'text')
-      setName(field?.name ?? initialDraft?.name ?? '')
-      setOptions(field ? getEnabledFieldOptions(field) : (initialDraft?.options ?? []))
-      setExistingKeyword('')
-      setSelectedExistingFieldId('')
-    }
-  }, [open, field, initialType, initialTab, initialDraft])
 
   const needsOptions = type === 'select' || type === 'multi_select'
 
@@ -102,14 +109,14 @@ export default function CustomFieldEditorModal({
     setOptions((prev) => [
       ...prev,
       {
-        value: `opt_${Date.now()}_${prev.length}`,
+        key: `draft_${Date.now()}_${prev.length}`,
         label: '',
         color: PRESET_COLORS[prev.length % PRESET_COLORS.length],
       },
     ])
   }
 
-  const updateOption = (idx: number, patch: Partial<FieldOption>) => {
+  const updateOption = (idx: number, patch: Partial<DraftOption>) => {
     setOptions((prev) => prev.map((o, i) => (i === idx ? { ...o, ...patch } : o)))
   }
 
@@ -226,7 +233,7 @@ export default function CustomFieldEditorModal({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {options.map((opt, idx) => (
               <div
-                key={opt.value}
+                key={opt.key}
                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               >
                 <HolderOutlined style={{ color: '#86909c' }} />

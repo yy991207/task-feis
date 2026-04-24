@@ -446,6 +446,7 @@ export default function TaskListPage() {
 
       {selectedTask && (
         <TaskDetailPanel
+          key={selectedTask.guid}
           task={selectedTask}
           tasklists={tasklists}
           onRefresh={refreshData}

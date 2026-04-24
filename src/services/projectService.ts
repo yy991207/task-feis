@@ -1,6 +1,13 @@
 import { request } from './request'
 import { appConfig } from '@/config/appConfig'
 import type { Project } from '@/types/project'
+import type { ProjectSummaryDistributionItem } from '@/types/task'
+
+export interface ProjectSummary {
+  priority_distribution: ProjectSummaryDistributionItem[]
+  status_distribution: ProjectSummaryDistributionItem[]
+  [key: string]: unknown
+}
 
 export function listProjects(params?: {
   status?: 'active' | 'archived'
@@ -97,8 +104,8 @@ export function distributeProject(
   )
 }
 
-export function getProjectSummary(projectId: string): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>(
+export function getProjectSummary(projectId: string): Promise<ProjectSummary> {
+  return request<ProjectSummary>(
     `api/v1/task-center/projects/${projectId}/summary?user_id=${encodeURIComponent(appConfig.user_id)}`,
   )
 }

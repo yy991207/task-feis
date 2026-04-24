@@ -108,6 +108,21 @@ function normalizeActivityValue(value: unknown): string {
   return JSON.stringify(value)
 }
 
+function getActivityDisplayValue(
+  payload: Record<string, unknown>,
+  prefer: 'new' | 'old' = 'new',
+): string {
+  const labeledValue =
+    prefer === 'old' ? payload.old_value_label : payload.new_value_label
+  const rawValue = prefer === 'old' ? payload.old_value : payload.new_value
+
+  if (typeof labeledValue === 'string' && labeledValue.trim().length > 0) {
+    return normalizeActivityValue(labeledValue)
+  }
+
+  return normalizeActivityValue(rawValue)
+}
+
 function buildActivityMessage(activity: ApiTaskActivity, actorLabel: string): ReactNode {
   const payload = activity.payload as Record<string, unknown>
   const taskTitle =
@@ -138,7 +153,15 @@ function buildActivityMessage(activity: ApiTaskActivity, actorLabel: string): Re
         <>
           <span className="activity-person">{actor}</span>
           <span> 将任务状态更新为 </span>
-          <span className="activity-task-title">{normalizeActivityValue(payload.new_value)}</span>
+          <span className="activity-task-title">{getActivityDisplayValue(payload)}</span>
+        </>
+      )
+    case 'task.priority_changed':
+      return (
+        <>
+          <span className="activity-person">{actor}</span>
+          <span> 将任务优先级更新为 </span>
+          <span className="activity-task-title">{getActivityDisplayValue(payload)}</span>
         </>
       )
     case 'task.description_changed':
@@ -186,8 +209,8 @@ function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): Re
       ? payload.field_name.trim()
       : '字段'
   const value =
-    typeof payload.new_value === 'string'
-      ? normalizeActivityValue(payload.new_value)
+    typeof payload.new_value_label === 'string' || typeof payload.old_value_label === 'string'
+      ? getActivityDisplayValue(payload)
       : typeof payload.comment_excerpt === 'string'
         ? normalizeActivityValue(payload.comment_excerpt)
         : typeof payload.file_name === 'string'
@@ -212,6 +235,8 @@ function formatActivityDetail(activity: ApiTaskActivity, actorLabel: string): Re
         </span>
       )
     case 'task.status_changed':
+      return null
+    case 'task.priority_changed':
       return null
     case 'task.created':
     case 'task.completed':
@@ -263,11 +288,10 @@ export default function ActivityView({
 }: ActivityViewProps) {
   const [activities, setActivities] = useState<ApiTaskActivity[]>([])
   const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
 
     Promise.all([listMyActivities(1, 100), listMembers().catch(() => [])])
       .then(([activityList, members]) => {

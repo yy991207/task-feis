@@ -11,7 +11,6 @@ export type CustomFieldType =
 
 export interface FieldOption {
   id?: string | null
-  value: string
   label: string
   color?: string | null
   is_disabled?: boolean
