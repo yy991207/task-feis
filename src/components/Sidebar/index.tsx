@@ -95,6 +95,15 @@ type CreatingTarget = 'root' | string
 
 const encodeTasklistKey = (guid: string) => `tl:${guid}`
 const encodeGroupKey = (id: string) => `grp:${id}`
+const EMPTY_GROUP_PLACEHOLDER_PREFIX = 'grp-empty:'
+
+const buildEmptyGroupPlaceholderNode = (groupId: string): DataNode => ({
+  key: `${EMPTY_GROUP_PLACEHOLDER_PREFIX}${groupId}`,
+  title: <div className="empty-group-drop-hint">可拖拽清单加入该分组</div>,
+  selectable: false,
+  isLeaf: true,
+  className: 'empty-group-placeholder',
+})
 
 function buildSidebarDragNodeClassName(
   nodeKey: string,
@@ -751,16 +760,18 @@ export default function Sidebar({
       .sort((a, b) => a.sort_order - b.sort_order)
     const groupNodes: DataNode[] = nonDefaultGroups.map((group) => {
       const memberProjects = projectsByGroup[group.group_id] || []
-      const children: DataNode[] = memberProjects.map((proj) => ({
-        key: encodeTasklistKey(proj.project_id),
-        title: renderProjectTitle(proj),
-        isLeaf: true,
-        className: buildSidebarDragNodeClassName(
-          encodeTasklistKey(proj.project_id),
-          draggingTasklistKey,
-          dropIndicatorState,
-        ),
-      }))
+      const children: DataNode[] = memberProjects.length > 0
+        ? memberProjects.map((proj) => ({
+            key: encodeTasklistKey(proj.project_id),
+            title: renderProjectTitle(proj),
+            isLeaf: true,
+            className: buildSidebarDragNodeClassName(
+              encodeTasklistKey(proj.project_id),
+              draggingTasklistKey,
+              dropIndicatorState,
+            ),
+          }))
+        : [buildEmptyGroupPlaceholderNode(group.group_id)]
 
       return {
         key: encodeGroupKey(group.group_id),
@@ -919,6 +930,9 @@ export default function Sidebar({
     if (dropKey.startsWith('grp:')) {
       // Dropped onto a group node (whether gap or into)
       targetGroupId = dropKey.slice(4)
+    } else if (dropKey.startsWith(EMPTY_GROUP_PLACEHOLDER_PREFIX)) {
+      // Dropped onto空分组占位提示行时，仍然落到该分组。
+      targetGroupId = dropKey.slice(EMPTY_GROUP_PLACEHOLDER_PREFIX.length)
     } else if (dropKey === 'root') {
       // Dropped onto the root "任务清单" section → default group
       targetGroupId = defaultGroup?.group_id ?? null
@@ -1045,6 +1059,7 @@ export default function Sidebar({
             //   - can drop into root → move to default group
             if (dragKey.startsWith('tl:')) {
               if (dropKey.startsWith('grp:')) return true
+              if (dropKey.startsWith(EMPTY_GROUP_PLACEHOLDER_PREFIX)) return true
               if (dropKey.startsWith('tl:')) return dropPosition !== 0
               if (dropKey === 'root') return true
               return false
