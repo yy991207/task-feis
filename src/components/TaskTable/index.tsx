@@ -116,9 +116,14 @@ import CustomFieldsModal from '@/components/CustomFieldsModal'
 import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
 import UserSearchSelect from '@/components/UserSearchSelect'
 import TaskParentPickerModal from '@/components/TaskParentPickerModal'
+import {
+  appendSection,
+  ensureSectionVisible,
+  renameSectionInList,
+  shouldEnterSectionEditMode,
+} from '@/components/TaskTable/sectionState'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
-  canConfigureTaskCompletionMode,
   getTaskCompletionActions,
   getTaskCompletionSummary,
   isCurrentUserAssigneeCompleted,
@@ -928,7 +933,6 @@ function AssigneePicker({
       return matchedMember ?? matchedUser ?? { id, name: id }
     })
   const completionSummary = task ? getTaskCompletionSummary(task) : null
-  const canConfigureMode = task ? canConfigureTaskCompletionMode(task) : false
   const currentCompletionMode = task?.completion_mode ?? 'any'
 
   const handlePopoverOpenChange = (open: boolean) => {
@@ -960,7 +964,7 @@ function AssigneePicker({
             onChange={(nextValue) => onChange(Array.isArray(nextValue) ? nextValue : [])}
             users={users}
           />
-          {task && canConfigureMode ? (
+          {task ? (
             <div className="assignee-completion-config">
               <Dropdown
                 trigger={['click']}
@@ -1380,6 +1384,7 @@ export default function TaskTable({
   const [creatingInSection, setCreatingInSection] = useState<string | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskAssigneeIds, setNewTaskAssigneeIds] = useState<string[]>([])
+  const [newTaskCompletionMode, setNewTaskCompletionMode] = useState<'any' | 'all'>('any')
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>(Priority.None)
   const [newTaskStart, setNewTaskStart] = useState<dayjs.Dayjs | null>(null)
   const [newTaskDue, setNewTaskDue] = useState<dayjs.Dayjs | null>(null)
@@ -1796,6 +1801,9 @@ export default function TaskTable({
       if (animationTimerRef.current !== null) {
         window.clearTimeout(animationTimerRef.current)
       }
+      if (pendingSectionEditTimerRef.current !== null) {
+        window.clearTimeout(pendingSectionEditTimerRef.current)
+      }
     }
   }, [])
 
@@ -1809,6 +1817,7 @@ export default function TaskTable({
       return next
     })
     setNewTaskAssigneeIds([currentUser.id])
+    setNewTaskCompletionMode('any')
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
@@ -1829,6 +1838,7 @@ export default function TaskTable({
     setCreatingInSection(null)
     setNewTaskTitle('')
     setNewTaskAssigneeIds([])
+    setNewTaskCompletionMode('any')
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
@@ -1856,7 +1866,7 @@ export default function TaskTable({
         project_id: tasklist!.guid,
         title: summary,
         assignee_ids: assigneeIds,
-        completion_mode: assigneeIds.length > 1 ? 'any' : undefined,
+        completion_mode: newTaskCompletionMode,
         priority: toPriorityString(newTaskPriority),
         section_id: sectionGuid,
         start_date: newTaskStart ? newTaskStart.toISOString() : undefined,
@@ -1919,6 +1929,7 @@ export default function TaskTable({
     newTaskTitle,
     submittingSectionGuid,
     newTaskAssigneeIds,
+    newTaskCompletionMode,
     newTaskPriority,
     newTaskStart,
     newTaskDue,
@@ -2260,6 +2271,35 @@ export default function TaskTable({
   const [editingSectionGuid, setEditingSectionGuid] = useState<string | null>(null)
 
   const [editingSectionName, setEditingSectionName] = useState('')
+  const [pendingEditingSection, setPendingEditingSection] = useState<Section | null>(null)
+  const pendingSectionEditTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!pendingEditingSection) {
+      return
+    }
+
+    const sectionExists = sectionSource.some(
+      (section) => section.guid === pendingEditingSection.guid,
+    )
+    if (!shouldEnterSectionEditMode(creatingSection, pendingEditingSection.guid, sectionExists)) {
+      return
+    }
+
+    pendingSectionEditTimerRef.current = window.setTimeout(() => {
+      setEditingSectionGuid(pendingEditingSection.guid)
+      setEditingSectionName(pendingEditingSection.name)
+      setPendingEditingSection(null)
+      pendingSectionEditTimerRef.current = null
+    }, 0)
+
+    return () => {
+      if (pendingSectionEditTimerRef.current !== null) {
+        window.clearTimeout(pendingSectionEditTimerRef.current)
+        pendingSectionEditTimerRef.current = null
+      }
+    }
+  }, [creatingSection, pendingEditingSection, sectionSource])
 
   const handleStartCreateSection = async () => {
     if (creatingSection) return
@@ -2275,7 +2315,10 @@ export default function TaskTable({
         name: apiSection.name,
         sort_order: apiSection.sort_order,
       }
-      setLocalSections((prev) => [...prev, nextSection])
+      // 分组数据是异步从父层拉回来的；这里必须基于当前页面实际分组源做追加，
+      // 不能直接拿初始本地状态追加，不然会把页面上已有分组暂时冲掉。
+      setLocalSections(appendSection(sectionSource, nextSection))
+      setVisibleSectionGuids((prev) => ensureSectionVisible(prev, nextSection.guid))
       setHasLocalSectionEdits(true)
       onTasklistUpdated?.({
         ...tasklist,
@@ -2288,9 +2331,9 @@ export default function TaskTable({
       animationTimerRef.current = window.setTimeout(() => {
         setAnimatedSectionGuid((prev) => (prev === nextSection.guid ? null : prev))
       }, 900)
-      // 立即进入重命名模式
-      setEditingSectionGuid(nextSection.guid)
-      setEditingSectionName(nextSection.name)
+      // 新建按钮的点击焦点可能会让输入框刚挂载就触发 blur，这里先记待编辑分组，
+      // 等创建 loading 结束、分组行稳定挂载后再切进配置输入态。
+      setPendingEditingSection(nextSection)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '创建任务分组失败'
       message.error(msg)
@@ -2307,9 +2350,7 @@ export default function TaskTable({
     if (!current || current.name === name) return
 
     // Optimistic
-    setLocalSections((prev) =>
-      prev.map((s) => (s.guid === sectionGuid ? { ...s, name } : s)),
-    )
+    setLocalSections(renameSectionInList(sectionSource, sectionGuid, name))
     setHasLocalSectionEdits(true)
 
     try {
@@ -3668,6 +3709,47 @@ export default function TaskTable({
       <AssigneePicker
         pickerKey={`inline-assignee-${sectionGuid}`}
         open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
+        task={{
+          guid: '__inline-create__',
+          task_id: '__inline-create__',
+          summary: '',
+          description: '',
+          status: 'todo',
+          completed_at: '0',
+          created_at: '0',
+          updated_at: '0',
+          creator: { id: currentUser.id, type: 'user', name: currentUser.name },
+          mode: newTaskCompletionMode === 'all' ? 1 : 2,
+          completion_mode: newTaskCompletionMode,
+          assignee_completions: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
+            user_id: id,
+            is_completed: false,
+            completed_at: null,
+            user_name: users.find((user) => user.id === id)?.name ?? id,
+            avatar_url: users.find((user) => user.id === id)?.avatar ?? null,
+          })),
+          priority: Priority.None,
+          tags: [],
+          is_milestone: false,
+          source: 1,
+          parent_task_guid: '',
+          attachment_count: 0,
+          comment_count: 0,
+          subtask_count: 0,
+          participant_ids: [],
+          members: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
+            id,
+            role: 'assignee' as const,
+            type: 'user' as const,
+            name: users.find((user) => user.id === id)?.name ?? id,
+            avatar: users.find((user) => user.id === id)?.avatar,
+          })),
+          tasklists: [],
+          dependencies: [],
+          custom_fields: [],
+          reminders: [],
+          url: '',
+        }}
         value={newTaskAssigneeIds}
         users={users}
         isTasklistView={isTasklistView}
@@ -3678,6 +3760,7 @@ export default function TaskTable({
           />
         }
         onChange={setNewTaskAssigneeIds}
+        onCompletionModeChange={setNewTaskCompletionMode}
         onInteract={markInlineCreateInteracting}
         onOpenChange={(open) => {
           setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)

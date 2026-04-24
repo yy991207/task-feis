@@ -3,7 +3,6 @@ import type { CSSProperties, ReactNode } from 'react'
 import Button from 'antd/es/button'
 import Checkbox from 'antd/es/checkbox'
 import Input from 'antd/es/input'
-import Typography from 'antd/es/typography'
 import Space from 'antd/es/space'
 import Avatar from 'antd/es/avatar'
 import Popover from 'antd/es/popover'
@@ -88,14 +87,12 @@ import TaskRichInput, {
 import UserSearchSelect from '@/components/UserSearchSelect'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
-  canConfigureTaskCompletionMode,
   getTaskCompletionActions,
   getTaskCompletionSummary,
   isCurrentUserAssigneeCompleted,
 } from '@/utils/taskCompletion'
 import './index.less'
 
-const { Text } = Typography
 const PARENT_TASK_CHAIN_MAX_DEPTH = 5
 const DETAIL_PANEL_DEFAULT_WIDTH = 560
 const DETAIL_PANEL_MIN_WIDTH = 520
@@ -675,6 +672,7 @@ export default function TaskDetailPanel({
   const [subtaskCreating, setSubtaskCreating] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
+  const [subtaskCompletionMode, setSubtaskCompletionMode] = useState<'any' | 'all'>('any')
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
   const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
   const [detailTasklistSections, setDetailTasklistSections] = useState<Section[]>([])
@@ -752,9 +750,6 @@ export default function TaskDetailPanel({
     const alreadyAdded = currentTasklistRefs.some((ref) => ref.section_guid === item.guid)
     return matchedKeyword && !alreadyAdded
   })
-  const currentTasklistSections = currentTasklistRefs
-    .map((item) => tasklistSectionSource.find((section) => section.guid === item.section_guid))
-    .filter((item): item is NonNullable<typeof item> => Boolean(item))
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
   const updateTaskAttachmentCount = (nextCount: number) => {
@@ -808,6 +803,7 @@ export default function TaskDetailPanel({
     setSubtaskCreating(false)
     setSubtaskTitle('')
     setSubtaskAssigneeIds([])
+    setSubtaskCompletionMode('any')
     setSubtaskDue(null)
     setParentTaskChain([])
     setDetailTasklistSections([])
@@ -1353,6 +1349,7 @@ export default function TaskDetailPanel({
   const resetSubtaskCreateDraft = () => {
     setSubtaskTitle('')
     setSubtaskAssigneeIds([])
+    setSubtaskCompletionMode('any')
     setSubtaskDue(null)
   }
 
@@ -1382,7 +1379,7 @@ export default function TaskDetailPanel({
         parent_task_id: task.guid,
         section_id: primarySectionGuid || primaryTasklistRef?.section_guid,
         assignee_ids: subtaskAssigneeIds,
-        completion_mode: subtaskAssigneeIds.length > 1 ? 'any' : undefined,
+        completion_mode: subtaskCompletionMode,
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
@@ -1504,7 +1501,7 @@ export default function TaskDetailPanel({
   const handleSubtaskAssigneeChange = async (subtask: Task, values: string[]) => {
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
     const defaultParticipantIds = buildDefaultParticipantIds(subtask.creator.id, nextAssigneeIds)
-    const nextCompletionMode = nextAssigneeIds.length > 1 ? (subtask.completion_mode ?? 'any') : 'any'
+    const nextCompletionMode = subtask.completion_mode ?? 'any'
     try {
       const apiTask = await updateTaskApi(subtask.guid, { assignee_ids: nextAssigneeIds, completion_mode: nextCompletionMode })
       if (defaultParticipantIds.length > 0) {
@@ -1619,30 +1616,6 @@ export default function TaskDetailPanel({
     } catch (err) {
       onTaskUpdated?.(task)
       message.error(err instanceof Error ? err.message : '切换任务分组失败')
-    }
-  }
-
-  const handleRemoveTaskFromSection = async (sectionGuid: string) => {
-    if (!currentTasklist) {
-      return
-    }
-
-    const nextTasklists = task.tasklists.filter(
-      (item) =>
-        item.tasklist_guid !== currentTasklist.guid || item.section_guid !== sectionGuid,
-    )
-
-    if (nextTasklists.length === task.tasklists.length) {
-      return
-    }
-
-    try {
-      await handleTaskPatch({
-        tasklists: nextTasklists,
-      })
-      message.success('已移除任务分组')
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '移除任务分组失败')
     }
   }
 
@@ -2127,38 +2100,36 @@ export default function TaskDetailPanel({
                     users={availableUsers}
                     placeholder="添加负责人"
                   />
-                  {canConfigureTaskCompletionMode(task) ? (
-                    <div className="detail-assignee-completion-config">
-                      <Dropdown
-                        trigger={['click']}
-                        menu={{
-                          selectable: true,
-                          selectedKeys: [task.completion_mode ?? 'any'],
-                          items: [
-                            { key: 'all', label: '全部负责人均需完成' },
-                            { key: 'any', label: '任一负责人完成即可' },
-                          ],
-                          onClick: ({ key }) => {
-                            void handleCompletionModeChange(key === 'all' ? 'all' : 'any')
-                          },
-                        }}
+                  <div className="detail-assignee-completion-config">
+                    <Dropdown
+                      trigger={['click']}
+                      menu={{
+                        selectable: true,
+                        selectedKeys: [task.completion_mode ?? 'any'],
+                        items: [
+                          { key: 'all', label: '全部负责人均需完成' },
+                          { key: 'any', label: '任一负责人完成即可' },
+                        ],
+                        onClick: ({ key }) => {
+                          void handleCompletionModeChange(key === 'all' ? 'all' : 'any')
+                        },
+                      }}
+                    >
+                      <Button
+                        type="text"
+                        size="small"
+                        className="detail-assignee-completion-btn"
                       >
-                        <Button
-                          type="text"
-                          size="small"
-                          className="detail-assignee-completion-btn"
-                        >
-                          {getTaskCompletionModeLabel(task)}
-                          <DownOutlined />
-                        </Button>
-                      </Dropdown>
-                      {taskCompletionSummary.totalCount > 0 ? (
-                        <span className="detail-assignee-completion-progress">
-                          {taskCompletionSummary.doneCount}/{taskCompletionSummary.totalCount} 人已完成
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
+                        {getTaskCompletionModeLabel(task)}
+                        <DownOutlined />
+                      </Button>
+                    </Dropdown>
+                    {taskCompletionSummary.totalCount > 0 ? (
+                      <span className="detail-assignee-completion-progress">
+                        {taskCompletionSummary.doneCount}/{taskCompletionSummary.totalCount} 人已完成
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               }
             >
@@ -2330,35 +2301,6 @@ export default function TaskDetailPanel({
                       onOpenChange={setSectionPopoverOpen}
                       content={
                         <div className="detail-popover-panel tasklist-section-panel">
-                          <div className="tasklist-section-panel-title">
-                            <Text strong>已添加任务分组</Text>
-                          </div>
-                          <div className="tasklist-section-tags">
-                            {detailTasklistSectionsLoading ? (
-                              <span className="tasklist-section-empty">分组加载中</span>
-                            ) : currentTasklistSections.length > 0 ? (
-                              currentTasklistSections.map((item) => (
-                                <span key={item.guid} className="tasklist-section-chip">
-                                  <span className="tasklist-section-chip-name">{item.name}</span>
-                                  <button
-                                    type="button"
-                                    className="tasklist-section-chip-remove"
-                                    onClick={() => void handleRemoveTaskFromSection(item.guid)}
-                                    disabled={currentTasklistSections.length === 1}
-                                    title={
-                                      currentTasklistSections.length === 1
-                                        ? '至少保留一个任务分组'
-                                        : '移除任务分组'
-                                    }
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))
-                            ) : (
-                              <span className="tasklist-section-empty">当前还没有任务分组</span>
-                            )}
-                          </div>
                           <Input
                             size="small"
                             value={sectionSearchValue}
@@ -2390,8 +2332,14 @@ export default function TaskDetailPanel({
                       <span className="tasklist-section-trigger">
                         {detailTasklistSectionsLoading
                           ? '分组加载中'
-                          : currentTasklistSections.length > 0
-                          ? currentTasklistSections.map((item) => item.name).join('、')
+                          : currentTasklistRefs.length > 0
+                          ? currentTasklistRefs
+                              .map((item) =>
+                                tasklistSectionSource.find((section) => section.guid === item.section_guid),
+                              )
+                              .filter((item): item is NonNullable<typeof item> => Boolean(item))
+                              .map((item) => item.name)
+                              .join('、')
                           : '选择分组'}
                         <Tooltip title="选择任务分组">
                           <DownOutlined className="tasklist-arrow" />
@@ -2625,42 +2573,40 @@ export default function TaskDetailPanel({
                                 }
                                 users={availableUsers}
                               />
-                              {canConfigureTaskCompletionMode(subtask) ? (
-                                <div className="detail-assignee-completion-config">
-                                  <Dropdown
-                                    trigger={['click']}
-                                    menu={{
-                                      selectable: true,
-                                      selectedKeys: [subtask.completion_mode ?? 'any'],
-                                      items: [
-                                        { key: 'all', label: '全部负责人均需完成' },
-                                        { key: 'any', label: '任一负责人完成即可' },
-                                      ],
-                                      onClick: ({ key }) => {
-                                        void handleSubtaskCompletionModeChange(
-                                          subtask,
-                                          key === 'all' ? 'all' : 'any',
-                                        )
-                                      },
-                                    }}
+                              <div className="detail-assignee-completion-config">
+                                <Dropdown
+                                  trigger={['click']}
+                                  menu={{
+                                    selectable: true,
+                                    selectedKeys: [subtask.completion_mode ?? 'any'],
+                                    items: [
+                                      { key: 'all', label: '全部负责人均需完成' },
+                                      { key: 'any', label: '任一负责人完成即可' },
+                                    ],
+                                    onClick: ({ key }) => {
+                                      void handleSubtaskCompletionModeChange(
+                                        subtask,
+                                        key === 'all' ? 'all' : 'any',
+                                      )
+                                    },
+                                  }}
+                                >
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    className="detail-assignee-completion-btn"
                                   >
-                                    <Button
-                                      type="text"
-                                      size="small"
-                                      className="detail-assignee-completion-btn"
-                                    >
-                                      {getTaskCompletionModeLabel(subtask)}
-                                      <DownOutlined />
-                                    </Button>
-                                  </Dropdown>
-                                  {getTaskCompletionSummary(subtask).totalCount > 0 ? (
-                                    <span className="detail-assignee-completion-progress">
-                                      {getTaskCompletionSummary(subtask).doneCount}/
-                                      {getTaskCompletionSummary(subtask).totalCount} 人已完成
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ) : null}
+                                    {getTaskCompletionModeLabel(subtask)}
+                                    <DownOutlined />
+                                  </Button>
+                                </Dropdown>
+                                {getTaskCompletionSummary(subtask).totalCount > 0 ? (
+                                  <span className="detail-assignee-completion-progress">
+                                    {getTaskCompletionSummary(subtask).doneCount}/
+                                    {getTaskCompletionSummary(subtask).totalCount} 人已完成
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
                           }
                         >
@@ -2795,6 +2741,33 @@ export default function TaskDetailPanel({
                                 users={availableUsers}
                                 style={{ width: '100%' }}
                               />
+                              <div className="detail-assignee-completion-config">
+                                <Dropdown
+                                  trigger={['click']}
+                                  menu={{
+                                    selectable: true,
+                                    selectedKeys: [subtaskCompletionMode],
+                                    items: [
+                                      { key: 'all', label: '全部负责人均需完成' },
+                                      { key: 'any', label: '任一负责人完成即可' },
+                                    ],
+                                    onClick: ({ key }) => {
+                                      setSubtaskCompletionMode(key === 'all' ? 'all' : 'any')
+                                    },
+                                  }}
+                                >
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    className="detail-assignee-completion-btn"
+                                  >
+                                    {subtaskCompletionMode === 'all'
+                                      ? '全部负责人均需完成'
+                                      : '任一负责人完成即可'}
+                                    <DownOutlined />
+                                  </Button>
+                                </Dropdown>
+                              </div>
                             </div>
                           }
                         >
