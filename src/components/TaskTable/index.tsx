@@ -130,6 +130,7 @@ import {
   getTaskCompletionSummary,
   isCurrentUserAssigneeCompleted,
 } from '@/utils/taskCompletion'
+import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
 import {
   listCustomFields,
   updateCustomField,
@@ -1557,6 +1558,7 @@ export default function TaskTable({
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
   const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
   const isTasklistView = Boolean(tasklist)
+  const canCreateInTasklist = canCurrentUserCreateInTasklist(tasklist, currentUser.id)
   const projectIdForView = tasklist?.guid ?? ''
   const [customFieldsReadyProjectId, setCustomFieldsReadyProjectId] = useState<string>('')
   void creatingCustomField
@@ -1810,6 +1812,10 @@ export default function TaskTable({
   }, [])
 
   const startInlineCreate = useCallback((sectionGuid: string) => {
+    if (!canCreateInTasklist) {
+      message.warning('只有清单创建者才能创建任务')
+      return
+    }
     setCollapsedSections((prev) => {
       if (!prev.has(sectionGuid)) {
         return prev
@@ -1825,7 +1831,7 @@ export default function TaskTable({
     setNewTaskDue(null)
     setInlineCreateFocusedField('title')
     setCreatingInSection(sectionGuid)
-  }, [currentUser.id])
+  }, [canCreateInTasklist, currentUser.id])
 
   const toggleSection = useCallback((sectionGuid: string) => {
     setCollapsedSections((prev) => {
@@ -1849,6 +1855,10 @@ export default function TaskTable({
   }
 
   const handleInlineCreate = useCallback(async (sectionGuid?: string) => {
+    if (!canCreateInTasklist) {
+      message.warning('只有清单创建者才能创建任务')
+      return
+    }
     const submittingKey = sectionGuid ?? '__default__'
     if (inlineCreateSubmittingRef.current === submittingKey || submittingSectionGuid === sectionGuid) {
       return
@@ -1927,6 +1937,7 @@ export default function TaskTable({
       setSubmittingSectionGuid(null)
     }
   }, [
+    canCreateInTasklist,
     currentUser.id,
     newTaskTitle,
     submittingSectionGuid,
@@ -2307,6 +2318,10 @@ export default function TaskTable({
     if (creatingSection) return
     if (!tasklist) {
       message.warning('请先选择一个清单')
+      return
+    }
+    if (!canCreateInTasklist) {
+      message.warning('只有清单创建者才能创建任务分组')
       return
     }
     setCreatingSection(true)
@@ -3055,7 +3070,7 @@ export default function TaskTable({
     ['--task-create-highlight' as string]: token.colorFillSecondary,
   } as React.CSSProperties
 
-  const createButton = config.toolbar.showCreate ? (
+  const createButton = config.toolbar.showCreate && canCreateInTasklist ? (
     <Dropdown menu={createMenuItems}>
       <Button size="small" icon={<PlusOutlined />}>
         新建任务
@@ -4030,7 +4045,7 @@ export default function TaskTable({
       <Tag color="default" className="section-count-tag">
         {sectionTasks.length}
       </Tag>
-      {isTasklistView && isSectionGroupMode && (
+      {canCreateInTasklist && isTasklistView && isSectionGroupMode && (
         <div className="section-actions" onClick={(e) => e.stopPropagation()}>
           <Button
             size="small"
@@ -4094,7 +4109,7 @@ export default function TaskTable({
           return renderInlineCreateTitleCell(record.section.guid)
         }
         if (record.rowKind === 'newTask') {
-          return (
+          return canCreateInTasklist ? (
             <button
               type="button"
               className="new-task-entry"
@@ -4102,7 +4117,7 @@ export default function TaskTable({
             >
               <span className="new-task-entry-label">新建任务</span>
             </button>
-          )
+          ) : null
         }
 
         return (
@@ -4549,7 +4564,7 @@ export default function TaskTable({
             content: createTaskInlineRow(section.guid),
           })
         // 任务分组里的“新建任务”是分组内入口，不跟顶部总按钮共用开关。
-        } else if (isTasklistView && isSectionGroupMode) {
+        } else if (isTasklistView && isSectionGroupMode && canCreateInTasklist) {
           rows.push({
             key: `new-task-${section.guid}`,
             guid: `new-task-${section.guid}`,
@@ -4800,7 +4815,7 @@ export default function TaskTable({
         <>
           {renderTaskTable()}
 
-          {isSectionGroupMode && (
+          {canCreateInTasklist && isSectionGroupMode && (
             <Button
               type="text"
               icon={<PlusOutlined />}

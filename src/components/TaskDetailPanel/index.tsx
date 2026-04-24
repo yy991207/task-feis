@@ -91,6 +91,7 @@ import {
   getTaskCompletionSummary,
   isCurrentUserAssigneeCompleted,
 } from '@/utils/taskCompletion'
+import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
 import './index.less'
 
 const PARENT_TASK_CHAIN_MAX_DEPTH = 5
@@ -741,6 +742,7 @@ export default function TaskDetailPanel({
   const currentTasklist = primaryTasklistRef
     ? tasklists.find((item) => item.guid === primaryTasklistRef.tasklist_guid)
     : undefined
+  const primaryTasklist = currentTasklist
   const currentTasklistRefs = task.tasklists.filter(
     (item) => item.tasklist_guid === currentTasklist?.guid,
   )
@@ -756,6 +758,7 @@ export default function TaskDetailPanel({
     return matchedKeyword && !alreadyAdded
   })
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
+  const canCreateInTasklist = canCurrentUserCreateInTasklist(primaryTasklist, appConfig.user_id)
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
   const updateTaskAttachmentCount = (nextCount: number) => {
     const safeCount = Math.max(0, nextCount)
@@ -1369,6 +1372,10 @@ export default function TaskDetailPanel({
   }
 
   const handleAddSubtask = async () => {
+    if (!canCreateInTasklist) {
+      message.warning('只有清单创建者才能创建任务')
+      return
+    }
     if (subtaskSubmittingRef.current) {
       return
     }
@@ -2901,7 +2908,7 @@ export default function TaskDetailPanel({
                   </div>
                 </div>
               )}
-              {canCreateSubtask && !subtaskCreating && (
+              {canCreateSubtask && canCreateInTasklist && !subtaskCreating && (
                 <button
                   type="button"
                   className="detail-subtask-row detail-subtask-add"
