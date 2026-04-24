@@ -758,6 +758,7 @@ export default function TaskDetailPanel({
     return matchedKeyword && !alreadyAdded
   })
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
+  // 详情里的子任务仍然属于当前清单，这里复用任务表同一条创建权限，避免入口不一致。
   const canCreateInTasklist = canCurrentUserCreateInTasklist(primaryTasklist, appConfig.user_id)
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
   const updateTaskAttachmentCount = (nextCount: number) => {

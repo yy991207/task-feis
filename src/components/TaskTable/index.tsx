@@ -1558,6 +1558,7 @@ export default function TaskTable({
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
   const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
   const isTasklistView = Boolean(tasklist)
+  // 这轮只限制“创建”相关入口，现有编辑链路先保持不变，避免把权限改动扩大成整套重构。
   const canCreateInTasklist = canCurrentUserCreateInTasklist(tasklist, currentUser.id)
   const projectIdForView = tasklist?.guid ?? ''
   const [customFieldsReadyProjectId, setCustomFieldsReadyProjectId] = useState<string>('')
