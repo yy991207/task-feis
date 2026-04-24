@@ -118,6 +118,8 @@ import UserSearchSelect from '@/components/UserSearchSelect'
 import TaskParentPickerModal from '@/components/TaskParentPickerModal'
 import {
   appendSection,
+  buildDeleteSectionPlan,
+  commitDeleteSection,
   ensureSectionVisible,
   renameSectionInList,
   shouldEnterSectionEditMode,
@@ -2384,48 +2386,48 @@ export default function TaskTable({
       message.warning('没有可迁移到的默认任务分组')
       return
     }
-    // 找到该分组下当前清单中的所有任务
-    const affectedTasks = tasks.filter((t) =>
-      t.tasklists.some(
-        (r) =>
-          r.tasklist_guid === tasklist.guid && r.section_guid === sectionGuid,
-      ),
-    )
-
-    const prevLocal = localSections
-    const prevHasEdits = hasLocalSectionEdits
-    const nextSections = sectionSource.filter((s) => s.guid !== sectionGuid)
-    setLocalSections(nextSections)
-    setHasLocalSectionEdits(true)
-    onTasklistUpdated?.({ ...tasklist, sections: nextSections })
-
-    // 先把任务迁到默认分组（本地 + 后端）
-    for (const t of affectedTasks) {
-      const updated: Task = {
-        ...t,
-        tasklists: t.tasklists.map((r) =>
-          r.tasklist_guid === tasklist.guid
-            ? { ...r, section_guid: defaultSection.guid }
-            : r,
-        ),
-      }
-      onTaskUpdated?.(updated)
+    const deletePlan = buildDeleteSectionPlan({
+      currentSections: sectionSource,
+      tasks,
+      tasklistGuid: tasklist.guid,
+      sectionGuid,
+    })
+    if (!deletePlan) {
+      message.warning('没有可迁移到的默认任务分组')
+      return
     }
-    try {
-      await Promise.all(
-        affectedTasks.map((t) => moveTaskToSection(t.guid, defaultSection.guid)),
+
+    const taskGuidsToMove = tasks
+      .filter((task) =>
+        task.tasklists.some(
+          (ref) =>
+            ref.tasklist_guid === tasklist.guid && ref.section_guid === sectionGuid,
+        ),
       )
-      await apiDeleteSection(sectionGuid)
+      .map((task) => task.guid)
+
+    try {
+      await commitDeleteSection({
+        taskGuidsToMove,
+        targetSectionGuid: defaultSection.guid,
+        moveTaskToSection,
+        deleteSection: () => apiDeleteSection(sectionGuid),
+      })
+      // 删除分组涉及任务迁移和分组删除两步后端操作，只有都成功了，前端才提交本地状态。
+      setLocalSections(deletePlan.nextSections)
+      setHasLocalSectionEdits(true)
+      onTasklistUpdated?.({ ...tasklist, sections: deletePlan.nextSections })
+      deletePlan.nextTasks.forEach((task, index) => {
+        if (task !== tasks[index]) {
+          onTaskUpdated?.(task)
+        }
+      })
       message.success(
-        affectedTasks.length > 0
-          ? `已删除任务分组，${affectedTasks.length} 个任务已移至「${defaultSection.name}」`
+        deletePlan.affectedTaskCount > 0
+          ? `已删除任务分组，${deletePlan.affectedTaskCount} 个任务已移至「${defaultSection.name}」`
           : '已删除任务分组',
       )
     } catch (err: unknown) {
-      setLocalSections(prevLocal)
-      setHasLocalSectionEdits(prevHasEdits)
-      onTasklistUpdated?.({ ...tasklist, sections: sectionSource })
-      for (const t of affectedTasks) onTaskUpdated?.(t)
       const msg = err instanceof Error ? err.message : '删除任务分组失败'
       message.error(msg)
     }
