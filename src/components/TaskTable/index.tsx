@@ -91,7 +91,7 @@ import {
   listSubtasks,
 } from '@/services/taskService'
 import { updateProject } from '@/services/projectService'
-import { listMembers } from '@/services/teamService'
+import { listMembers, type TeamMember } from '@/services/teamService'
 import { appConfig } from '@/config/appConfig'
 import {
   createSection as apiCreateSection,
@@ -117,6 +117,12 @@ import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
 import UserSearchSelect from '@/components/UserSearchSelect'
 import TaskParentPickerModal from '@/components/TaskParentPickerModal'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
+import {
+  canConfigureTaskCompletionMode,
+  getTaskCompletionActions,
+  getTaskCompletionSummary,
+  isCurrentUserAssigneeCompleted,
+} from '@/utils/taskCompletion'
 import {
   listCustomFields,
   updateCustomField,
@@ -211,7 +217,7 @@ const QUICK_CREATE_RECOMMENDED_FIELDS: Array<{
   label: string
   type: ApiCustomFieldType
   draft?: {
-    options?: Array<{ value: string; label: string; color?: string | null }>
+    options?: Array<{ key: string; label: string; color?: string | null }>
   }
 }> = [
   {
@@ -220,9 +226,9 @@ const QUICK_CREATE_RECOMMENDED_FIELDS: Array<{
     type: 'select',
     draft: {
       options: [
-        { value: 'urgent', label: '高', color: '#f53f3f' },
-        { value: 'medium', label: '中', color: '#ff7d00' },
-        { value: 'low', label: '低', color: '#00b42a' },
+        { key: 'urgent', label: '高', color: '#f53f3f' },
+        { key: 'medium', label: '中', color: '#ff7d00' },
+        { key: 'low', label: '低', color: '#00b42a' },
       ],
     },
   },
@@ -233,9 +239,9 @@ const QUICK_CREATE_RECOMMENDED_FIELDS: Array<{
     type: 'select',
     draft: {
       options: [
-        { value: 'high', label: '高', color: '#f53f3f' },
-        { value: 'medium', label: '中', color: '#ff7d00' },
-        { value: 'low', label: '低', color: '#00b42a' },
+        { key: 'high', label: '高', color: '#f53f3f' },
+        { key: 'medium', label: '中', color: '#ff7d00' },
+        { key: 'low', label: '低', color: '#00b42a' },
       ],
     },
   },
@@ -872,6 +878,7 @@ interface DateConfigPanelProps {
 interface AssigneePickerProps {
   pickerKey: string
   open: boolean
+  task?: Task
   value?: string[]
   users: User[]
   taskMembers?: Member[]
@@ -879,12 +886,14 @@ interface AssigneePickerProps {
   isTasklistView: boolean
   triggerClassName?: string
   onChange: (value: string[]) => void
+  onCompletionModeChange?: (mode: 'any' | 'all') => void
   onInteract?: () => void
   onOpenChange?: (open: boolean) => void
 }
 
 function AssigneePicker({
   open,
+  task,
   value,
   users,
   taskMembers,
@@ -892,11 +901,11 @@ function AssigneePicker({
   isTasklistView,
   triggerClassName,
   onChange,
+  onCompletionModeChange,
   onInteract,
   onOpenChange,
 }: AssigneePickerProps) {
   const popupContainerRef = useRef<HTMLDivElement | null>(null)
-  const [selectOpen, setSelectOpen] = useState(open)
   const membersById = useMemo(
     () =>
       new Map(
@@ -911,15 +920,18 @@ function AssigneePicker({
       ),
     [taskMembers],
   )
-  const selectedUsers = (value ?? [])
-    .map((id) => {
+  const selectedUsers = task
+    ? buildTaskAssigneeUsers(task, users)
+    : (value ?? []).map((id) => {
       const matchedMember = membersById.get(id)
       const matchedUser = users.find((user) => user.id === id)
       return matchedMember ?? matchedUser ?? { id, name: id }
     })
+  const completionSummary = task ? getTaskCompletionSummary(task) : null
+  const canConfigureMode = task ? canConfigureTaskCompletionMode(task) : false
+  const currentCompletionMode = task?.completion_mode ?? 'any'
 
   const handlePopoverOpenChange = (open: boolean) => {
-    setSelectOpen(open)
     onOpenChange?.(open)
   }
 
@@ -927,28 +939,55 @@ function AssigneePicker({
     <Popover
       trigger="click"
       placement="bottomLeft"
+      overlayClassName="task-assignee-popover"
       open={open}
       destroyOnHidden
       onOpenChange={handlePopoverOpenChange}
       content={
         <div
           ref={popupContainerRef}
-          style={{ width: 220 }}
+          style={{ width: 332 }}
           onMouseDown={onInteract}
         >
           <UserSearchSelect
             size="small"
             mode="multiple"
-            open={open ? selectOpen : false}
-            onOpenChange={setSelectOpen}
+            optionsVariant="inline"
             getPopupContainer={() => popupContainerRef.current ?? document.body}
             style={{ width: '100%' }}
-            placeholder="搜索用户"
+            placeholder="添加负责人"
             value={value}
             onChange={(nextValue) => onChange(Array.isArray(nextValue) ? nextValue : [])}
             users={users}
-            autoFocus
           />
+          {task && canConfigureMode ? (
+            <div className="assignee-completion-config">
+              <Dropdown
+                trigger={['click']}
+                menu={{
+                  selectable: true,
+                  selectedKeys: [currentCompletionMode],
+                  items: [
+                    { key: 'all', label: '全部负责人均需完成' },
+                    { key: 'any', label: '任一负责人完成即可' },
+                  ],
+                  onClick: ({ key }) => {
+                    onCompletionModeChange?.(key === 'all' ? 'all' : 'any')
+                  },
+                }}
+              >
+                <Button size="small" type="text" className="assignee-completion-mode-btn">
+                  {getTaskCompletionModeLabel(task)}
+                  <DownOutlined />
+                </Button>
+              </Dropdown>
+              {completionSummary && completionSummary.totalCount > 0 ? (
+                <span className="assignee-completion-progress">
+                  {completionSummary.doneCount}/{completionSummary.totalCount} 人已完成
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       }
     >
@@ -964,13 +1003,31 @@ function AssigneePicker({
                   key={selectedUser.id}
                   title={selectedUser.name ?? selectedUser.id}
                 >
-                  <Avatar
-                    size={20}
-                    className="tasklist-assignee-avatar"
-                    style={{ backgroundColor: '#7b67ee', color: '#fff', fontSize: 11 }}
+                  <span
+                    className={`tasklist-assignee-avatar-wrap ${
+                      task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed
+                        ? 'is-completed'
+                        : ''
+                    }`}
                   >
-                    {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
-                  </Avatar>
+                    <Avatar
+                      size={20}
+                      src={normalizeAvatarSrc(selectedUser.avatar)}
+                      className="tasklist-assignee-avatar"
+                      style={{
+                        backgroundColor: normalizeAvatarSrc(selectedUser.avatar) ? undefined : '#7b67ee',
+                        color: '#fff',
+                        fontSize: 11,
+                      }}
+                    >
+                      {normalizeAvatarSrc(selectedUser.avatar) ? null : getUserDisplayName(selectedUser).slice(0, 1)}
+                    </Avatar>
+                    {task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed ? (
+                      <span className="tasklist-assignee-completed-badge">
+                        <CheckOutlined />
+                      </span>
+                    ) : null}
+                  </span>
                 </Tooltip>
               ))}
             </Avatar.Group>
@@ -979,14 +1036,32 @@ function AssigneePicker({
               {selectedUsers.map((selectedUser) => (
                 <Tooltip
                   key={selectedUser.id}
-                  title={selectedUser.name ?? selectedUser.id}
+                  title={getUserDisplayName(selectedUser)}
                 >
-                  <Avatar
-                    size={24}
-                    style={{ backgroundColor: '#7b67ee', fontSize: 12 }}
+                  <span
+                    className={`tasklist-assignee-avatar-wrap ${
+                      task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed
+                        ? 'is-completed'
+                        : ''
+                    }`}
                   >
-                    {(selectedUser.name ?? selectedUser.id).slice(0, 1)}
-                  </Avatar>
+                    <Avatar
+                      size={24}
+                      src={normalizeAvatarSrc(selectedUser.avatar)}
+                      style={{
+                        backgroundColor: normalizeAvatarSrc(selectedUser.avatar) ? undefined : '#7b67ee',
+                        fontSize: 12,
+                        color: '#fff',
+                      }}
+                    >
+                      {normalizeAvatarSrc(selectedUser.avatar) ? null : getUserDisplayName(selectedUser).slice(0, 1)}
+                    </Avatar>
+                    {task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed ? (
+                      <span className="tasklist-assignee-completed-badge">
+                        <CheckOutlined />
+                      </span>
+                    ) : null}
+                  </span>
                 </Tooltip>
               ))}
             </Avatar.Group>
@@ -1151,7 +1226,7 @@ function renderOverflowTooltip(
       title={title}
       placement="top"
       color="#000"
-      overlayInnerStyle={{ color: '#fff' }}
+      styles={{ body: { color: '#fff' } }}
     >
       {content}
     </Tooltip>
@@ -1160,6 +1235,42 @@ function renderOverflowTooltip(
 
 function renderOverflowText(value: React.ReactNode) {
   return renderOverflowTooltip(value, <span className="custom-field-text">{value}</span>)
+}
+
+function normalizeAvatarSrc(avatar?: string | null): string | undefined {
+  if (typeof avatar !== 'string') {
+    return undefined
+  }
+  const trimmed = avatar.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function getUserDisplayName(user: Pick<User, 'id' | 'name'>): string {
+  const name = user.name?.trim()
+  return name || user.id || '未知用户'
+}
+
+function getTaskCompletionModeLabel(task: Task): string {
+  return task.completion_mode === 'all' ? '全部负责人均需完成' : '任一负责人完成即可'
+}
+
+function buildTaskAssigneeUsers(task: Task, users: User[]): User[] {
+  return task.members
+    .filter((member) => member.role === 'assignee')
+    .map((member) => {
+      const completion = task.assignee_completions?.find((item) => item.user_id === member.id)
+      const matchedUser = users.find((user) => user.id === member.id)
+      return {
+        id: member.id,
+        name:
+          completion?.user_name?.trim() ||
+          member.name?.trim() ||
+          matchedUser?.name?.trim() ||
+          member.id,
+        avatar:
+          normalizeAvatarSrc(completion?.avatar_url ?? member.avatar ?? matchedUser?.avatar),
+      }
+    })
 }
 
 type ResizableHeaderCellProps = React.ThHTMLAttributes<HTMLTableCellElement> & {
@@ -1240,11 +1351,11 @@ export default function TaskTable({
   loading = false,
   statusFilter: controlledStatusFilter,
   sortMode: controlledSortMode,
-  mineOnly: _controlledMineOnly,
+  mineOnly,
   pendingExpandTaskGuid,
   onStatusFilterChange,
   onSortModeChange,
-  onMineOnlyChange: _onMineOnlyChange,
+  onMineOnlyChange,
   onPendingExpandConsumed,
   onTaskClick,
   onRefresh,
@@ -1254,8 +1365,11 @@ export default function TaskTable({
   onTaskCreatedDetailOpen,
 }: TaskTableProps) {
   const { token } = theme.useToken()
+  void mineOnly
+  void onMineOnlyChange
   const currentUser: User = { id: appConfig.user_id, name: appConfig.user_id }
   const [users, setUsers] = useState<User[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     return new Set(
       (sections ?? [])
@@ -1431,7 +1545,7 @@ export default function TaskTable({
   const [editorInitialDraft, setEditorInitialDraft] = useState<{
     name?: string
     required?: boolean
-    options?: Array<{ value: string; label: string; color?: string | null }>
+    options?: Array<{ key: string; label: string; color?: string | null }>
   } | null>(null)
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
   const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
@@ -1605,15 +1719,16 @@ export default function TaskTable({
 
   useEffect(() => {
     listMembers()
-      .then((members) =>
+      .then((members) => {
+        setTeamMembers(members)
         setUsers(
           members.map((m) => ({
             id: m.user_id,
             name: m.user_name ?? m.user_id,
             avatar: m.avatar_url ?? undefined,
           })),
-        ),
-      )
+        )
+      })
       .catch(() => {})
   }, [])
 
@@ -1741,6 +1856,7 @@ export default function TaskTable({
         project_id: tasklist!.guid,
         title: summary,
         assignee_ids: assigneeIds,
+        completion_mode: assigneeIds.length > 1 ? 'any' : undefined,
         priority: toPriorityString(newTaskPriority),
         section_id: sectionGuid,
         start_date: newTaskStart ? newTaskStart.toISOString() : undefined,
@@ -1859,14 +1975,18 @@ export default function TaskTable({
     inlineCreateInteractingRef.current = true
   }
 
-  const handleToggleStatus = async (e: React.MouseEvent, task: Task) => {
+  const handleToggleStatus = async (
+    e: React.MouseEvent,
+    task: Task,
+    action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
+  ) => {
     e.stopPropagation()
-    const nextStatus = task.status === 'done' ? 'todo' : 'done'
+    const nextStatus = action?.status ?? (task.status === 'done' ? 'todo' : 'done')
     const optimistic = { ...task, status: nextStatus as Task['status'] }
     handleTaskUpdate(optimistic)
     updateSubtaskInCache(optimistic)
     try {
-      const apiTask = await patchTaskStatus(task.guid, nextStatus)
+      const apiTask = await patchTaskStatus(task.guid, nextStatus, { scope: action?.scope })
       const next = apiTaskToTask(apiTask, tasklist?.guid)
       handleTaskUpdate(next)
       updateSubtaskInCache(next)
@@ -3479,7 +3599,10 @@ export default function TaskTable({
     </div>
   )
 
-  const createTaskInlineRow = (_sectionGuid: string) => null
+  const createTaskInlineRow = (_sectionGuid: string) => {
+    void _sectionGuid
+    return null
+  }
 
   const renderInlineCreateTitleCell = (sectionGuid: string) => (
     <div className="inline-create-title-cell">
@@ -3882,6 +4005,7 @@ export default function TaskTable({
             expanded={expandedTaskGuids.has(record.guid)}
             loadedSubtaskCount={(subtasksByGuid[record.guid] ?? []).length}
             onToggleExpand={handleToggleExpand}
+            statusActions={getTaskCompletionActions(record, teamMembers)}
             onToggleStatus={handleToggleStatus}
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
@@ -4646,7 +4770,12 @@ interface TaskTitleCellProps {
   expanded?: boolean
   loadedSubtaskCount?: number
   onToggleExpand?: (task: Task) => void
-  onToggleStatus: (e: React.MouseEvent, task: Task) => void
+  statusActions: Array<{ key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' }>
+  onToggleStatus: (
+    e: React.MouseEvent,
+    task: Task,
+    action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
+  ) => void
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
 }
@@ -4915,12 +5044,16 @@ function TaskTitleCell({
   expanded = false,
   loadedSubtaskCount,
   onToggleExpand,
+  statusActions,
   onToggleStatus,
   onOpenDetail,
   onUpdate,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
-  const statusToggleTooltip = task.status === 'done' ? '标记未完成' : '标记已完成'
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  const isSelfCompleted = isCurrentUserAssigneeCompleted(task)
+  const statusToggleTooltip = isSelfCompleted ? '重启任务' : '标记已完成'
+  const primaryStatusAction = statusActions[0]
 
   const handleRenameSummary = async (rawName: string) => {
     setEditingName(false)
@@ -4947,17 +5080,58 @@ function TaskTitleCell({
           />
         )}
         <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
-          <Tooltip
-            title={statusToggleTooltip}
-            placement="top"
-            color="#000"
-            overlayInnerStyle={{ color: '#fff' }}
-          >
-            <Checkbox
-              checked={task.status === 'done'}
-              onClick={(e) => onToggleStatus(e, task)}
-            />
-          </Tooltip>
+          {statusActions.length > 1 && primaryStatusAction ? (
+            <Dropdown
+              trigger={['click']}
+              open={statusMenuOpen}
+              onOpenChange={setStatusMenuOpen}
+              menu={{
+                items: statusActions.map((action) => ({
+                  key: action.key,
+                  label: action.label,
+                })),
+                onClick: ({ key, domEvent }) => {
+                  domEvent.stopPropagation()
+                  setStatusMenuOpen(false)
+                  const matchedAction = statusActions.find((item) => item.key === key)
+                  if (!matchedAction) {
+                    return
+                  }
+                  onToggleStatus(domEvent as unknown as React.MouseEvent, task, matchedAction)
+                },
+              }}
+            >
+              <span>
+                <Tooltip
+                  title={statusToggleTooltip}
+                  placement="top"
+                  color="#000"
+                  styles={{ body: { color: '#fff' } }}
+                >
+                  <Checkbox
+                    checked={isSelfCompleted}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setStatusMenuOpen((open) => !open)
+                    }}
+                    onChange={() => undefined}
+                  />
+                </Tooltip>
+              </span>
+            </Dropdown>
+          ) : (
+            <Tooltip
+              title={statusToggleTooltip}
+              placement="top"
+              color="#000"
+              styles={{ body: { color: '#fff' } }}
+            >
+              <Checkbox
+                checked={isSelfCompleted}
+                onClick={(e) => onToggleStatus(e, task, primaryStatusAction)}
+              />
+            </Tooltip>
+          )}
         </div>
         <div className="cell cell-title">
           {task.subtask_count > 0 ? (
@@ -5110,8 +5284,8 @@ function TaskAssigneeCell({
   onUpdate,
   onAssigneePickerOpenChange,
 }: TaskAssigneeCellProps) {
-  const assignees = task.members.filter((m) => m.role === 'assignee')
-  const assigneeIds = assignees.map((member) => member.id)
+  const assigneeUsers = buildTaskAssigneeUsers(task, users)
+  const assigneeIds = assigneeUsers.map((user) => user.id)
   const assigneePickerKey = `task-assignee-${task.guid}`
 
   const handleAssigneeChange = async (values: string[]) => {
@@ -5126,8 +5300,8 @@ function TaskAssigneeCell({
         id,
         role: 'assignee' as const,
         type: 'user' as const,
-        name: users.find((u) => u.id === id)?.name,
-        avatar: users.find((u) => u.id === id)?.avatar,
+        name: assigneeUsers.find((u) => u.id === id)?.name ?? users.find((u) => u.id === id)?.name,
+        avatar: assigneeUsers.find((u) => u.id === id)?.avatar ?? users.find((u) => u.id === id)?.avatar,
       })),
       ...task.members.filter((m) => m.role === 'follower'),
     ]
@@ -5150,18 +5324,35 @@ function TaskAssigneeCell({
     }
   }
 
+  const handleCompletionModeChange = async (mode: 'any' | 'all') => {
+    if (task.completion_mode === mode) {
+      return
+    }
+    const optimistic: Task = { ...task, completion_mode: mode, mode: mode === 'all' ? 1 : 2 }
+    onUpdate(optimistic)
+    try {
+      const apiTask = await updateTaskApi(task.guid, { completion_mode: mode })
+      onUpdate(apiTaskToTask(apiTask))
+    } catch {
+      onUpdate(task)
+      message.error('更新完成模式失败')
+    }
+  }
+
   return (
     <div className="cell cell-assignee" onClick={(e) => e.stopPropagation()}>
       <AssigneePicker
         pickerKey={assigneePickerKey}
         open={activeAssigneePickerKey === assigneePickerKey}
+        task={task}
         value={assigneeIds}
         users={users}
-        taskMembers={assignees}
+        taskMembers={task.members.filter((m) => m.role === 'assignee')}
         isTasklistView={isTasklistView}
         triggerClassName="assignee-trigger"
         placeholderIcon={<UserOutlined className="empty-assignee" />}
         onChange={(value) => void handleAssigneeChange(value)}
+        onCompletionModeChange={(mode) => void handleCompletionModeChange(mode)}
         onOpenChange={(open) => {
           onAssigneePickerOpenChange(open ? assigneePickerKey : null)
         }}

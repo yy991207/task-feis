@@ -43,6 +43,16 @@ export interface Reminder {
   relative_fire_minute: number
 }
 
+export type TaskCompletionMode = 'any' | 'all'
+
+export interface AssigneeCompletion {
+  user_id: string
+  is_completed: boolean
+  completed_at?: string | null
+  user_name?: string | null
+  avatar_url?: string | null
+}
+
 export interface TasklistRef {
   tasklist_guid: string
   section_guid: string
@@ -102,6 +112,8 @@ export interface Task {
   updated_at: string
   creator: { id: string; type: MemberType; name?: string; avatar?: string }
   mode: TaskMode
+  completion_mode?: TaskCompletionMode
+  assignee_completions?: AssigneeCompletion[]
   priority: Priority
   tags: string[]
   is_milestone: boolean
@@ -158,6 +170,7 @@ export interface CreateTaskPayload {
   due?: TimeValue
   start?: TimeValue
   mode?: TaskMode
+  completion_mode?: TaskCompletionMode
   priority?: Priority
   is_milestone?: boolean
   parent_task_guid?: string

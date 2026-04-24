@@ -30,6 +30,7 @@ import {
 
 interface DraftOption {
   key: string
+  id?: string | null
   label: string
   color?: string | null
 }
@@ -72,6 +73,7 @@ function getEnabledFieldOptions(field?: ApiCustomField | null): FieldOption[] {
 function toEditableDraftOption(option: FieldOption, index: number): DraftOption {
   return {
     key: option.id ?? `existing-${index}`,
+    id: option.id,
     label: option.label,
     color: option.color,
   }
@@ -173,7 +175,7 @@ export default function CustomFieldEditorModal({
       return
     }
     try {
-      await deleteCustomField(field.field_id)
+      await deleteCustomField(projectId, field.field_id)
       message.success('已删除字段')
       onDeleted?.(field.field_id)
       onClose()

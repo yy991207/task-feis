@@ -421,16 +421,6 @@
     align-items: center;
   }
 
-  .tasklist-assignee-avatar {
-    margin-left: -6px;
-    border: 2px solid #fff;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
-
-    &:first-child {
-      margin-left: 0;
-    }
-  }
-
   .section-count-tag {
     margin: 0 !important;
     padding: 0 6px !important;
@@ -493,6 +483,89 @@
   &.drag-over-bottom {
     box-shadow: inset 0 -2px 0 0 #3370ff;
   }
+}
+
+.task-assignee-popover {
+  .assignee-completion-config {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 12px 16px 0;
+    border-top: 1px solid #e6e9ef;
+  }
+
+  .assignee-completion-mode-btn.ant-btn.ant-btn-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 1 auto;
+    min-width: 0;
+    height: 22px;
+    padding-inline: 0;
+    white-space: nowrap;
+    color: #1f2329 !important;
+    font-size: 13px;
+    line-height: 22px;
+    font-weight: 400;
+
+    .anticon:last-child {
+      color: #6b7280;
+      font-size: 12px;
+    }
+  }
+
+  .assignee-completion-progress {
+    flex: 0 0 auto;
+    margin-left: auto;
+    text-align: right;
+    color: #1456f0;
+    font-size: 13px;
+    line-height: 22px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+}
+
+.tasklist-assignee-avatar {
+  margin-left: -6px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+
+  &:first-child {
+    margin-left: 0;
+  }
+}
+
+.tasklist-assignee-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &.is-completed {
+    z-index: 2;
+  }
+}
+
+.tasklist-assignee-completed-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #34c759;
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 8px;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
 }
 
 .task-table-row {
@@ -692,16 +765,6 @@
     .empty-assignee {
       color: #c3c7cf;
       font-size: 15px;
-    }
-  }
-
-  .tasklist-assignee-avatar {
-    margin-left: -6px;
-    border: 2px solid #fff;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
-
-    &:first-child {
-      margin-left: 0;
     }
   }
 

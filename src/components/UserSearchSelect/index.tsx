@@ -20,6 +20,7 @@ interface UserSearchSelectProps {
   style?: CSSProperties
   mode?: 'multiple'
   getPopupContainer?: () => HTMLElement
+  optionsVariant?: 'floating' | 'inline'
   onChange: (value?: string | string[]) => void
   onOpenChange?: (open: boolean) => void
 }
@@ -46,6 +47,7 @@ export default function UserSearchSelect({
   style,
   mode,
   getPopupContainer: _getPopupContainer,
+  optionsVariant = 'floating',
   onChange,
   onOpenChange,
 }: UserSearchSelectProps): ReactElement {
@@ -53,7 +55,9 @@ export default function UserSearchSelect({
   const rootRef = useRef<HTMLDivElement>(null)
   const [internalOpen, setInternalOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
-  const dropdownOpen = open ?? internalOpen
+  const isInlineAlwaysOpen = optionsVariant === 'inline'
+  const optionAvatarSize = isInlineAlwaysOpen ? 32 : 24
+  const dropdownOpen = isInlineAlwaysOpen ? true : open ?? internalOpen
   const selectedIds = useMemo(
     () => (Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []),
     [value],
@@ -84,11 +88,19 @@ export default function UserSearchSelect({
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
+      if (isInlineAlwaysOpen) {
+        return
+      }
       const target = event.target
       if (!(target instanceof Node)) {
         return
       }
-      if (rootRef.current?.contains(target)) {
+      const isClickInsideInlinePanel =
+        optionsVariant === 'inline' &&
+        target instanceof Element &&
+        rootRef.current?.closest('.ant-popover')?.contains(target)
+
+      if (rootRef.current?.contains(target) || isClickInsideInlinePanel) {
         return
       }
       handleDropdownOpenChange(false)
@@ -96,7 +108,7 @@ export default function UserSearchSelect({
 
     document.addEventListener('pointerdown', handlePointerDown)
     return () => document.removeEventListener('pointerdown', handlePointerDown)
-  })
+  }, [isInlineAlwaysOpen, optionsVariant])
 
   const handleDropdownOpenChange = (nextOpen: boolean): void => {
     // 外部传 open 时走受控模式；未传 open 时组件自己维护展开状态，默认保持收起。
@@ -121,7 +133,9 @@ export default function UserSearchSelect({
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'Escape') {
-      handleDropdownOpenChange(false)
+      if (!isInlineAlwaysOpen) {
+        handleDropdownOpenChange(false)
+      }
       return
     }
     if (event.key !== 'Enter' || filteredUsers.length === 0) {
@@ -134,6 +148,7 @@ export default function UserSearchSelect({
   const wrapperClassName = [
     'user-search-select',
     dropdownOpen ? 'user-search-select-open' : '',
+    optionsVariant === 'inline' ? 'user-search-select-inline' : '',
     className ?? '',
   ].filter(Boolean).join(' ')
 
@@ -155,13 +170,17 @@ export default function UserSearchSelect({
         value={searchText}
         placeholder={placeholder}
         prefix={<SearchOutlined />}
-        suffix={dropdownOpen ? <UpOutlined /> : <DownOutlined />}
+        suffix={isInlineAlwaysOpen ? null : dropdownOpen ? <UpOutlined /> : <DownOutlined />}
         allowClear
-        onFocus={() => handleDropdownOpenChange(true)}
+        onFocus={() => {
+          if (!isInlineAlwaysOpen) {
+            handleDropdownOpenChange(true)
+          }
+        }}
         onChange={(event) => setSearchText(event.target.value)}
         onKeyDown={handleSearchKeyDown}
       />
-      {dropdownOpen && (
+      {(isInlineAlwaysOpen || dropdownOpen) && (
         <div className="user-search-options" role="listbox">
           {filteredUsers.map((user) => {
             const isSelected = selectedIds.includes(user.id)
@@ -174,7 +193,7 @@ export default function UserSearchSelect({
                 onClick={() => handleUserToggle(user.id)}
               >
                 <Avatar
-                  size={24}
+                  size={optionAvatarSize}
                   src={normalizeAvatarSrc(user.avatar)}
                   icon={avatarSrc ? undefined : <UserOutlined />}
                   className="user-search-option-avatar"

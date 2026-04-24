@@ -113,7 +113,7 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
 
   const handleDelete = async (fieldId: string) => {
     try {
-      await deleteCustomField(fieldId)
+      await deleteCustomField(projectId, fieldId)
       message.success('已删除')
       await load()
       onChanged?.()

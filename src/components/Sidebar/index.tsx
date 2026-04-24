@@ -40,7 +40,6 @@ import {
 import type { Tasklist } from '@/types/task'
 import NotificationBell from '@/components/NotificationBell'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
-import UserSwitcher from '@/components/UserSwitcher'
 import type { ProjectGroup } from '@/types/projectGroup'
 import type { Project } from '@/types/project'
 import {
@@ -993,15 +992,6 @@ export default function Sidebar({
           任务
         </Title>
         <div style={{ marginLeft: 'auto' }}>
-          <UserSwitcher />
-          <Tooltip title="团队管理">
-            <Button
-              type="text"
-              size="small"
-              icon={<UserOutlined />}
-              onClick={() => onNavigate('settings')}
-            />
-          </Tooltip>
           <NotificationBell />
         </div>
       </div>

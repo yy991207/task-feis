@@ -1,6 +1,13 @@
 import { request } from './request'
 import { appConfig } from '@/config/appConfig'
-import type { Task, Priority, CustomFieldValue, TasklistRef } from '@/types/task'
+import type {
+  Task,
+  Priority,
+  CustomFieldValue,
+  TasklistRef,
+  TaskCompletionMode,
+  AssigneeCompletion,
+} from '@/types/task'
 
 export interface ApiUserProfile {
   user_id: string
@@ -33,6 +40,8 @@ export interface ApiTask {
   start_date: string | null
   due_date: string | null
   completed_at: string | null
+  completion_mode?: TaskCompletionMode | null
+  assignee_completions?: AssigneeCompletion[]
   sort_order: number
   involved_user_ids: string[]
   attachment_count: number
@@ -79,6 +88,10 @@ const priorityNumToString: Record<number, string> = {
   2: 'medium',
   3: 'high',
   4: 'urgent',
+}
+
+function normalizeTaskCompletionMode(mode?: string | null): TaskCompletionMode {
+  return mode === 'all' ? 'all' : 'any'
 }
 
 function normalizeTaskStatus(status: string, isCompleted: boolean): Task['status'] {
@@ -177,6 +190,11 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     new Set([...(api.assignee_ids ?? []), ...(api.assignee_id ? [api.assignee_id] : [])]),
   )
   const profileMap = buildApiUserProfileMap(api)
+  const assigneeCompletionMap = new Map(
+    (api.assignee_completions ?? [])
+      .filter((item) => item?.user_id)
+      .map((item) => [item.user_id, item]),
+  )
   const members = [
     ...apiAssigneeIds.map((id) => {
       const profile = profileMap.get(id)
@@ -223,7 +241,19 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
       name: api.creator_name ?? creatorProfile?.user_name ?? api.creator_id,
       avatar: api.creator_avatar_url ?? creatorProfile?.avatar_url ?? undefined,
     },
-    mode: 2,
+    mode: normalizeTaskCompletionMode(api.completion_mode) === 'all' ? 1 : 2,
+    completion_mode: normalizeTaskCompletionMode(api.completion_mode),
+    assignee_completions: apiAssigneeIds.map((id) => {
+      const completion = assigneeCompletionMap.get(id)
+      const profile = profileMap.get(id)
+      return {
+        user_id: id,
+        is_completed: completion?.is_completed ?? api.is_completed,
+        completed_at: completion?.completed_at ?? null,
+        user_name: completion?.user_name ?? profile?.user_name ?? null,
+        avatar_url: completion?.avatar_url ?? profile?.avatar_url ?? null,
+      }
+    }),
     priority: (priorityStringToNum[api.priority] ?? 0) as Priority,
     tags: [...api.tags],
     is_milestone: false,
@@ -363,6 +393,7 @@ export function createTaskApi(payload: {
   description?: string
   parent_task_id?: string
   assignee_ids?: string[]
+  completion_mode?: TaskCompletionMode
   priority?: string
   tags?: string[]
   section_id?: string
@@ -385,6 +416,7 @@ export function updateTaskApi(
     status?: string
     priority?: string
     assignee_ids?: string[]
+    completion_mode?: TaskCompletionMode
     tags?: string[]
     section_id?: string | null
     tasklists?: TasklistRef[]
@@ -410,10 +442,11 @@ export function deleteTaskApi(taskId: string): Promise<void> {
 export function patchTaskStatus(
   taskId: string,
   status: string,
+  options?: { scope?: 'self' | 'all' },
 ): Promise<ApiTask> {
   return request<ApiTask>(`api/v1/task-center/tasks/${taskId}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ user_id: appConfig.user_id, status }),
+    body: JSON.stringify({ user_id: appConfig.user_id, status, ...options }),
   })
 }
 

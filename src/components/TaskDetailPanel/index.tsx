@@ -87,6 +87,12 @@ import TaskRichInput, {
 } from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
+import {
+  canConfigureTaskCompletionMode,
+  getTaskCompletionActions,
+  getTaskCompletionSummary,
+  isCurrentUserAssigneeCompleted,
+} from '@/utils/taskCompletion'
 import './index.less'
 
 const { Text } = Typography
@@ -185,6 +191,10 @@ function renderUserAvatar(
       {normalizeAvatarSrc(user.avatar) ? null : fallback}
     </Avatar>
   )
+}
+
+function getTaskCompletionModeLabel(task: Task): string {
+  return task.completion_mode === 'all' ? '全部负责人均需完成' : '任一负责人完成即可'
 }
 
 function normalizeActivityValue(value: unknown): string {
@@ -672,6 +682,7 @@ export default function TaskDetailPanel({
   const [activeSubtaskDueGuid, setActiveSubtaskDueGuid] = useState<string | null>(null)
   const [activeSubtaskAssigneeGuid, setActiveSubtaskAssigneeGuid] = useState<string | null>(null)
   const [followersPopoverOpen, setFollowersPopoverOpen] = useState(false)
+  const [taskStatusMenuOpen, setTaskStatusMenuOpen] = useState(false)
   const subtaskCreateRowRef = useRef<HTMLDivElement | null>(null)
   const subtaskInteractingRef = useRef(false)
   const subtaskSubmittingRef = useRef(false)
@@ -707,7 +718,14 @@ export default function TaskDetailPanel({
   const titleSubmittingRef = useRef(false)
   const titleComposingRef = useRef(false)
   const titleSkipBlurSubmitRef = useRef(false)
+  const [availableUsers, setAvailableUsers] = useState<User[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const commentInputUsers = availableUsers
   const assignees = task.members.filter((m) => m.role === 'assignee')
+  const taskStatusActions = getTaskCompletionActions(task, teamMembers)
+  const primaryTaskStatusAction = taskStatusActions[0]
+  const isCurrentTaskCompleted = isCurrentUserAssigneeCompleted(task)
+  const taskCompletionSummary = getTaskCompletionSummary(task)
   const isSubtask = Boolean(task.parent_task_guid)
   const creator: User = {
     id: task.creator.id,
@@ -1073,9 +1091,6 @@ export default function TaskDetailPanel({
     }
   }, [])
 
-  const [availableUsers, setAvailableUsers] = useState<User[]>([])
-  const commentInputUsers = availableUsers
-
   const resolveTaskUserById = (
     userId: string,
     fallback?: { name?: string | null; avatar?: string | null },
@@ -1109,7 +1124,10 @@ export default function TaskDetailPanel({
 
   useEffect(() => {
     listMembers()
-      .then((members) => setAvailableUsers(members.map(mapTeamMemberToUser)))
+      .then((members) => {
+        setTeamMembers(members)
+        setAvailableUsers(members.map(mapTeamMemberToUser))
+      })
       .catch(() => {})
   }, [])
 
@@ -1200,6 +1218,35 @@ export default function TaskDetailPanel({
     }
   }
 
+  const handleCompletionModeChange = async (mode: 'any' | 'all') => {
+    if (task.completion_mode === mode) {
+      return
+    }
+    try {
+      const apiTask = await updateTaskApi(task.guid, { completion_mode: mode })
+      const nextTask = apiTaskToTask(apiTask)
+      onTaskUpdated?.(nextTask)
+      if (!onTaskUpdated) onRefresh?.()
+    } catch (err) {
+      message.error(getActionErrorMessage(err, '更新完成模式失败'))
+    }
+  }
+
+  const handleSubtaskCompletionModeChange = async (subtask: Task, mode: 'any' | 'all') => {
+    if (subtask.completion_mode === mode) {
+      return
+    }
+    try {
+      const apiTask = await updateTaskApi(subtask.guid, { completion_mode: mode })
+      const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+      setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
+      onTaskUpdated?.(next)
+      message.success('已更新子任务完成模式')
+    } catch (err) {
+      message.error(getActionErrorMessage(err, '更新子任务完成模式失败'))
+    }
+  }
+
   const handleFollowersChange = async (nextFollowerIds: string[]) => {
     const nextUniqueFollowerIds = Array.from(new Set(nextFollowerIds.filter(Boolean)))
     const currentFollowerIds = followedUserIds
@@ -1223,9 +1270,12 @@ export default function TaskDetailPanel({
     }
   }
 
-  const handleToggleTaskStatus = async () => {
+  const handleToggleTaskStatus = async (
+    action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
+  ) => {
     try {
-      const apiTask = await patchTaskStatus(task.guid, task.status === 'done' ? 'todo' : 'done')
+      const nextStatus = action?.status ?? (task.status === 'done' ? 'todo' : 'done')
+      const apiTask = await patchTaskStatus(task.guid, nextStatus, { scope: action?.scope })
       const nextTask = apiTaskToTask(apiTask)
       onTaskUpdated?.(nextTask)
       if (!onTaskUpdated) onRefresh?.()
@@ -1239,6 +1289,7 @@ export default function TaskDetailPanel({
       <UserSearchSelect
         mode="multiple"
         value={followedUserIds}
+        optionsVariant="inline"
         onChange={(value) => void handleFollowersChange(Array.isArray(value) ? value : [])}
         users={availableUsers}
       />
@@ -1331,6 +1382,7 @@ export default function TaskDetailPanel({
         parent_task_id: task.guid,
         section_id: primarySectionGuid || primaryTasklistRef?.section_guid,
         assignee_ids: subtaskAssigneeIds,
+        completion_mode: subtaskAssigneeIds.length > 1 ? 'any' : undefined,
         start_date: parentStart,
         due_date: subtaskDue ? subtaskDue.toISOString() : undefined,
       })
@@ -1411,10 +1463,13 @@ export default function TaskDetailPanel({
     void handleAddSubtask()
   }
 
-  const handleToggleSubtaskStatus = async (subtask: Task) => {
-    const nextDone = subtask.status !== 'done'
+  const handleToggleSubtaskStatus = async (
+    subtask: Task,
+    action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
+  ) => {
+    const nextStatus = action?.status ?? (subtask.status !== 'done' ? 'done' : 'todo')
     try {
-      const apiTask = await patchTaskStatus(subtask.guid, nextDone ? 'done' : 'todo')
+      const apiTask = await patchTaskStatus(subtask.guid, nextStatus, { scope: action?.scope })
       const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
       onTaskUpdated?.(next)
@@ -1449,8 +1504,9 @@ export default function TaskDetailPanel({
   const handleSubtaskAssigneeChange = async (subtask: Task, values: string[]) => {
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
     const defaultParticipantIds = buildDefaultParticipantIds(subtask.creator.id, nextAssigneeIds)
+    const nextCompletionMode = nextAssigneeIds.length > 1 ? (subtask.completion_mode ?? 'any') : 'any'
     try {
-      const apiTask = await patchTaskAssignee(subtask.guid, nextAssigneeIds)
+      const apiTask = await updateTaskApi(subtask.guid, { assignee_ids: nextAssigneeIds, completion_mode: nextCompletionMode })
       if (defaultParticipantIds.length > 0) {
         await addParticipants(subtask.guid, defaultParticipantIds)
       }
@@ -1948,23 +2004,64 @@ export default function TaskDetailPanel({
 
           {/* Title */}
           <div className={`detail-title-row ${task.status === 'done' ? 'is-done' : ''}`}>
-            <Tooltip
-              title={task.status === 'done' ? '标记未完成' : '标记已完成'}
-              placement="top"
-              color="#000"
-              overlayInnerStyle={{ color: '#fff' }}
-            >
-              <Checkbox
-                className="detail-title-checkbox"
-                checked={task.status === 'done'}
-                onClick={(e) => {
-                  e.stopPropagation()
+            {taskStatusActions.length > 1 && primaryTaskStatusAction ? (
+              <Dropdown
+                trigger={['click']}
+                placement="bottomLeft"
+                open={taskStatusMenuOpen}
+                onOpenChange={setTaskStatusMenuOpen}
+                menu={{
+                  items: taskStatusActions.map((action) => ({
+                    key: action.key,
+                    label: action.label,
+                  })),
+                  onClick: ({ key }) => {
+                    setTaskStatusMenuOpen(false)
+                    const matchedAction = taskStatusActions.find((item) => item.key === key)
+                    if (!matchedAction) {
+                      return
+                    }
+                    void handleToggleTaskStatus(matchedAction)
+                  },
                 }}
-                onChange={() => {
-                  void handleToggleTaskStatus()
-                }}
-              />
-            </Tooltip>
+              >
+                <span>
+                  <Tooltip
+                    title={isCurrentTaskCompleted ? '重启任务' : '标记已完成'}
+                    placement="top"
+                    color="#000"
+                    styles={{ body: { color: '#fff' } }}
+                  >
+                    <Checkbox
+                      className="detail-title-checkbox"
+                      checked={isCurrentTaskCompleted}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setTaskStatusMenuOpen((open) => !open)
+                      }}
+                      onChange={() => undefined}
+                    />
+                  </Tooltip>
+                </span>
+              </Dropdown>
+            ) : (
+              <Tooltip
+                title={isCurrentTaskCompleted ? '重启任务' : '标记已完成'}
+                placement="top"
+                color="#000"
+                styles={{ body: { color: '#fff' } }}
+              >
+                <Checkbox
+                  className="detail-title-checkbox"
+                  checked={isCurrentTaskCompleted}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleToggleTaskStatus(primaryTaskStatusAction)
+                  }}
+                  onChange={() => undefined}
+                />
+              </Tooltip>
+            )}
             {titleEditing ? (
               <Input
                 className="detail-title-editor"
@@ -2018,16 +2115,50 @@ export default function TaskDetailPanel({
             <Popover
               trigger="click"
               placement="bottomLeft"
+              overlayClassName="detail-assignee-popover"
               content={
-                <div className="detail-popover-panel">
+                <div className="detail-popover-panel detail-popover-panel-assignee">
                   <UserSearchSelect
                     mode="multiple"
                     size="small"
+                    optionsVariant="inline"
                     value={assignees.map((member) => member.id)}
                     onChange={(value) => void handleAssigneeChange(Array.isArray(value) ? value : [])}
                     users={availableUsers}
-                    placeholder="搜索并选择负责人"
+                    placeholder="添加负责人"
                   />
+                  {canConfigureTaskCompletionMode(task) ? (
+                    <div className="detail-assignee-completion-config">
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          selectable: true,
+                          selectedKeys: [task.completion_mode ?? 'any'],
+                          items: [
+                            { key: 'all', label: '全部负责人均需完成' },
+                            { key: 'any', label: '任一负责人完成即可' },
+                          ],
+                          onClick: ({ key }) => {
+                            void handleCompletionModeChange(key === 'all' ? 'all' : 'any')
+                          },
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          className="detail-assignee-completion-btn"
+                        >
+                          {getTaskCompletionModeLabel(task)}
+                          <DownOutlined />
+                        </Button>
+                      </Dropdown>
+                      {taskCompletionSummary.totalCount > 0 ? (
+                        <span className="detail-assignee-completion-progress">
+                          {taskCompletionSummary.doneCount}/{taskCompletionSummary.totalCount} 人已完成
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               }
             >
@@ -2039,13 +2170,26 @@ export default function TaskDetailPanel({
                       name: a.name ?? null,
                       avatar: a.avatar ?? null,
                     }))}>
-                      {renderUserAvatar(resolveTaskUserById(a.id, {
-                        name: a.name ?? null,
-                        avatar: a.avatar ?? null,
-                      }), {
-                        size: 16,
-                        style: { backgroundColor: '#7b67ee', fontSize: 10, color: '#fff' },
-                      })}
+                      <span
+                        className={`detail-assignee-avatar-wrap ${
+                          task.assignee_completions?.find((item) => item.user_id === a.id)?.is_completed
+                            ? 'is-completed'
+                            : ''
+                        }`}
+                      >
+                        {renderUserAvatar(resolveTaskUserById(a.id, {
+                          name: a.name ?? null,
+                          avatar: a.avatar ?? null,
+                        }), {
+                          size: 16,
+                          style: { backgroundColor: '#7b67ee', fontSize: 10, color: '#fff' },
+                        })}
+                        {task.assignee_completions?.find((item) => item.user_id === a.id)?.is_completed ? (
+                          <span className="detail-assignee-completed-badge">
+                            <CheckOutlined />
+                          </span>
+                        ) : null}
+                      </span>
                     </Tooltip>
                   ))}
                 </Avatar.Group>
@@ -2334,6 +2478,9 @@ export default function TaskDetailPanel({
             <div className="detail-subtasks">
               {subtaskDrafts.map((subtask) => {
                 const isDone = subtask.status === 'done'
+                const isSubtaskCompleted = isCurrentUserAssigneeCompleted(subtask)
+                const subtaskStatusActions = getTaskCompletionActions(subtask, teamMembers)
+                const primarySubtaskStatusAction = subtaskStatusActions[0]
                 const assigneeUsers = subtask.members
                   .filter((m) => m.role === 'assignee')
                   .map((assignee) =>
@@ -2348,22 +2495,58 @@ export default function TaskDetailPanel({
                     key={subtask.guid}
                     className={`detail-subtask-row ${isDone ? 'is-done' : ''}`}
                   >
-                    <Tooltip
-                      title={isDone ? '标记未完成' : '标记已完成'}
-                      placement="top"
-                      color="#000"
-                      overlayInnerStyle={{ color: '#fff' }}
-                    >
-                      <span
-                        className={`subtask-check ${isDone ? 'checked' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void handleToggleSubtaskStatus(subtask)
+                    {subtaskStatusActions.length > 1 && primarySubtaskStatusAction ? (
+                      <Dropdown
+                        trigger={['click']}
+                        placement="bottomLeft"
+                        menu={{
+                          items: subtaskStatusActions.map((action) => ({
+                            key: action.key,
+                            label: action.label,
+                          })),
+                          onClick: ({ key }) => {
+                            const matchedAction = subtaskStatusActions.find((item) => item.key === key)
+                            if (!matchedAction) {
+                              return
+                            }
+                            void handleToggleSubtaskStatus(subtask, matchedAction)
+                          },
                         }}
                       >
-                        {isDone && <CheckOutlined />}
-                      </span>
-                    </Tooltip>
+                        <span>
+                          <Tooltip
+                            title={isSubtaskCompleted ? '重启任务' : '标记已完成'}
+                            placement="top"
+                            color="#000"
+                            styles={{ body: { color: '#fff' } }}
+                          >
+                            <span
+                              className={`subtask-check ${isSubtaskCompleted ? 'checked' : ''}`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {isSubtaskCompleted && <CheckOutlined />}
+                            </span>
+                          </Tooltip>
+                        </span>
+                      </Dropdown>
+                    ) : (
+                      <Tooltip
+                        title={isSubtaskCompleted ? '重启任务' : '标记已完成'}
+                        placement="top"
+                        color="#000"
+                        styles={{ body: { color: '#fff' } }}
+                      >
+                        <span
+                          className={`subtask-check ${isSubtaskCompleted ? 'checked' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleToggleSubtaskStatus(subtask, primarySubtaskStatusAction)
+                          }}
+                        >
+                          {isSubtaskCompleted && <CheckOutlined />}
+                        </span>
+                      </Tooltip>
+                    )}
                     <div className="subtask-main">
                       <button
                         type="button"
@@ -2421,16 +2604,18 @@ export default function TaskDetailPanel({
                         <Popover
                           trigger="click"
                           placement="bottomLeft"
+                          overlayClassName="detail-subtask-assignee-popover"
                           open={activeSubtaskAssigneeGuid === subtask.guid}
                           onOpenChange={(open) =>
                             setActiveSubtaskAssigneeGuid(open ? subtask.guid : null)
                           }
                           content={
-                            <div style={{ width: 220 }}>
+                            <div className="detail-popover-panel detail-popover-panel-assignee detail-popover-panel-subtask-assignee">
                               <UserSearchSelect
                                 autoFocus
-                                placeholder="搜索并选择负责人"
+                                placeholder="添加负责人"
                                 mode="multiple"
+                                optionsVariant="inline"
                                 value={assigneeUsers.map((user) => user.id)}
                                 onChange={(value) =>
                                   void handleSubtaskAssigneeChange(
@@ -2440,6 +2625,42 @@ export default function TaskDetailPanel({
                                 }
                                 users={availableUsers}
                               />
+                              {canConfigureTaskCompletionMode(subtask) ? (
+                                <div className="detail-assignee-completion-config">
+                                  <Dropdown
+                                    trigger={['click']}
+                                    menu={{
+                                      selectable: true,
+                                      selectedKeys: [subtask.completion_mode ?? 'any'],
+                                      items: [
+                                        { key: 'all', label: '全部负责人均需完成' },
+                                        { key: 'any', label: '任一负责人完成即可' },
+                                      ],
+                                      onClick: ({ key }) => {
+                                        void handleSubtaskCompletionModeChange(
+                                          subtask,
+                                          key === 'all' ? 'all' : 'any',
+                                        )
+                                      },
+                                    }}
+                                  >
+                                    <Button
+                                      type="text"
+                                      size="small"
+                                      className="detail-assignee-completion-btn"
+                                    >
+                                      {getTaskCompletionModeLabel(subtask)}
+                                      <DownOutlined />
+                                    </Button>
+                                  </Dropdown>
+                                  {getTaskCompletionSummary(subtask).totalCount > 0 ? (
+                                    <span className="detail-assignee-completion-progress">
+                                      {getTaskCompletionSummary(subtask).doneCount}/
+                                      {getTaskCompletionSummary(subtask).totalCount} 人已完成
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           }
                         >
@@ -2454,10 +2675,23 @@ export default function TaskDetailPanel({
                                 <Avatar.Group size={20} max={{ count: 3 }}>
                                   {assigneeUsers.map((assigneeUser) => (
                                     <Tooltip key={assigneeUser.id} title={getUserDisplayName(assigneeUser)}>
-                                      {renderUserAvatar(assigneeUser, {
-                                        size: 20,
-                                        style: { backgroundColor: '#7b67ee', color: '#fff' },
-                                      })}
+                                      <span
+                                        className={`detail-assignee-avatar-wrap ${
+                                          subtask.assignee_completions?.find((item) => item.user_id === assigneeUser.id)?.is_completed
+                                            ? 'is-completed'
+                                            : ''
+                                        }`}
+                                      >
+                                        {renderUserAvatar(assigneeUser, {
+                                          size: 20,
+                                          style: { backgroundColor: '#7b67ee', color: '#fff' },
+                                        })}
+                                        {subtask.assignee_completions?.find((item) => item.user_id === assigneeUser.id)?.is_completed ? (
+                                          <span className="detail-assignee-completed-badge">
+                                            <CheckOutlined />
+                                          </span>
+                                        ) : null}
+                                      </span>
                                     </Tooltip>
                                   ))}
                                 </Avatar.Group>
@@ -2539,9 +2773,10 @@ export default function TaskDetailPanel({
                         <Popover
                           trigger="click"
                           placement="bottomLeft"
+                          overlayClassName="detail-subtask-assignee-popover"
                           content={
                             <div
-                              style={{ width: 200 }}
+                              className="detail-popover-panel detail-popover-panel-assignee detail-popover-panel-subtask-assignee"
                               onMouseDown={(e) => {
                                 markSubtaskCreateInteracting()
                                 e.preventDefault()
@@ -2551,7 +2786,8 @@ export default function TaskDetailPanel({
                                 autoFocus
                                 size="small"
                                 mode="multiple"
-                                placeholder="选择负责人"
+                                optionsVariant="inline"
+                                placeholder="添加负责人"
                                 value={subtaskAssigneeIds}
                                 onChange={(value) =>
                                   setSubtaskAssigneeIds(Array.isArray(value) ? value : [])

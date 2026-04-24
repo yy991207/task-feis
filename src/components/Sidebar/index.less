@@ -97,6 +97,13 @@
     align-items: center;
   }
 
+  /* 清单分组行默认不显示拖拽图标，但 rc-tree 仍会预留 16px 占位。
+     这里把占位收窄到 9px，让展开箭头和左侧菜单图标列落在同一条竖线上。 */
+  .tree-section > .ant-tree-draggable-icon {
+    width: 9px;
+    min-width: 9px;
+  }
+
   /* 缩进单元：去掉子节点的额外缩进，让子清单与父"任务清单"左对齐
      （父节点的 switcher 和子节点的 switcher-noop 都占 16px，起点自然对齐） */
   .ant-tree .ant-tree-indent-unit {

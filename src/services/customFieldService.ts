@@ -109,9 +109,9 @@ export async function updateCustomField(
   )
 }
 
-export async function deleteCustomField(fieldId: string): Promise<void> {
+export async function deleteCustomField(projectId: string, fieldId: string): Promise<void> {
   return request<void>(
-    `api/v1/task-center/custom-fields/${fieldId}?user_id=${uid()}`,
+    `api/v1/task-center/projects/${projectId}/custom-fields/${fieldId}?user_id=${uid()}`,
     { method: 'DELETE' },
   )
 }
