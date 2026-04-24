@@ -240,9 +240,11 @@
     font-size: 14px;
     color: #1f2329;
 
-    .ant-badge-status-dot {
-      width: 8px !important;
-      height: 8px !important;
+    .tasklist-icon {
+      flex-shrink: 0;
+      font-size: 15px;
+      color: #8f959e;
+      line-height: 1;
     }
 
     .tasklist-name {
@@ -295,6 +297,10 @@
     &.active {
       color: #3370ff;
       font-weight: 500;
+
+      .tasklist-icon {
+        color: currentColor;
+      }
     }
   }
 

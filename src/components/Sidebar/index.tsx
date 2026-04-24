@@ -7,7 +7,6 @@ import Button from 'antd/es/button'
 import Modal from 'antd/es/modal'
 import Typography from 'antd/es/typography'
 import Divider from 'antd/es/divider'
-import Badge from 'antd/es/badge'
 import Tooltip from 'antd/es/tooltip'
 import Flex from 'antd/es/flex'
 import Space from 'antd/es/space'
@@ -21,6 +20,7 @@ import {
   HistoryOutlined,
   StarOutlined,
   FileTextOutlined,
+  FileDoneOutlined,
   OrderedListOutlined,
   AppstoreOutlined,
   PlusOutlined,
@@ -685,7 +685,7 @@ export default function Sidebar({
     if (editingTasklistGuid === proj.project_id) {
       return (
         <div className="tasklist-title editing">
-          <Badge color="#3370ff" />
+          <FileDoneOutlined className="tasklist-icon" />
           <div className="tasklist-name-editor">
             <EditableInput
               placeholder="输入清单名称"
@@ -707,7 +707,7 @@ export default function Sidebar({
           setEditingTasklistGuid(proj.project_id)
         }}
       >
-        <Badge color="#3370ff" />
+        <FileDoneOutlined className="tasklist-icon" />
         <span className="tasklist-name">{proj.name}</span>
         <Dropdown
           menu={buildTasklistActionMenu(proj)}
