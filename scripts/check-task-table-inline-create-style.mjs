@@ -72,7 +72,7 @@ async function testStylesPromoteBlockLayoutInsteadOfLightweightControls() {
 
   assert.match(
     style,
-    /\.inline-create-title-box \{[\s\S]*min-height: 36px[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
+    /\.inline-create-title-box \{[\s\S]*height: 100%[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
     '标题输入框外层应该是白底描边的大方框，而不是透明输入框。',
   )
 }
@@ -131,7 +131,7 @@ async function testTitleEditorUsesFullHeightRectStyle() {
 
   assert.match(
     style,
-    /\.inline-create-title-box \{[\s\S]*min-height: 36px[\s\S]*padding: 0[\s\S]*border-radius: 0/,
+    /\.inline-create-title-box \{[\s\S]*height: 100%[\s\S]*padding: 0[\s\S]*border-radius: 0/,
     '新建任务标题输入框应该是矩形外框，且上下没有额外留白。',
   )
 
@@ -149,7 +149,7 @@ async function testTitleEditorUsesFullHeightRectStyle() {
 
   assert.match(
     style,
-    /\.task-title-edit-box \{[\s\S]*min-height: 36px[\s\S]*padding: 0[\s\S]*border-radius: 0/,
+    /\.task-title-edit-box \{[\s\S]*height: 100%[\s\S]*padding: 0[\s\S]*border-radius: 0/,
     '已创建任务编辑框也应该是矩形满高样式，不能继续保留旧的小输入框外观。',
   )
 
@@ -157,6 +157,18 @@ async function testTitleEditorUsesFullHeightRectStyle() {
     editableInputSource,
     /size="middle"/,
     '已创建任务编辑态里的输入框应该至少切到 middle，不能继续用 small。',
+  )
+
+  assert.match(
+    style,
+    /\.inline-create-field-shell \{[\s\S]*height: 100%[\s\S]*padding: 0 12px[\s\S]*border-radius: 0/,
+    '新建任务里除了标题以外的配置项壳层也应该撑满整行高度，不能继续居中留白。',
+  )
+
+  assert.match(
+    style,
+    /\.custom-field-editor \{[\s\S]*height: 100%[\s\S]*min-height: 40px[\s\S]*border-radius: 0/,
+    '已创建任务的自定义字段编辑态也应该同步成满高矩形，不要继续保持小号轻量输入框。',
   )
 }
 

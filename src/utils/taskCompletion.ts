@@ -66,16 +66,21 @@ export function getTaskCompletionActions(
   const isAdmin = isCurrentUserTaskAdmin(teamMembers)
   const isAdminAndAssignee = isAdmin && isAssignee
 
-  if (assigneeCount > 1 && isAdminAndAssignee) {
+  // 多人负责人场景：负责人可以操作自己的完成状态，管理员可以替所有人完成
+  if (assigneeCount > 1 && isAssignee) {
     if (!isSelfCompleted) {
       return [
         { key: 'done:self', label: '仅我完成', status: 'done', scope: 'self' },
-        { key: 'done:all', label: '为所有负责人完成', status: 'done', scope: 'all' },
+        ...(isAdmin
+          ? [{ key: 'done:all', label: '为所有负责人完成', status: 'done', scope: 'all' as const }]
+          : []),
       ]
     }
     return [
       { key: 'todo:self', label: '重启任务', status: 'todo', scope: 'self' },
-      { key: 'todo:all', label: '为所有负责人完成', status: 'done', scope: 'all' },
+      ...(isAdmin
+        ? [{ key: 'done:all', label: '为所有负责人完成', status: 'done', scope: 'all' as const }]
+        : []),
     ]
   }
 
