@@ -1083,6 +1083,7 @@ body.detail-panel-resizing {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  width: 100%;
   padding: 6px 8px;
   border-radius: 10px;
   font-size: 13px;
@@ -1109,7 +1110,7 @@ body.detail-panel-resizing {
     width: 16px;
     height: 16px;
     border: 1px solid #c9cdd4;
-    border-radius: 3px;
+    border-radius: 50%;
     cursor: pointer;
     flex-shrink: 0;
     color: #fff;
@@ -1125,6 +1126,15 @@ body.detail-panel-resizing {
     &.checked {
       background: #3370ff;
       border-color: #3370ff;
+    }
+
+    &.subtask-check--draft {
+      margin-top: 0;
+      width: 18px;
+      height: 18px;
+      border-color: #cfd3dc;
+      background: #fff;
+      cursor: default;
     }
   }
 
@@ -1218,29 +1228,60 @@ body.detail-panel-resizing {
 }
 
 .detail-subtask-add {
-  color: #86909c;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: #f7f8fa;
+  color: #8f959e;
   cursor: pointer;
+  box-shadow: none;
+  appearance: none;
+  text-align: left;
 
   .subtask-add-icon {
-    font-size: 12px;
+    font-size: 14px;
+    flex-shrink: 0;
   }
 
   &:hover {
-    color: #3370ff;
+    background: #fff;
+    border-color: #eef0f3;
+    box-shadow: 0 4px 12px rgba(31, 35, 41, 0.06);
+    color: #5f6672;
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: #b9cdfc;
+    box-shadow:
+      0 0 0 2px rgba(51, 112, 255, 0.12),
+      0 4px 12px rgba(31, 35, 41, 0.06);
+  }
+
+  .subtask-add-text {
+    line-height: 20px;
   }
 }
 
 .subtask-suffix-icons {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
 
   .subtask-icon-btn {
     cursor: pointer;
-    color: #86909c;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: #8f959e;
     font-size: 14px;
-    padding: 2px 4px;
-    border-radius: 3px;
+    padding: 0;
+    border-radius: 6px;
     transition: background 0.15s, color 0.15s;
 
     &:hover {
@@ -1254,9 +1295,103 @@ body.detail-panel-resizing {
   }
 }
 
+.detail-subtask-creator-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+
+.detail-subtask-creator-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  color: #4e5969;
+  line-height: 18px;
+
+  .detail-subtask-creator-count {
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ant-progress {
+    margin: 0;
+    width: 48px;
+    min-width: 48px;
+    line-height: 1;
+  }
+
+  .ant-progress-inner {
+    background: #e5e6eb;
+    border-radius: 999px;
+  }
+
+  .ant-progress-bg {
+    border-radius: 999px;
+  }
+}
+
 .detail-subtask-row.is-creating {
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 8px 0 2px;
+  border-radius: 10px;
+  border-color: #eef0f3;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(31, 35, 41, 0.08);
+
   .ant-input-affix-wrapper {
     width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    align-items: center;
+    min-height: 32px;
+
+    &:hover,
+    &.ant-input-affix-wrapper-focused,
+    &:focus-within {
+      border: 0;
+      box-shadow: none;
+    }
+  }
+
+  .ant-input-prefix {
+    margin-right: 0;
+  }
+
+  .ant-input {
+    padding: 0;
+    font-size: 13px;
+    color: #1f2329;
+    line-height: 20px;
+
+    &::placeholder {
+      color: #8f959e;
+    }
+  }
+
+  .ant-input-suffix {
+    margin-left: 8px;
+  }
+
+  &:hover {
+    background: #fff;
+    border-color: #eef0f3;
+  }
+}
+
+.detail-subtask-row.is-creating,
+.detail-subtask-add {
+  .subtask-add-text,
+  .ant-input,
+  .detail-subtask-creator-count {
+    letter-spacing: 0;
   }
 }
 
@@ -1286,6 +1421,19 @@ body.detail-panel-resizing {
   .task-rich-input-mention {
     background: #edf3ff;
     color: #245bdb;
+  }
+
+  img {
+    display: block;
+    width: 160px;
+    max-width: 100%;
+    height: 108px;
+    margin: 8px 0;
+    border: 1px solid #e5e6eb;
+    border-radius: 8px;
+    background: #f7f8fa;
+    object-fit: cover;
+    cursor: pointer;
   }
 }
 

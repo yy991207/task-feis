@@ -13,6 +13,7 @@ import Tooltip from 'antd/es/tooltip'
 import Breadcrumb from 'antd/es/breadcrumb'
 import Empty from 'antd/es/empty'
 import Spin from 'antd/es/spin'
+import Progress from 'antd/es/progress'
 import {
   CloseOutlined,
   MoreOutlined,
@@ -20,7 +21,6 @@ import {
   CalendarOutlined,
   PaperClipOutlined,
   BranchesOutlined,
-  PlusOutlined,
   CheckOutlined,
   DeleteOutlined,
   AlignLeftOutlined,
@@ -1340,6 +1340,11 @@ export default function TaskDetailPanel({
 
   const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
   const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
+  const subtaskCreatePreviewTotal = subtaskDrafts.length + (subtaskCreating ? 1 : 0)
+  const subtaskCreatePreviewPercent =
+    subtaskCreatePreviewTotal > 0
+      ? Math.round((subtaskDrafts.length / subtaskCreatePreviewTotal) * 100)
+      : 0
 
   const cancelEmptySubtaskCreate = () => {
     setSubtaskCreating(false)
@@ -2391,8 +2396,20 @@ export default function TaskDetailPanel({
                   className={`detail-description-view ${!descriptionDraft.trim() ? 'is-empty' : ''}`}
                   onClick={(event) => {
                     const target = event.target
-                    if (target instanceof Element && target.closest('a[href]')) {
-                      return
+                    if (target instanceof Element) {
+                      if (target.closest('a[href]')) {
+                        return
+                      }
+                      // 描述区内嵌图片走现有附件预览弹窗，避免点图时误切到编辑态。
+                      const image = target.closest('img[data-attachment-id]')
+                      if (image instanceof HTMLImageElement) {
+                        const attachmentId = image.dataset.attachmentId ?? ''
+                        const attachment = attachments.find((item) => item.attachment_id === attachmentId)
+                        if (attachment) {
+                          handleOpenAttachmentPreview(attachment)
+                          return
+                        }
+                      }
                     }
                     setDescriptionEditing(true)
                   }}
@@ -2663,136 +2680,150 @@ export default function TaskDetailPanel({
                 )
               })}
               {canCreateSubtask && subtaskCreating && (
-                <div
-                  ref={subtaskCreateRowRef}
-                  className="detail-subtask-row is-creating"
-                >
-                  <span className="subtask-check" />
-                  <Input
-                    size="small"
-                    autoFocus
-                    placeholder="输入内容，回车即可创建子任务"
-                    value={subtaskTitle}
-                    onChange={(e) => setSubtaskTitle(e.target.value)}
-                    onPressEnter={() => void handleAddSubtask()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setSubtaskCreating(false)
-                        resetSubtaskCreateDraft()
-                      }
-                    }}
-                    style={{ flex: 1 }}
-                    suffix={
-                      <span
-                        className="subtask-suffix-icons"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={markSubtaskCreateInteracting}
-                      >
-                        <Popover
-                          trigger="click"
-                          placement="bottomLeft"
-                          content={
-                            <div
-                              style={{ width: 260 }}
-                              onMouseDown={(e) => {
-                                markSubtaskCreateInteracting()
-                                e.preventDefault()
-                              }}
-                            >
-                              <Calendar
-                                fullscreen={false}
-                                value={subtaskDue ?? undefined}
-                                onSelect={setSubtaskDue}
-                                disabledDate={(current) =>
-                                  current && current < dayjs().startOf('day')
-                                }
-                              />
-                            </div>
-                          }
+                <div className="detail-subtask-creator-card">
+                  <div className="detail-subtask-creator-progress" aria-hidden="true">
+                    <span className="detail-subtask-creator-count">
+                      {subtaskDrafts.length}/{subtaskCreatePreviewTotal}
+                    </span>
+                    <Progress
+                      percent={subtaskCreatePreviewPercent}
+                      showInfo={false}
+                      size={{ height: 8 }}
+                      strokeColor="#b8bcc5"
+                      trailColor="#e5e6eb"
+                    />
+                  </div>
+                  <div
+                    ref={subtaskCreateRowRef}
+                    className="detail-subtask-row is-creating"
+                  >
+                    <span className="subtask-check subtask-check--draft" />
+                    <Input
+                      size="small"
+                      autoFocus
+                      bordered={false}
+                      placeholder="输入内容，回车即可创建子任务"
+                      value={subtaskTitle}
+                      onChange={(e) => setSubtaskTitle(e.target.value)}
+                      onPressEnter={() => void handleAddSubtask()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setSubtaskCreating(false)
+                          resetSubtaskCreateDraft()
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                      suffix={
+                        <span
+                          className="subtask-suffix-icons"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={markSubtaskCreateInteracting}
                         >
-                          <Tooltip title="设置子任务截止时间">
-                            <CalendarOutlined
-                              className={`subtask-icon-btn ${subtaskDue ? 'active' : ''}`}
-                            />
-                          </Tooltip>
-                        </Popover>
-                        <Popover
-                          trigger="click"
-                          placement="bottomLeft"
-                          overlayClassName="detail-subtask-assignee-popover"
-                          content={
-                            <div
-                              className="detail-popover-panel detail-popover-panel-assignee detail-popover-panel-subtask-assignee"
-                              onMouseDown={(e) => {
-                                markSubtaskCreateInteracting()
-                                e.preventDefault()
-                              }}
-                            >
-                              <UserSearchSelect
-                                autoFocus
-                                size="small"
-                                mode="multiple"
-                                optionsVariant="inline"
-                                placeholder="添加负责人"
-                                value={subtaskAssigneeIds}
-                                onChange={(value) =>
-                                  setSubtaskAssigneeIds(Array.isArray(value) ? value : [])
-                                }
-                                users={availableUsers}
-                                style={{ width: '100%' }}
-                              />
-                              <div className="detail-assignee-completion-config">
-                                <Dropdown
-                                  trigger={['click']}
-                                  menu={{
-                                    selectable: true,
-                                    selectedKeys: [subtaskCompletionMode],
-                                    items: [
-                                      { key: 'all', label: '全部负责人均需完成' },
-                                      { key: 'any', label: '任一负责人完成即可' },
-                                    ],
-                                    onClick: ({ key }) => {
-                                      setSubtaskCompletionMode(key === 'all' ? 'all' : 'any')
-                                    },
-                                  }}
-                                >
-                                  <Button
-                                    type="text"
-                                    size="small"
-                                    className="detail-assignee-completion-btn"
-                                  >
-                                    {subtaskCompletionMode === 'all'
-                                      ? '全部负责人均需完成'
-                                      : '任一负责人完成即可'}
-                                    <DownOutlined />
-                                  </Button>
-                                </Dropdown>
+                          <Popover
+                            trigger="click"
+                            placement="bottomLeft"
+                            content={
+                              <div
+                                style={{ width: 260 }}
+                                onMouseDown={(e) => {
+                                  markSubtaskCreateInteracting()
+                                  e.preventDefault()
+                                }}
+                              >
+                                <Calendar
+                                  fullscreen={false}
+                                  value={subtaskDue ?? undefined}
+                                  onSelect={setSubtaskDue}
+                                  disabledDate={(current) =>
+                                    current && current < dayjs().startOf('day')
+                                  }
+                                />
                               </div>
-                            </div>
-                          }
-                        >
-                          <Tooltip title="设置子任务负责人">
-                            <UsergroupAddOutlined
-                              className={`subtask-icon-btn ${subtaskAssigneeIds.length > 0 ? 'active' : ''}`}
-                            />
-                          </Tooltip>
-                        </Popover>
-                      </span>
-                    }
-                    onBlur={handleSubtaskCreateBlur}
-                  />
+                            }
+                          >
+                            <Tooltip title="设置子任务截止时间">
+                              <CalendarOutlined
+                                className={`subtask-icon-btn ${subtaskDue ? 'active' : ''}`}
+                              />
+                            </Tooltip>
+                          </Popover>
+                          <Popover
+                            trigger="click"
+                            placement="bottomLeft"
+                            overlayClassName="detail-subtask-assignee-popover"
+                            content={
+                              <div
+                                className="detail-popover-panel detail-popover-panel-assignee detail-popover-panel-subtask-assignee"
+                                onMouseDown={(e) => {
+                                  markSubtaskCreateInteracting()
+                                  e.preventDefault()
+                                }}
+                              >
+                                <UserSearchSelect
+                                  autoFocus
+                                  size="small"
+                                  mode="multiple"
+                                  optionsVariant="inline"
+                                  placeholder="添加负责人"
+                                  value={subtaskAssigneeIds}
+                                  onChange={(value) =>
+                                    setSubtaskAssigneeIds(Array.isArray(value) ? value : [])
+                                  }
+                                  users={availableUsers}
+                                  style={{ width: '100%' }}
+                                />
+                                <div className="detail-assignee-completion-config">
+                                  <Dropdown
+                                    trigger={['click']}
+                                    menu={{
+                                      selectable: true,
+                                      selectedKeys: [subtaskCompletionMode],
+                                      items: [
+                                        { key: 'all', label: '全部负责人均需完成' },
+                                        { key: 'any', label: '任一负责人完成即可' },
+                                      ],
+                                      onClick: ({ key }) => {
+                                        setSubtaskCompletionMode(key === 'all' ? 'all' : 'any')
+                                      },
+                                    }}
+                                  >
+                                    <Button
+                                      type="text"
+                                      size="small"
+                                      className="detail-assignee-completion-btn"
+                                    >
+                                      {subtaskCompletionMode === 'all'
+                                        ? '全部负责人均需完成'
+                                        : '任一负责人完成即可'}
+                                      <DownOutlined />
+                                    </Button>
+                                  </Dropdown>
+                                </div>
+                              </div>
+                            }
+                          >
+                            <Tooltip title="设置子任务负责人">
+                              <UsergroupAddOutlined
+                                className={`subtask-icon-btn ${subtaskAssigneeIds.length > 0 ? 'active' : ''}`}
+                              />
+                            </Tooltip>
+                          </Popover>
+                        </span>
+                      }
+                      onBlur={handleSubtaskCreateBlur}
+                    />
+                  </div>
                 </div>
               )}
               {canCreateSubtask && !subtaskCreating && (
-                <div
+                <button
+                  type="button"
                   className="detail-subtask-row detail-subtask-add"
                   onClick={() => setSubtaskCreating(true)}
                 >
-                  <Tooltip title="添加子任务">
-                    <PlusOutlined className="subtask-add-icon" />
-                  </Tooltip>
+                  <BranchesOutlined className="subtask-add-icon" />
                   <span className="subtask-add-text">添加子任务</span>
-                </div>
+                </button>
               )}
               {!canCreateSubtask && (
                 <div
