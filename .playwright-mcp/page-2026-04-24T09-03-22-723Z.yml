@@ -1,0 +1,374 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - button "unordered-list" [ref=e9] [cursor=pointer]:
+            - img "unordered-list" [ref=e11]:
+              - img [ref=e12]
+          - heading "任务" [level=5] [ref=e14]
+          - generic [ref=e15]:
+            - button "user-switch" [active] [ref=e16] [cursor=pointer]:
+              - img "user-switch" [ref=e18]:
+                - img [ref=e19]
+            - generic [ref=e21]:
+              - button "bell" [ref=e22] [cursor=pointer]:
+                - img "bell" [ref=e24]:
+                  - img [ref=e25]
+              - superscript [ref=e278]:
+                - generic [ref=e279]:
+                  - generic [ref=e280]: "7"
+                  - generic [ref=e281]: "1"
+        - menu [ref=e27]:
+          - menuitem "user 我负责的" [ref=e28] [cursor=pointer]:
+            - img "user" [ref=e29]:
+              - img [ref=e30]
+            - generic [ref=e32]: 我负责的
+          - menuitem "eye 我关注的" [ref=e33] [cursor=pointer]:
+            - img "eye" [ref=e34]:
+              - img [ref=e35]
+            - generic [ref=e37]: 我关注的
+          - menuitem "history 动态" [ref=e38] [cursor=pointer]:
+            - img "history" [ref=e39]:
+              - img [ref=e40]
+            - generic [ref=e42]: 动态
+        - separator [ref=e43]
+        - menu [ref=e44]:
+          - text: 快速访问
+          - group [ref=e45]:
+            - menuitem "file-text 全部任务" [ref=e46] [cursor=pointer]:
+              - img "file-text" [ref=e47]:
+                - img [ref=e48]
+              - generic [ref=e50]: 全部任务
+            - menuitem "ordered-list 我创建的" [ref=e51] [cursor=pointer]:
+              - img "ordered-list" [ref=e52]:
+                - img [ref=e53]
+              - generic [ref=e55]: 我创建的
+            - menuitem "appstore 我分配的" [ref=e56] [cursor=pointer]:
+              - img "appstore" [ref=e57]:
+                - img [ref=e58]
+              - generic [ref=e60]: 我分配的
+            - menuitem "star 已完成" [ref=e61] [cursor=pointer]:
+              - img "star" [ref=e62]:
+                - img [ref=e63]
+              - generic [ref=e65]: 已完成
+        - separator [ref=e66]
+        - tree [ref=e69]:
+          - generic [ref=e72]:
+            - treeitem "caret-down 任务清单 plus" [expanded] [ref=e282]:
+              - img "caret-down" [ref=e284] [cursor=pointer]:
+                - img [ref=e285]
+              - generic [ref=e76] [cursor=pointer]:
+                - generic [ref=e79]: 任务清单
+                - button "plus" [ref=e82]:
+                  - img "plus" [ref=e84]:
+                    - img [ref=e85]
+            - treeitem "drag file-done 任务清单 1336 ellipsis" [ref=e287]:
+              - img "drag" [ref=e289]:
+                - img [ref=e290]
+              - generic [ref=e294] [cursor=pointer]:
+                - img "file-done" [ref=e295]:
+                  - img [ref=e296]
+                - generic [ref=e298]: 任务清单 1336
+                - button "ellipsis" [ref=e299]:
+                  - img "ellipsis" [ref=e301]:
+                    - img [ref=e302]
+            - treeitem "drag caret-down 银河传说 ellipsis plus" [expanded] [ref=e88]:
+              - img "drag" [ref=e90]:
+                - img [ref=e91]
+              - img "caret-down" [ref=e94] [cursor=pointer]:
+                - img [ref=e95]
+              - generic [ref=e99] [cursor=pointer]:
+                - generic [ref=e102]: 银河传说
+                - generic [ref=e103]:
+                  - button "ellipsis" [ref=e105]:
+                    - img "ellipsis" [ref=e107]:
+                      - img [ref=e108]
+                  - button "plus" [ref=e111]:
+                    - img "plus" [ref=e113]:
+                      - img [ref=e114]
+            - treeitem "可拖拽清单加入该分组" [ref=e117]:
+              - generic [ref=e120] [cursor=pointer]: 可拖拽清单加入该分组
+            - treeitem "drag caret-down 朱元璋吃西瓜 ellipsis plus" [expanded] [ref=e121]:
+              - img "drag" [ref=e123]:
+                - img [ref=e124]
+              - img "caret-down" [ref=e127] [cursor=pointer]:
+                - img [ref=e128]
+              - generic [ref=e132] [cursor=pointer]:
+                - generic [ref=e135]: 朱元璋吃西瓜
+                - generic [ref=e136]:
+                  - button "ellipsis" [ref=e138]:
+                    - img "ellipsis" [ref=e140]:
+                      - img [ref=e141]
+                  - button "plus" [ref=e144]:
+                    - img "plus" [ref=e146]:
+                      - img [ref=e147]
+            - treeitem "可拖拽清单加入该分组" [ref=e150]:
+              - generic [ref=e153] [cursor=pointer]: 可拖拽清单加入该分组
+            - treeitem "drag caret-down 新分组11111 ellipsis plus" [expanded] [ref=e154]:
+              - img "drag" [ref=e156]:
+                - img [ref=e157]
+              - img "caret-down" [ref=e160] [cursor=pointer]:
+                - img [ref=e161]
+              - generic [ref=e165] [cursor=pointer]:
+                - generic [ref=e168]: 新分组11111
+                - generic [ref=e169]:
+                  - button "ellipsis" [ref=e171]:
+                    - img "ellipsis" [ref=e173]:
+                      - img [ref=e174]
+                  - button "plus" [ref=e177]:
+                    - img "plus" [ref=e179]:
+                      - img [ref=e180]
+            - treeitem "drag file-done 任务清单 1339 ellipsis" [ref=e304]:
+              - img "drag" [ref=e306]:
+                - img [ref=e307]
+              - generic [ref=e311] [cursor=pointer]:
+                - img "file-done" [ref=e312]:
+                  - img [ref=e313]
+                - generic [ref=e315]: 任务清单 1339
+                - button "ellipsis" [ref=e316]:
+                  - img "ellipsis" [ref=e318]:
+                    - img [ref=e319]
+            - treeitem "drag caret-down 新分组 ellipsis plus" [expanded] [ref=e187]:
+              - img "drag" [ref=e189]:
+                - img [ref=e190]
+              - img "caret-down" [ref=e193] [cursor=pointer]:
+                - img [ref=e194]
+              - generic [ref=e198] [cursor=pointer]:
+                - generic [ref=e201]: 新分组
+                - generic [ref=e202]:
+                  - button "ellipsis" [ref=e204]:
+                    - img "ellipsis" [ref=e206]:
+                      - img [ref=e207]
+                  - button "plus" [ref=e210]:
+                    - img "plus" [ref=e212]:
+                      - img [ref=e213]
+            - treeitem "drag file-done 张三创建的清单 ellipsis" [ref=e321]:
+              - img "drag" [ref=e323]:
+                - img [ref=e324]
+              - generic [ref=e328] [cursor=pointer]:
+                - img "file-done" [ref=e329]:
+                  - img [ref=e330]
+                - generic [ref=e332]: 张三创建的清单
+                - button "ellipsis" [ref=e333]:
+                  - img "ellipsis" [ref=e335]:
+                    - img [ref=e336]
+        - button "plus 新建清单分组" [ref=e221] [cursor=pointer]:
+          - img "plus" [ref=e223]:
+            - img [ref=e224]
+          - generic [ref=e227]: 新建清单分组
+    - main [ref=e229]:
+      - generic [ref=e230]:
+        - heading "我负责的" [level=5] [ref=e234]
+        - generic [ref=e236]:
+          - button "filter 全部任务" [ref=e239] [cursor=pointer]:
+            - img "filter" [ref=e241]:
+              - img [ref=e242]
+            - generic [ref=e244]: 全部任务
+          - button "filter 筛选" [ref=e246] [cursor=pointer]:
+            - img "filter" [ref=e248]:
+              - img [ref=e249]
+            - generic [ref=e251]: 筛选
+          - button "sort-ascending 排序 · 截止时间" [ref=e253] [cursor=pointer]:
+            - img "sort-ascending" [ref=e255]:
+              - img [ref=e256]
+            - generic [ref=e258]: 排序 · 截止时间
+          - button "setting 字段配置" [ref=e260] [cursor=pointer]:
+            - img "setting" [ref=e262]:
+              - img [ref=e263]
+            - generic [ref=e265]: 字段配置
+        - generic [ref=e266]:
+          - table [ref=e344]:
+            - rowgroup [ref=e351]:
+              - row "font-size 任务标题 拖拽调整字段宽度 clock-circle 开始时间 打开字段菜单 拖拽调整字段宽度 calendar 截止时间 打开字段菜单 拖拽调整字段宽度 user 创建人 打开字段菜单 拖拽调整字段宽度 创建时间 打开字段菜单 拖拽调整字段宽度" [ref=e352]:
+                - columnheader "font-size 任务标题 拖拽调整字段宽度" [ref=e353]:
+                  - generic [ref=e355]:
+                    - img "font-size" [ref=e356]:
+                      - img [ref=e357]
+                    - generic [ref=e359]: 任务标题
+                  - separator "拖拽调整字段宽度" [ref=e360]
+                - columnheader "clock-circle 开始时间 打开字段菜单 拖拽调整字段宽度" [ref=e361]:
+                  - generic [ref=e363]:
+                    - generic [ref=e365]:
+                      - img "clock-circle" [ref=e366]:
+                        - img [ref=e367]
+                      - generic [ref=e370]: 开始时间
+                    - button "打开字段菜单":
+                      - img "down":
+                        - img
+                  - separator "拖拽调整字段宽度" [ref=e371]
+                - columnheader "calendar 截止时间 打开字段菜单 拖拽调整字段宽度" [ref=e372]:
+                  - generic [ref=e374]:
+                    - generic [ref=e376]:
+                      - img "calendar" [ref=e377]:
+                        - img [ref=e378]
+                      - generic [ref=e380]: 截止时间
+                    - button "打开字段菜单":
+                      - img "down":
+                        - img
+                  - separator "拖拽调整字段宽度" [ref=e381]
+                - columnheader "user 创建人 打开字段菜单 拖拽调整字段宽度" [ref=e382]:
+                  - generic [ref=e384]:
+                    - generic [ref=e386]:
+                      - img "user" [ref=e387]:
+                        - img [ref=e388]
+                      - generic [ref=e390]: 创建人
+                    - button "打开字段菜单":
+                      - img "down":
+                        - img
+                  - separator "拖拽调整字段宽度" [ref=e391]
+                - columnheader "创建时间 打开字段菜单 拖拽调整字段宽度" [ref=e392]:
+                  - generic [ref=e394]:
+                    - generic [ref=e396]: 创建时间
+                    - button "打开字段菜单":
+                      - img "down":
+                        - img
+                  - separator "拖拽调整字段宽度" [ref=e397]
+                - columnheader [ref=e398]
+            - rowgroup [ref=e399]:
+              - generic [ref=e400]:
+                - img [ref=e401]:
+                  - img [ref=e402]
+                - generic [ref=e404]: 任务标题
+              - generic [ref=e405]:
+                - generic [ref=e407]:
+                  - img [ref=e408]:
+                    - img [ref=e409]
+                  - generic [ref=e412]: 开始时间
+                - button:
+                  - img:
+                    - img
+              - generic [ref=e413]:
+                - generic [ref=e415]:
+                  - img [ref=e416]:
+                    - img [ref=e417]
+                  - generic [ref=e419]: 截止时间
+                - button:
+                  - img:
+                    - img
+              - generic [ref=e420]:
+                - generic [ref=e422]:
+                  - img [ref=e423]:
+                    - img [ref=e424]
+                  - generic [ref=e426]: 创建人
+                - button:
+                  - img:
+                    - img
+              - generic [ref=e427]:
+                - generic [ref=e429]: 创建时间
+                - button:
+                  - img:
+                    - img
+              - row "caret-down 默认分组 4" [ref=e430]:
+                - cell "caret-down 默认分组 4" [ref=e431]:
+                  - generic [ref=e432] [cursor=pointer]:
+                    - img "caret-down" [ref=e433]:
+                      - img [ref=e434]
+                    - generic [ref=e436]: 默认分组
+                    - generic [ref=e437]: "4"
+                - cell [ref=e438]
+                - cell [ref=e439]
+                - cell [ref=e440]
+                - cell [ref=e441]
+                - cell [ref=e442]
+              - row "4444 calendar calendar 管 4月24日 15:50" [ref=e443] [cursor=pointer]:
+                - cell "4444" [ref=e444]:
+                  - generic [ref=e446]:
+                    - checkbox [ref=e450]
+                    - generic [ref=e452]: "4444"
+                - cell "calendar" [ref=e454]:
+                  - img "calendar" [ref=e457]:
+                    - img [ref=e458]
+                - cell "calendar" [ref=e460]:
+                  - img "calendar" [ref=e463]:
+                    - img [ref=e464]
+                - cell "管" [ref=e466]:
+                  - generic [ref=e468]: 管
+                - cell "4月24日 15:50" [ref=e469]
+                - cell [ref=e470]
+              - row "测试 calendar calendar 管 4月24日 16:46" [ref=e471] [cursor=pointer]:
+                - cell "测试" [ref=e472]:
+                  - generic [ref=e474]:
+                    - checkbox [ref=e479]
+                    - generic [ref=e481]: 测试
+                - cell "calendar" [ref=e483]:
+                  - img "calendar" [ref=e486]:
+                    - img [ref=e487]
+                - cell "calendar" [ref=e489]:
+                  - img "calendar" [ref=e492]:
+                    - img [ref=e493]
+                - cell "管" [ref=e495]:
+                  - generic [ref=e497]: 管
+                - cell "4月24日 16:46" [ref=e498]
+                - cell [ref=e499]
+              - row "caret-right 111111 subnode 0 / 1 calendar calendar 管 4月24日 14:16" [ref=e500] [cursor=pointer]:
+                - cell "caret-right 111111 subnode 0 / 1" [ref=e501]:
+                  - generic [ref=e503]:
+                    - checkbox [checked] [ref=e508]
+                    - generic [ref=e509]:
+                      - img "caret-right" [ref=e510]:
+                        - img [ref=e511]
+                      - generic [ref=e513]: "111111"
+                      - generic "子任务 0 / 1" [ref=e515]:
+                        - img "subnode" [ref=e516]:
+                          - img [ref=e517]
+                        - generic [ref=e519]: 0 / 1
+                - cell "calendar" [ref=e521]:
+                  - img "calendar" [ref=e524]:
+                    - img [ref=e525]
+                - cell "calendar" [ref=e527]:
+                  - img "calendar" [ref=e530]:
+                    - img [ref=e531]
+                - cell "管" [ref=e533]:
+                  - generic [ref=e535]: 管
+                - cell "4月24日 14:16" [ref=e536]
+                - cell [ref=e537]
+              - row "3344 calendar calendar 管 4月24日 14:19" [ref=e538] [cursor=pointer]:
+                - cell "3344" [ref=e539]:
+                  - generic [ref=e541]:
+                    - checkbox [checked] [ref=e545]
+                    - generic [ref=e547]: "3344"
+                - cell "calendar" [ref=e549]:
+                  - img "calendar" [ref=e552]:
+                    - img [ref=e553]
+                - cell "calendar" [ref=e555]:
+                  - img "calendar" [ref=e558]:
+                    - img [ref=e559]
+                - cell "管" [ref=e561]:
+                  - generic [ref=e563]: 管
+                - cell "4月24日 14:19" [ref=e564]
+                - cell [ref=e565]
+          - button "plus 新建任务分组" [ref=e566] [cursor=pointer]:
+            - img "plus" [ref=e568]:
+              - img [ref=e569]
+            - generic [ref=e572]: 新建任务分组
+  - menu [ref=e574]:
+    - text: 切换团队
+    - group
+    - menuitem "银河传说" [ref=e575] [cursor=pointer]:
+      - generic [ref=e578]: 银河传说
+    - menuitem "复仇者" [ref=e579] [cursor=pointer]:
+      - generic [ref=e582]: 复仇者
+    - menuitem "check 测试团队 当前" [ref=e583] [cursor=pointer]:
+      - generic [ref=e585]:
+        - img "check" [ref=e587]:
+          - img [ref=e588]
+        - generic [ref=e590]: 测试团队
+        - generic [ref=e591]: 当前
+    - text: 切换当前身份
+    - group
+    - menuitem "check 123456 所有者" [ref=e592] [cursor=pointer]:
+      - generic [ref=e594]:
+        - img "check" [ref=e596]:
+          - img [ref=e597]
+        - generic [ref=e599]: "123456"
+        - generic [ref=e600]: 所有者
+    - menuitem "张三" [ref=e601] [cursor=pointer]:
+      - generic [ref=e604]: 张三
+    - menuitem "李四" [ref=e606] [cursor=pointer]:
+      - generic [ref=e609]: 李四
+    - menuitem "王五" [ref=e611] [cursor=pointer]:
+      - generic [ref=e614]: 王五
+    - menuitem "赵六" [ref=e616] [cursor=pointer]:
+      - generic [ref=e619]: 赵六
+  - 'tooltip "当前用户: 123456" [ref=e622]'

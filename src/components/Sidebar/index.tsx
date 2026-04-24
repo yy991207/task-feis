@@ -40,6 +40,7 @@ import {
 import type { Tasklist } from '@/types/task'
 import NotificationBell from '@/components/NotificationBell'
 import CustomFieldsModal from '@/components/CustomFieldsModal'
+import UserSwitcher from '@/components/UserSwitcher'
 import type { ProjectGroup } from '@/types/projectGroup'
 import type { Project } from '@/types/project'
 import {
@@ -1005,7 +1006,8 @@ export default function Sidebar({
         <Title level={5} className="sidebar-title">
           任务
         </Title>
-        <div style={{ marginLeft: 'auto' }}>
+        <div className="sidebar-header-actions">
+          <UserSwitcher />
           <NotificationBell />
         </div>
       </div>
