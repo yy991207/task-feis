@@ -86,6 +86,7 @@ export interface CustomFieldDef {
   guid: string
   name: string
   type: CustomFieldType
+  render_hint?: string | null
   options?: SelectOption[]
 }
 
@@ -129,6 +130,7 @@ export interface Task {
   tasklists: TasklistRef[]
   dependencies: Dependency[]
   custom_fields: CustomFieldValue[]
+  custom_fields_display?: Record<string, unknown>
   reminders: Reminder[]
   due?: TimeValue
   start?: TimeValue

@@ -53,6 +53,7 @@ export interface ApiTask {
   is_completed: boolean
   is_starred: boolean
   custom_fields?: Record<string, unknown>
+  custom_fields_display?: Record<string, unknown>
 }
 
 export interface ApiTaskActivity {
@@ -268,6 +269,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     tasklists: [{ tasklist_guid: tlGuid, section_guid: api.section_id }],
     dependencies: [],
     custom_fields: mappedCustomFields,
+    custom_fields_display: api.custom_fields_display ?? {},
     reminders: [],
     start: api.start_date
       ? { timestamp: new Date(api.start_date).getTime().toString(), is_all_day: false }

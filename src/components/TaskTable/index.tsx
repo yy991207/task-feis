@@ -39,7 +39,7 @@ import {
   DownOutlined,
   CheckOutlined,
   FontSizeOutlined,
-  LinkOutlined,
+  PlayCircleOutlined,
   ClockCircleOutlined,
   CalendarOutlined,
   RightOutlined,
@@ -660,6 +660,14 @@ function getTaskDateValue(task: Task, fieldKey: string): dayjs.Dayjs | null {
 }
 
 function getTaskCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string[] {
+  if (field.type === 'button') {
+    const displayValue = task.custom_fields_display?.[field.guid]
+    if (typeof displayValue === 'string' && displayValue.trim()) {
+      return [displayValue.trim()]
+    }
+    return []
+  }
+
   const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
   if (!fieldValue) {
     return []
@@ -1514,11 +1522,14 @@ export default function TaskTable({
     guid: f.field_id,
     name: f.name,
     type:
-      f.field_type === 'select'
+      f.field_type === 'text' && f.render_hint === 'button'
+        ? 'button'
+        : f.field_type === 'select'
         ? 'single_select'
         : f.field_type === 'date'
         ? 'datetime'
         : (f.field_type as CustomFieldDef['type']),
+    render_hint: f.render_hint ?? null,
     options: (f.options ?? []).map((o) => ({
       guid: o.id ?? o.label,
       name: o.label,
@@ -5156,9 +5167,12 @@ function CustomFieldCell({
   )
 
   if (field.type === 'button') {
-    // 按钮类型：URL 存在 options[0] 的 label（前端映射后是 name 字段），点击新窗口打开
-    const url = field.options?.[0]?.name ?? ''
-    const label = field.name || '打开'
+    // render_hint=button 走任务字段显示值，只做前端按钮态展示；旧 button 字段继续兼容原有链接模式。
+    const displayValue = task.custom_fields_display?.[field.guid]
+    const buttonValue = typeof displayValue === 'string' && displayValue.trim()
+      ? displayValue.trim()
+      : ''
+    const legacyUrl = field.render_hint === 'button' ? '' : (field.options?.[0]?.name ?? '')
     return renderCellShell(
       <div
         className="custom-field-button-cell"
@@ -5166,30 +5180,23 @@ function CustomFieldCell({
         style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}
       >
         <Button
-          type="primary"
+          type="text"
           size="small"
-          icon={<LinkOutlined />}
-          disabled={!url}
-          onClick={() => {
-            if (url) {
-              window.open(url, '_blank', 'noopener,noreferrer')
+          icon={<PlayCircleOutlined />}
+          className="custom-field-button-trigger"
+          aria-label={field.name || '查看'}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (field.render_hint === 'button') {
+              message.info(buttonValue || '当前按钮还没有内容')
+              return
+            }
+            if (legacyUrl) {
+              window.open(legacyUrl, '_blank', 'noopener,noreferrer')
             }
           }}
-          style={{ maxWidth: '100%' }}
-        >
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxWidth: 120,
-              display: 'inline-block',
-              verticalAlign: 'bottom',
-            }}
-          >
-            {label}
-          </span>
-        </Button>
+        />
       </div>,
     )
   }
@@ -5978,7 +5985,11 @@ function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]
   }
 
   if (field.type === 'button') {
-    return field.options?.[0]?.name ?? '-'
+    const displayValue = task.custom_fields_display?.[field.guid]
+    if (typeof displayValue === 'string' && displayValue.trim()) {
+      return displayValue.trim()
+    }
+    return field.options?.[0]?.name ?? field.name ?? '-'
   }
 
   const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)

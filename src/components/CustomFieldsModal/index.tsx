@@ -21,6 +21,13 @@ import {
   type UpdateFieldOption,
 } from '@/services/customFieldService'
 
+function getApiCustomFieldDisplayType(field: ApiCustomField): CustomFieldType {
+  if (field.field_type === 'text' && field.render_hint === 'button') {
+    return 'button'
+  }
+  return field.field_type
+}
+
 interface Props {
   open: boolean
   projectId: string
@@ -127,7 +134,7 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
     setCreating(true)
     form.setFieldsValue({
       name: it.name,
-      field_type: it.field_type,
+      field_type: getApiCustomFieldDisplayType(it),
       options: (it.options ?? []).map((o) => o.label).join('\n'),
     })
   }
@@ -192,8 +199,8 @@ export default function CustomFieldsModal({ open, projectId, onClose, onChanged 
                     <Space>
                       <span>{it.name}</span>
                       <Tag>
-                        {fieldTypeOptions.find((f) => f.value === it.field_type)?.label ??
-                          it.field_type}
+                        {fieldTypeOptions.find((f) => f.value === getApiCustomFieldDisplayType(it))?.label ??
+                          getApiCustomFieldDisplayType(it)}
                       </Tag>
                       {it.required && <Tag color="red">必填</Tag>}
                     </Space>

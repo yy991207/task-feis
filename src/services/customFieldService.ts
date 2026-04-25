@@ -35,6 +35,7 @@ export interface ApiCustomField {
   team_id?: string
   name: string
   field_type: CustomFieldType
+  render_hint?: string | null
   options: FieldOption[] | null
   required: boolean
   is_visible: boolean

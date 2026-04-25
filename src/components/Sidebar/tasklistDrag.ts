@@ -1,4 +1,4 @@
-import type { Project } from '@/types/project'
+import type { Project } from '../../types/project'
 
 export const EMPTY_GROUP_PLACEHOLDER_PREFIX = 'grp-empty:'
 

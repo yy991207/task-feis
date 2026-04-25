@@ -1,17 +1,14 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import message from 'antd/es/message'
 import Dropdown from 'antd/es/dropdown'
 import Tree from 'antd/es/tree'
 import Menu from 'antd/es/menu'
 import Button from 'antd/es/button'
-import Modal from 'antd/es/modal'
 import Typography from 'antd/es/typography'
 import Divider from 'antd/es/divider'
 import Tooltip from 'antd/es/tooltip'
 import Flex from 'antd/es/flex'
 import Space from 'antd/es/space'
-import Select from 'antd/es/select'
-import Spin from 'antd/es/spin'
 import type { DataNode, TreeProps } from 'antd/es/tree'
 import type { MenuProps } from 'antd/es/menu'
 import {
@@ -32,8 +29,6 @@ import {
   EllipsisOutlined,
   DeleteOutlined,
   EditOutlined,
-  ShareAltOutlined,
-  InboxOutlined,
   StopOutlined,
   DragOutlined,
 } from '@ant-design/icons'
@@ -55,16 +50,8 @@ import {
   createProject,
   updateProject as apiUpdateProject,
   deleteProject as apiDeleteProject,
-  archiveProject as apiArchiveProject,
   moveProjectToGroup,
-  distributeProject,
 } from '@/services/projectService'
-import {
-  listMembers,
-  listTeams,
-  type Team,
-} from '@/services/teamService'
-import { appConfig } from '@/config/appConfig'
 import EditableInput from '@/components/EditableInput'
 import {
   EMPTY_GROUP_PLACEHOLDER_PREFIX,
@@ -160,14 +147,8 @@ export default function Sidebar({
   const [openedGroupMenuId, setOpenedGroupMenuId] = useState<string | null>(null)
   const [openedProjectMenuId, setOpenedProjectMenuId] = useState<string | null>(null)
   const [customFieldsProjectId, setCustomFieldsProjectId] = useState<string | null>(null)
-  const [shareModalProject, setShareModalProject] = useState<Project | null>(null)
-  const [shareTargetTeams, setShareTargetTeams] = useState<Team[]>([])
-  const [selectedShareTeamIds, setSelectedShareTeamIds] = useState<string[]>([])
-  const [shareTeamLoading, setShareTeamLoading] = useState(false)
-  const [shareSubmitting, setShareSubmitting] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
   const [draggingTasklistKey, setDraggingTasklistKey] = useState<string | null>(null)
-  const shareRequestIdRef = useRef(0)
 
   useEffect(() => {
     listProjectGroups()
@@ -410,104 +391,6 @@ export default function Sidebar({
     }
   }
 
-  const handleArchiveTasklist = async (projectId: string) => {
-    setOpenedProjectMenuId(null)
-    try {
-      await apiArchiveProject(projectId)
-      setProjects((prev) => prev.filter((p) => p.project_id !== projectId))
-      message.success('已归档清单')
-      if (
-        typeof activeKey === 'object' &&
-        activeKey.type === 'tasklist' &&
-        activeKey.guid === projectId
-      ) {
-        onNavigate('all-tasks')
-      }
-      onTasklistsChange?.()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '归档清单失败'
-      message.error(msg)
-    }
-  }
-
-  const handleOpenShareModal = async (project: Project) => {
-    const requestId = shareRequestIdRef.current + 1
-    shareRequestIdRef.current = requestId
-    setOpenedProjectMenuId(null)
-    setShareModalProject(project)
-    setSelectedShareTeamIds([])
-    setShareTargetTeams([])
-    setShareTeamLoading(true)
-
-    try {
-      // 先拿到当前用户可见的团队，再按成员角色过滤出当前用户可管理的团队。
-      const teams = await listTeams()
-      const membersByTeam = await Promise.all(
-        teams.map((team) => listMembers(team.team_id).catch(() => [])),
-      )
-
-      const manageableTeams = teams.filter((team, index) => {
-        const member = membersByTeam[index]?.find(
-          (item) => item.user_id === appConfig.user_id,
-        )
-        if (!member) {
-          return false
-        }
-        return (
-          team.team_id !== project.team_id &&
-          (member.role === 'owner' || member.role === 'admin')
-        )
-      })
-
-      if (shareRequestIdRef.current !== requestId) {
-        return
-      }
-      setShareTargetTeams(manageableTeams)
-    } catch (err: unknown) {
-      if (shareRequestIdRef.current !== requestId) {
-        return
-      }
-      const msg = err instanceof Error ? err.message : '加载可分享团队失败'
-      message.error(msg)
-    } finally {
-      if (shareRequestIdRef.current === requestId) {
-        setShareTeamLoading(false)
-      }
-    }
-  }
-
-  const handleCloseShareModal = (force = false) => {
-    if (shareSubmitting && !force) {
-      return
-    }
-    setShareModalProject(null)
-    setShareTargetTeams([])
-    setSelectedShareTeamIds([])
-    shareRequestIdRef.current += 1
-  }
-
-  const handleSubmitShare = async () => {
-    if (!shareModalProject) {
-      return
-    }
-    if (selectedShareTeamIds.length === 0) {
-      message.warning('请至少选择一个团队')
-      return
-    }
-
-    setShareSubmitting(true)
-    try {
-      await distributeProject(shareModalProject.project_id, selectedShareTeamIds)
-      message.success('分享成功')
-      handleCloseShareModal(true)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '分享失败'
-      message.error(msg)
-    } finally {
-      setShareSubmitting(false)
-    }
-  }
-
   const defaultGroup = useMemo(
     () => groups.find((g) => g.is_default),
     [groups],
@@ -555,30 +438,13 @@ export default function Sidebar({
       {
         key: 'rename',
         icon: <EditOutlined />,
-        label: '重命名清单',
+        label: '重命名',
         onClick: () => handleStartRenameTasklist(proj.project_id),
-      },
-      {
-        key: 'share',
-        icon: <ShareAltOutlined />,
-        label: '分享',
-        onClick: () => {
-          void handleOpenShareModal(proj)
-        },
-      },
-      { type: 'divider' },
-      {
-        key: 'archive',
-        icon: <InboxOutlined />,
-        label: '归档清单',
-        onClick: () => {
-          void handleArchiveTasklist(proj.project_id)
-        },
       },
       {
         key: 'delete',
         icon: <StopOutlined />,
-        label: '移除清单',
+        label: '删除',
         danger: true,
         onClick: () => {
           void handleDeleteTasklist(proj.project_id)
@@ -1009,6 +875,22 @@ export default function Sidebar({
             }
             return false
           }}
+          dropIndicatorRender={(props) => {
+            if (props.dropPosition === 0) {
+              return null
+            }
+            return (
+              <div
+                className="sidebar-drop-indicator"
+                style={{
+                  left: 0,
+                  right: 0,
+                  top: props.dropPosition === -1 ? -3 : undefined,
+                  bottom: props.dropPosition === 1 ? -3 : undefined,
+                }}
+              />
+            )
+          }}
           onDragStart={(info) => {
             setDraggingTasklistKey(String(info.node.key))
           }}
@@ -1040,49 +922,6 @@ export default function Sidebar({
         projectId={customFieldsProjectId ?? ''}
         onClose={() => setCustomFieldsProjectId(null)}
       />
-
-      <Modal
-        title="分享清单"
-        open={!!shareModalProject}
-        confirmLoading={shareSubmitting}
-        okText="确认分享"
-        cancelText="取消"
-        onCancel={() => handleCloseShareModal()}
-        onOk={() => {
-          void handleSubmitShare()
-        }}
-      >
-        <div className="tasklist-share-modal">
-          <div className="tasklist-share-modal__summary">
-            {shareModalProject
-              ? `把“${shareModalProject.name}”分享给其他可管理团队。`
-              : ''}
-          </div>
-          <div className="tasklist-share-modal__field">
-            <div className="tasklist-share-modal__label">选择团队</div>
-            {shareTeamLoading ? (
-              <div className="tasklist-share-modal__loading">
-                <Spin size="small" />
-              </div>
-            ) : (
-              <Select
-                mode="multiple"
-                allowClear
-                showSearch
-                placeholder="请选择要分享到的团队"
-                value={selectedShareTeamIds}
-                onChange={setSelectedShareTeamIds}
-                options={shareTargetTeams.map((team) => ({
-                  label: `${team.name} (${team.team_id})`,
-                  value: team.team_id,
-                }))}
-                notFoundContent="当前没有可管理的其他团队"
-                maxTagCount="responsive"
-              />
-            )}
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }

@@ -28,6 +28,16 @@ import {
   type UpdateFieldOption,
 } from '@/services/customFieldService'
 
+function getApiCustomFieldDisplayType(field?: ApiCustomField | null): CustomFieldType | undefined {
+  if (!field) {
+    return undefined
+  }
+  if (field.field_type === 'text' && field.render_hint === 'button') {
+    return 'button'
+  }
+  return field.field_type
+}
+
 interface DraftOption {
   key: string
   id?: string | null
@@ -96,7 +106,9 @@ export default function CustomFieldEditorModal({
 }: Props) {
   const isEdit = !!field
   const [activeTab, setActiveTab] = useState<'new' | 'existing'>(field ? 'new' : initialTab)
-  const [type, setType] = useState<CustomFieldType>(field?.field_type ?? initialType ?? 'text')
+  const [type, setType] = useState<CustomFieldType>(
+    getApiCustomFieldDisplayType(field) ?? initialType ?? 'text',
+  )
   const [name, setName] = useState(field?.name ?? initialDraft?.name ?? '')
   const [options, setOptions] = useState<DraftOption[]>(() =>
     field
@@ -104,8 +116,8 @@ export default function CustomFieldEditorModal({
       : (initialDraft?.options ?? []),
   )
   const [buttonUrl, setButtonUrl] = useState<string>(() => {
-    if (field?.field_type === 'button') {
-      return field.options?.[0]?.label ?? ''
+    if (getApiCustomFieldDisplayType(field) === 'button') {
+      return field?.options?.[0]?.label ?? ''
     }
     return ''
   })
@@ -119,7 +131,7 @@ export default function CustomFieldEditorModal({
       return
     }
     if (field) {
-      setType(field.field_type)
+      setType(getApiCustomFieldDisplayType(field) ?? 'text')
     } else if (initialType) {
       setType(initialType)
     }
@@ -382,7 +394,9 @@ export default function CustomFieldEditorModal({
                       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {f.name}
                       </span>
-                      <Tag style={{ marginInlineEnd: 0 }}>{typeLabel(f.field_type)}</Tag>
+                      <Tag style={{ marginInlineEnd: 0 }}>
+                        {typeLabel(getApiCustomFieldDisplayType(f) ?? f.field_type)}
+                      </Tag>
                     </div>
                     {f.options && f.options.length > 0 ? (
                       <div

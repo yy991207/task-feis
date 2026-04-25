@@ -1,0 +1,89 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - button "unordered-list" [ref=e9] [cursor=pointer]:
+          - img "unordered-list" [ref=e11]:
+            - img [ref=e12]
+        - heading "任务" [level=5] [ref=e14]
+        - generic [ref=e15]:
+          - button "user-switch" [ref=e16] [cursor=pointer]:
+            - img "user-switch" [ref=e18]:
+              - img [ref=e19]
+          - button "bell" [ref=e22] [cursor=pointer]:
+            - img "bell" [ref=e24]:
+              - img [ref=e25]
+      - menu [ref=e27]:
+        - menuitem "user 我负责的" [ref=e28] [cursor=pointer]:
+          - img "user" [ref=e29]:
+            - img [ref=e30]
+          - generic [ref=e32]: 我负责的
+        - menuitem "eye 我关注的" [ref=e33] [cursor=pointer]:
+          - img "eye" [ref=e34]:
+            - img [ref=e35]
+          - generic [ref=e37]: 我关注的
+        - menuitem "history 动态" [ref=e38] [cursor=pointer]:
+          - img "history" [ref=e39]:
+            - img [ref=e40]
+          - generic [ref=e42]: 动态
+      - separator [ref=e43]
+      - menu [ref=e44]:
+        - text: 快速访问
+        - group [ref=e45]:
+          - menuitem "file-text 全部任务" [ref=e46] [cursor=pointer]:
+            - img "file-text" [ref=e47]:
+              - img [ref=e48]
+            - generic [ref=e50]: 全部任务
+          - menuitem "ordered-list 我创建的" [ref=e51] [cursor=pointer]:
+            - img "ordered-list" [ref=e52]:
+              - img [ref=e53]
+            - generic [ref=e55]: 我创建的
+          - menuitem "appstore 我分配的" [ref=e56] [cursor=pointer]:
+            - img "appstore" [ref=e57]:
+              - img [ref=e58]
+            - generic [ref=e60]: 我分配的
+          - menuitem "star 已完成" [ref=e61] [cursor=pointer]:
+            - img "star" [ref=e62]:
+              - img [ref=e63]
+            - generic [ref=e65]: 已完成
+      - separator [ref=e66]
+      - tree [ref=e69]:
+        - treeitem "任务清单 plus" [ref=e73]:
+          - generic [ref=e76] [cursor=pointer]:
+            - generic [ref=e79]: 任务清单
+            - button "plus" [ref=e82]:
+              - img "plus" [ref=e84]:
+                - img [ref=e85]
+      - button "plus 新建清单分组" [ref=e89] [cursor=pointer]:
+        - img "plus" [ref=e91]:
+          - img [ref=e92]
+        - generic [ref=e95]: 新建清单分组
+  - main [ref=e97]:
+    - generic [ref=e98]:
+      - heading "我负责的" [level=5] [ref=e102]
+      - generic [ref=e104]:
+        - button "filter 全部任务" [ref=e107] [cursor=pointer]:
+          - img "filter" [ref=e109]:
+            - img [ref=e110]
+          - generic [ref=e112]: 全部任务
+        - button "filter 筛选" [ref=e114] [cursor=pointer]:
+          - img "filter" [ref=e116]:
+            - img [ref=e117]
+          - generic [ref=e119]: 筛选
+        - button "sort-ascending 排序 · 截止时间" [ref=e121] [cursor=pointer]:
+          - img "sort-ascending" [ref=e123]:
+            - img [ref=e124]
+          - generic [ref=e126]: 排序 · 截止时间
+        - button "setting 字段配置" [ref=e128] [cursor=pointer]:
+          - img "setting" [ref=e130]:
+            - img [ref=e131]
+          - generic [ref=e133]: 字段配置
+      - generic [ref=e137]:
+        - heading [level=3] [ref=e138]
+        - list [ref=e139]:
+          - listitem [ref=e140]
+          - listitem [ref=e141]
+          - listitem [ref=e142]
+          - listitem [ref=e143]
+          - listitem [ref=e144]
+          - listitem [ref=e145]
