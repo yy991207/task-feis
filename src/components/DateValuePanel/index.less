@@ -1,0 +1,90 @@
+.date-value-panel {
+  width: 260px;
+  padding-top: 6px;
+
+  .ant-picker-calendar {
+    background: transparent;
+  }
+
+  .ant-picker-calendar-mini {
+    .ant-picker-panel {
+      border-top: none;
+    }
+
+    .ant-picker-content th {
+      color: #8f959e;
+      font-size: 12px;
+      font-weight: 400;
+    }
+
+    .ant-picker-cell {
+      padding-inline: 2px;
+    }
+
+    .ant-picker-cell-inner {
+      min-width: 28px;
+      height: 28px;
+      line-height: 28px;
+      font-size: 12px;
+      border-radius: 999px;
+    }
+  }
+}
+
+.date-value-panel-header {
+  display: grid;
+  grid-template-columns: 24px 1fr 24px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 6px;
+}
+
+.date-value-panel-title {
+  color: #1f2329;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+}
+
+.date-value-panel-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+
+.date-value-panel-input,
+.date-value-panel-time {
+  width: 100%;
+}
+
+.date-value-time-row {
+  width: 100%;
+}
+
+.date-value-panel-toggle {
+  padding: 8px 12px 0;
+  color: #1f2329;
+  font-size: 13px;
+}
+
+.date-value-panel-divider {
+  margin: 10px 0 0 !important;
+}
+
+.date-value-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 10px;
+}
+
+.date-value-panel-clear {
+  padding-inline: 0 !important;
+  color: #8f959e !important;
+
+  &:hover {
+    background: transparent !important;
+    color: #1f2329 !important;
+  }
+}

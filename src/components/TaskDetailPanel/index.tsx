@@ -18,7 +18,7 @@ import {
   CloseOutlined,
   MoreOutlined,
   UserOutlined,
-  CalendarOutlined,
+  CalendarOutlined as DateIconOutlined,
   PaperClipOutlined,
   BranchesOutlined,
   CheckOutlined,
@@ -34,7 +34,6 @@ import {
   LeftOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import Calendar from 'antd/es/calendar'
 import type { Section, Task, Tasklist, User } from '@/types/task'
 import { appConfig } from '@/config/appConfig'
 import {
@@ -79,6 +78,9 @@ import {
 } from '@/services/projectService'
 import { listSections, moveTaskToSection } from '@/services/sectionService'
 import { FilePreviewRenderer } from '@/components/file-preview'
+import DateValuePanel, {
+  formatDateValueLabel,
+} from '@/components/DateValuePanel'
 import TaskRichInput, {
   TaskRichText,
   normalizeRichContent,
@@ -678,6 +680,9 @@ export default function TaskDetailPanel({
   const [subtaskAssigneeIds, setSubtaskAssigneeIds] = useState<string[]>([])
   const [subtaskCompletionMode, setSubtaskCompletionMode] = useState<'any' | 'all'>('any')
   const [subtaskDue, setSubtaskDue] = useState<dayjs.Dayjs | null>(null)
+  const [startTimeEnabled, setStartTimeEnabled] = useState(Boolean(task.start?.timestamp && !dayjs(Number(task.start.timestamp)).startOf('day').isSame(dayjs(Number(task.start.timestamp)))))
+  const [dueTimeEnabled, setDueTimeEnabled] = useState(Boolean(task.due?.timestamp && !dayjs(Number(task.due.timestamp)).startOf('day').isSame(dayjs(Number(task.due.timestamp)))))
+  const [subtaskCreateDueTimeEnabled, setSubtaskCreateDueTimeEnabled] = useState(false)
   const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
   const [detailTasklistSections, setDetailTasklistSections] = useState<Section[]>([])
   const [detailTasklistSectionsLoading, setDetailTasklistSectionsLoading] = useState(false)
@@ -1389,6 +1394,13 @@ export default function TaskDetailPanel({
 
   const handleDateChange = handleDateQuickSet
 
+  useEffect(() => {
+    const startDate = task.start?.timestamp ? dayjs(Number(task.start.timestamp)) : null
+    const dueDate = task.due?.timestamp ? dayjs(Number(task.due.timestamp)) : null
+    setStartTimeEnabled(Boolean(startDate && !startDate.startOf('day').isSame(startDate)))
+    setDueTimeEnabled(Boolean(dueDate && !dueDate.startOf('day').isSame(dueDate)))
+  }, [task.start?.timestamp, task.due?.timestamp])
+
   const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
   const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
   const subtaskCompletionCount = subtaskDrafts.filter((item) => item.status === 'done').length
@@ -1408,6 +1420,7 @@ export default function TaskDetailPanel({
     setSubtaskAssigneeIds([])
     setSubtaskCompletionMode('any')
     setSubtaskDue(null)
+    setSubtaskCreateDueTimeEnabled(false)
   }
 
   const handleAddSubtask = async () => {
@@ -2324,7 +2337,7 @@ export default function TaskDetailPanel({
           {/* Date row */}
           <div className="detail-field-row">
             <Tooltip title="开始和截止时间" placement="top">
-              <CalendarOutlined className="field-icon" />
+              <DateIconOutlined className="field-icon" />
             </Tooltip>
             <div className="field-content">
               <Popover
@@ -2338,63 +2351,39 @@ export default function TaskDetailPanel({
                         子任务开始时间跟随父任务，不能单独修改
                       </div>
                     ) : (
-                      <>
-                        <Calendar
-                          fullscreen={false}
-                          value={
-                            task.start
-                              ? dayjs(Number(task.start.timestamp))
-                              : undefined
-                          }
-                          onSelect={(value) => void handleDateChange('start', value)}
-                        />
-                        {task.start && (
-                          <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                            <Button
-                              type="link"
-                              size="small"
-                              onClick={() => void handleDateChange('start', null)}
-                            >
-                              清除
-                            </Button>
-                          </div>
-                        )}
-                      </>
+                      <DateValuePanel
+                        value={task.start ? dayjs(Number(task.start.timestamp)) : null}
+                        showTimeToggle={startTimeEnabled}
+                        datePlaceholder="开始日期"
+                        timePlaceholder="开始时间"
+                        onChange={(value) => void handleDateChange('start', value)}
+                        onShowTimeToggle={setStartTimeEnabled}
+                        onClear={() => void handleDateChange('start', null)}
+                      />
                     )}
                     <div style={{ marginTop: 12, marginBottom: 8, fontWeight: 500, fontSize: 13 }}>截止时间</div>
-                    <Calendar
-                      fullscreen={false}
-                      value={
-                        task.due
-                          ? dayjs(Number(task.due.timestamp))
-                          : undefined
-                      }
-                      onSelect={(value) => void handleDateChange('due', value)}
+                    <DateValuePanel
+                      value={task.due ? dayjs(Number(task.due.timestamp)) : null}
+                      showTimeToggle={dueTimeEnabled}
+                      datePlaceholder="截止日期"
+                      timePlaceholder="截止时间"
+                      onChange={(value) => void handleDateChange('due', value)}
+                      onShowTimeToggle={setDueTimeEnabled}
+                      onClear={() => void handleDateChange('due', null)}
                       disabledDate={(current) =>
                         current && current < dayjs().startOf('day')
                       }
                     />
-                    {task.due && (
-                      <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                        <Button
-                          type="link"
-                          size="small"
-                          onClick={() => void handleDateChange('due', null)}
-                        >
-                          清除
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 }
               >
                 <span className="date-range-text">
                   {task.start && task.due
-                    ? `${dayjs(Number(task.start.timestamp)).format('M月D日')} – ${dayjs(Number(task.due.timestamp)).format('M月D日')}`
+                    ? `${formatDateValueLabel(dayjs(Number(task.start.timestamp)))} – ${formatDateValueLabel(dayjs(Number(task.due.timestamp)))}`
                     : task.start
-                      ? dayjs(Number(task.start.timestamp)).format('M月D日')
+                      ? formatDateValueLabel(dayjs(Number(task.start.timestamp)))
                       : task.due
-                        ? dayjs(Number(task.due.timestamp)).format('M月D日')
+                        ? formatDateValueLabel(dayjs(Number(task.due.timestamp)))
                         : '设置日期'}
                 </span>
               </Popover>
@@ -2711,26 +2700,19 @@ export default function TaskDetailPanel({
                             setActiveSubtaskDueGuid(open ? subtask.guid : null)
                           }
                           content={
-                            <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-                              <Calendar
-                                fullscreen={false}
-                                value={dueDate ?? undefined}
-                                onSelect={(value) => void handleSubtaskDueChange(subtask, value)}
+                            <div style={{ width: 280 }} onMouseDown={(e) => e.preventDefault()}>
+                              <DateValuePanel
+                                value={dueDate}
+                                showTimeToggle={Boolean(dueDate && !dueDate.startOf('day').isSame(dueDate))}
+                                datePlaceholder="截止日期"
+                                timePlaceholder="截止时间"
+                                onChange={(value) => void handleSubtaskDueChange(subtask, value)}
+                                onShowTimeToggle={() => undefined}
+                                onClear={() => void handleSubtaskDueChange(subtask, null)}
                                 disabledDate={(current) =>
                                   current && current < dayjs().startOf('day')
                                 }
                               />
-                              {dueDate && (
-                                <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                                  <Button
-                                    type="link"
-                                    size="small"
-                                    onClick={() => void handleSubtaskDueChange(subtask, null)}
-                                  >
-                                    清除
-                                  </Button>
-                                </div>
-                              )}
                             </div>
                           }
                         >
@@ -2739,9 +2721,9 @@ export default function TaskDetailPanel({
                               type="text"
                               size="small"
                               className="subtask-meta-trigger subtask-date-trigger"
-                              icon={dueDate ? undefined : <CalendarOutlined />}
+                              icon={dueDate ? undefined : <DateIconOutlined />}
                             >
-                              {dueDate ? `${dueDate.format('M月D日')} 截止` : null}
+                              {dueDate ? `${formatDateValueLabel(dueDate)} 截止` : null}
                             </Button>
                           </Tooltip>
                         </Popover>
@@ -2891,16 +2873,20 @@ export default function TaskDetailPanel({
                             placement="bottomLeft"
                             content={
                               <div
-                                style={{ width: 260 }}
+                                style={{ width: 280 }}
                                 onMouseDown={(e) => {
                                   markSubtaskCreateInteracting()
                                   e.preventDefault()
                                 }}
                               >
-                                <Calendar
-                                  fullscreen={false}
-                                  value={subtaskDue ?? undefined}
-                                  onSelect={setSubtaskDue}
+                                <DateValuePanel
+                                  value={subtaskDue}
+                                  showTimeToggle={subtaskCreateDueTimeEnabled}
+                                  datePlaceholder="截止日期"
+                                  timePlaceholder="截止时间"
+                                  onChange={setSubtaskDue}
+                                  onShowTimeToggle={setSubtaskCreateDueTimeEnabled}
+                                  onClear={() => setSubtaskDue(null)}
                                   disabledDate={(current) =>
                                     current && current < dayjs().startOf('day')
                                   }
@@ -2909,7 +2895,7 @@ export default function TaskDetailPanel({
                             }
                           >
                             <Tooltip title="设置子任务截止时间">
-                              <CalendarOutlined
+                              <DateIconOutlined
                                 className={`subtask-icon-btn ${subtaskDue ? 'active' : ''}`}
                               />
                             </Tooltip>

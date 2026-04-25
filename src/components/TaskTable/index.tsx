@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Input from 'antd/es/input'
 import Checkbox from 'antd/es/checkbox'
 import Popover from 'antd/es/popover'
-import Calendar from 'antd/es/calendar'
 import Select from 'antd/es/select'
 import DatePicker from 'antd/es/date-picker'
 import Button from 'antd/es/button'
@@ -116,6 +115,10 @@ import CustomFieldsModal from '@/components/CustomFieldsModal'
 import CustomFieldEditorModal from '@/components/CustomFieldEditorModal'
 import UserSearchSelect from '@/components/UserSearchSelect'
 import TaskParentPickerModal from '@/components/TaskParentPickerModal'
+import DateValuePanel, {
+  applyDateValueDetail,
+  formatDateValueLabel,
+} from '@/components/DateValuePanel'
 import {
   appendSection,
   buildDeleteSectionPlan,
@@ -1271,6 +1274,8 @@ export default function TaskTable({
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>(Priority.None)
   const [newTaskStart, setNewTaskStart] = useState<dayjs.Dayjs | null>(null)
   const [newTaskDue, setNewTaskDue] = useState<dayjs.Dayjs | null>(null)
+  const [newTaskStartHasTime, setNewTaskStartHasTime] = useState(false)
+  const [newTaskDueHasTime, setNewTaskDueHasTime] = useState(false)
   const [submittingSectionGuid, setSubmittingSectionGuid] = useState<string | null>(null)
   const [animatedTaskGuid, setAnimatedTaskGuid] = useState<string | null>(null)
   const [animatedSectionGuid, setAnimatedSectionGuid] = useState<string | null>(null)
@@ -1720,6 +1725,8 @@ export default function TaskTable({
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
+    setNewTaskStartHasTime(false)
+    setNewTaskDueHasTime(false)
     setInlineCreateFocusedField('title')
     setCreatingInSection(sectionGuid)
   }, [canCreateInTasklist, currentUser.id])
@@ -1741,6 +1748,8 @@ export default function TaskTable({
     setNewTaskPriority(Priority.None)
     setNewTaskStart(null)
     setNewTaskDue(null)
+    setNewTaskStartHasTime(false)
+    setNewTaskDueHasTime(false)
     setInlineCreateFocusedField(null)
     setActiveAssigneePickerKey(null)
   }
@@ -3124,7 +3133,9 @@ export default function TaskTable({
               <DatePicker
                 size="small"
                 value={normalizeFilterTextValue(condition.value) ? dayjs(Number(normalizeFilterTextValue(condition.value))) : null}
-                placeholder="请选择日期"
+                showTime={{ format: 'HH:mm', showSecond: false }}
+                format="YYYY-MM-DD HH:mm"
+                placeholder="请选择时间"
                 onChange={(value) =>
                   updateFilterCondition(condition.id, {
                     value: value ? value.valueOf().toString() : undefined,
@@ -3135,7 +3146,9 @@ export default function TaskTable({
                 <DatePicker
                   size="small"
                   value={normalizeFilterTextValue(condition.endValue) ? dayjs(Number(normalizeFilterTextValue(condition.endValue))) : null}
-                  placeholder="请选择日期"
+                  showTime={{ format: 'HH:mm', showSecond: false }}
+                  format="YYYY-MM-DD HH:mm"
+                  placeholder="请选择时间"
                   onChange={(value) =>
                     updateFilterCondition(condition.id, {
                       endValue: value ? value.valueOf().toString() : undefined,
@@ -3731,6 +3744,7 @@ export default function TaskTable({
 
   const renderInlineCreateDateCell = (_sectionGuid: string, field: 'start' | 'due') => {
     const date = field === 'start' ? newTaskStart : newTaskDue
+    const showTime = field === 'start' ? newTaskStartHasTime : newTaskDueHasTime
     void _sectionGuid
 
     const handleInlineCreateDateChange = (dateField: 'start' | 'due', nextDate: dayjs.Dayjs | null) => {
@@ -3741,7 +3755,21 @@ export default function TaskTable({
       setNewTaskDue(nextDate)
     }
 
-      return (
+    const handleInlineCreateShowTimeChange = (dateField: 'start' | 'due', checked: boolean) => {
+      if (dateField === 'start') {
+        setNewTaskStartHasTime(checked)
+        if (newTaskStart) {
+          setNewTaskStart(applyDateValueDetail(newTaskStart, checked, newTaskStart))
+        }
+        return
+      }
+      setNewTaskDueHasTime(checked)
+      if (newTaskDue) {
+        setNewTaskDue(applyDateValueDetail(newTaskDue, checked, newTaskDue))
+      }
+    }
+
+    return (
       <div
         className={`cell cell-${field} task-edit-cell ${
           inlineCreateFocusedField === field ? 'active' : ''
@@ -3751,28 +3779,21 @@ export default function TaskTable({
           trigger="click"
           placement="bottomLeft"
           content={
-            <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-              <Calendar
-                fullscreen={false}
-                value={date ?? undefined}
-                onSelect={(value) => void handleInlineCreateDateChange(field, value)}
+            <div style={{ width: 280 }}>
+              <DateValuePanel
+                value={date}
+                showTimeToggle={showTime}
+                datePlaceholder={field === 'start' ? '开始日期' : '截止日期'}
+                timePlaceholder="截止日期"
+                onChange={(value) => void handleInlineCreateDateChange(field, value)}
+                onShowTimeToggle={(checked) => handleInlineCreateShowTimeChange(field, checked)}
+                onClear={() => void handleInlineCreateDateChange(field, null)}
                 disabledDate={
                   field === 'due'
                     ? (current) => current && current < dayjs().startOf('day')
                     : undefined
                 }
               />
-              {date && (
-                <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => void handleInlineCreateDateChange(field, null)}
-                  >
-                    清除
-                  </Button>
-                </div>
-              )}
             </div>
           }
           onOpenChange={(open) => {
@@ -3785,7 +3806,7 @@ export default function TaskTable({
             block
             onMouseDown={markInlineCreateInteracting}
           >
-            <span className="date-text">{date ? date.format('M月D日') : ''}</span>
+            <span className="date-text">{formatDateValueLabel(date)}</span>
             <CalendarOutlined className="empty-date-icon" />
           </Button>
         </Popover>
@@ -5184,7 +5205,9 @@ function CustomFieldCell({
         <DatePicker
           size="middle"
           value={dateValue}
-          placeholder="选择日期"
+          showTime={{ format: 'HH:mm', showSecond: false }}
+          format="YYYY-MM-DD HH:mm"
+          placeholder="选择时间"
           autoFocus
           onChange={(value) => {
             onChange({
@@ -5697,10 +5720,15 @@ function TaskDateCell({
   const [pickerOpen, setPickerOpen] = useState(false)
   const isSubtask = Boolean(task.parent_task_guid)
   const date = task[field] ? dayjs(Number(task[field]!.timestamp)) : null
+  const [showTimeEnabled, setShowTimeEnabled] = useState(Boolean(date && !date.startOf('day').isSame(date)))
 
   useEffect(() => {
     onEditingChange(pickerOpen)
   }, [onEditingChange, pickerOpen])
+
+  useEffect(() => {
+    setShowTimeEnabled(Boolean(date && !date.startOf('day').isSame(date)))
+  }, [date])
 
   const handleDateChange = async (nextDate: dayjs.Dayjs | null) => {
     if (field === 'start' && isSubtask) {
@@ -5747,7 +5775,7 @@ function TaskDateCell({
           onClick={(event) => event.stopPropagation()}
         >
           {date ? (
-            renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
+            renderOverflowTooltip(formatDateValueLabel(date), <span className="date-text">{formatDateValueLabel(date)}</span>)
           ) : (
             <CalendarOutlined className="empty-date-icon" />
           )}
@@ -5758,28 +5786,21 @@ function TaskDateCell({
           placement="bottomLeft"
           open={pickerOpen}
           content={
-            <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
-              <Calendar
-                fullscreen={false}
-                value={date ?? undefined}
-                onSelect={(value) => void handleDateChange(value)}
+            <div style={{ width: 280 }}>
+              <DateValuePanel
+                value={date}
+                showTimeToggle={showTimeEnabled}
+                datePlaceholder={field === 'start' ? '开始日期' : '截止日期'}
+                timePlaceholder="截止日期"
+                onChange={(value) => void handleDateChange(value)}
+                onShowTimeToggle={setShowTimeEnabled}
+                onClear={() => void handleDateChange(null)}
                 disabledDate={
                   field === 'due'
                     ? (current) => current && current < dayjs().startOf('day')
                     : undefined
                 }
               />
-              {date && (
-                <div style={{ textAlign: 'right', padding: '4px 8px' }}>
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => void handleDateChange(null)}
-                  >
-                    清除
-                  </Button>
-                </div>
-              )}
             </div>
           }
           onOpenChange={setPickerOpen}
@@ -5791,7 +5812,7 @@ function TaskDateCell({
             onClick={(event) => event.stopPropagation()}
           >
             {date ? (
-              renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
+              renderOverflowTooltip(formatDateValueLabel(date), <span className="date-text">{formatDateValueLabel(date)}</span>)
             ) : (
               <CalendarOutlined className="empty-date-icon" />
             )}
@@ -5912,7 +5933,7 @@ function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]
       return fieldValue.text_value?.trim() || '-'
     case 'datetime':
       return fieldValue.datetime_value
-        ? dayjs(Number(fieldValue.datetime_value)).format('YYYY/M/D')
+        ? dayjs(Number(fieldValue.datetime_value)).format('YYYY/M/D HH:mm')
         : '-'
     case 'single_select':
       return field.options?.find((option) => option.guid === fieldValue.single_select_value)?.name ?? '-'
