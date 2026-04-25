@@ -40,6 +40,7 @@ import {
   DownOutlined,
   CheckOutlined,
   FontSizeOutlined,
+  LinkOutlined,
   ClockCircleOutlined,
   CalendarOutlined,
   LeftOutlined,
@@ -3387,6 +3388,7 @@ export default function TaskTable({
     { key: 'number', label: '数值', type: 'number' as ApiCustomFieldType, icon: <NumberOutlined /> },
     { key: 'date', label: '日期', type: 'date' as ApiCustomFieldType, icon: <CalendarOutlined /> },
     { key: 'text', label: '文本', type: 'text' as ApiCustomFieldType, icon: <FontSizeOutlined /> },
+    { key: 'button', label: '按钮', type: 'button' as ApiCustomFieldType, icon: <LinkOutlined /> },
   ]
 
   const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
@@ -5145,6 +5147,45 @@ function CustomFieldCell({
     </div>
   )
 
+  if (field.type === 'button') {
+    // 按钮类型：URL 存在 options[0] 的 label（前端映射后是 name 字段），点击新窗口打开
+    const url = field.options?.[0]?.name ?? ''
+    const label = field.name || '打开'
+    return renderCellShell(
+      <div
+        className="custom-field-button-cell"
+        onClick={(event) => event.stopPropagation()}
+        style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}
+      >
+        <Button
+          type="primary"
+          size="small"
+          icon={<LinkOutlined />}
+          disabled={!url}
+          onClick={() => {
+            if (url) {
+              window.open(url, '_blank', 'noopener,noreferrer')
+            }
+          }}
+          style={{ maxWidth: '100%' }}
+        >
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: 120,
+              display: 'inline-block',
+              verticalAlign: 'bottom',
+            }}
+          >
+            {label}
+          </span>
+        </Button>
+      </div>,
+    )
+  }
+
   if (!editing) {
     if (field.type === 'single_select' && hasValue) {
       return renderCellShell(renderReadTrigger(renderSelectFieldTags(field, selectedSingleValues)))
@@ -5922,6 +5963,10 @@ function getDateGroupKey(field: 'start' | 'due', task: Task) {
 function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string {
   if (field.guid === 'status') {
     return taskStatusLabelMap[task.status] ?? '-'
+  }
+
+  if (field.type === 'button') {
+    return field.options?.[0]?.name ?? '-'
   }
 
   const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from 'antd/es/modal'
 import Form from 'antd/es/form'
 import Input from 'antd/es/input'
@@ -59,7 +59,10 @@ const TYPE_OPTIONS: { label: string; value: CustomFieldType }[] = [
   { label: '单选', value: 'select' },
   { label: '多选', value: 'multi_select' },
   { label: '成员', value: 'member' },
+  { label: '按钮', value: 'button' },
 ]
+
+const BUTTON_NAME_MAX = 12
 
 const PRESET_COLORS = [
   '#3370ff', '#34c759', '#ff9500', '#ff3b30', '#af52de',
@@ -101,11 +104,30 @@ export default function CustomFieldEditorModal({
       ? getEnabledFieldOptions(field).map(toEditableDraftOption)
       : (initialDraft?.options ?? []),
   )
+  const [buttonUrl, setButtonUrl] = useState<string>(() => {
+    if (field?.field_type === 'button') {
+      return field.options?.[0]?.label ?? ''
+    }
+    return ''
+  })
   const [existingKeyword, setExistingKeyword] = useState('')
   const [selectedExistingFieldId, setSelectedExistingFieldId] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // 外层菜单点选了某个字段类型后，把它同步到弹窗里的"字段类型"下拉，避免两个状态不一致
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    if (field) {
+      setType(field.field_type)
+    } else if (initialType) {
+      setType(initialType)
+    }
+  }, [open, field, initialType])
+
   const needsOptions = type === 'select' || type === 'multi_select'
+  const isButton = type === 'button'
 
   const addOption = () => {
     setOptions((prev) => [
@@ -132,6 +154,21 @@ export default function CustomFieldEditorModal({
       message.warning('请输入字段标题')
       return
     }
+    if (isButton && trimmed.length > BUTTON_NAME_MAX) {
+      message.warning(`按钮文字最多 ${BUTTON_NAME_MAX} 个字符`)
+      return
+    }
+    const trimmedUrl = buttonUrl.trim()
+    if (isButton) {
+      if (!trimmedUrl) {
+        message.warning('请输入跳转链接')
+        return
+      }
+      if (!/^https?:\/\//i.test(trimmedUrl)) {
+        message.warning('链接需以 http:// 或 https:// 开头')
+        return
+      }
+    }
     if (needsOptions) {
       const valid = options.filter((o) => o.label.trim())
       if (valid.length === 0) {
@@ -145,7 +182,9 @@ export default function CustomFieldEditorModal({
         ? options
             .filter((o) => o.label.trim())
             .map((o) => ({ id: o.id, label: o.label.trim(), color: o.color }))
-        : undefined
+        : isButton
+          ? [{ id: field?.options?.[0]?.id ?? null, label: trimmedUrl, color: null }]
+          : undefined
       let saved: ApiCustomField
       if (isEdit && field) {
         saved = await updateCustomField(projectId, field.field_id, {
@@ -212,12 +251,13 @@ export default function CustomFieldEditorModal({
           columnGap: 16,
         }}
       >
-        <Form.Item label="字段标题" required>
+        <Form.Item label={isButton ? '按钮文字' : '字段标题'} required>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="请输入字段标题"
-            maxLength={50}
+            placeholder={isButton ? '按钮上显示的文字' : '请输入字段标题'}
+            maxLength={isButton ? BUTTON_NAME_MAX : 50}
+            showCount={isButton}
           />
         </Form.Item>
         <Form.Item label="字段类型" required>
@@ -229,6 +269,16 @@ export default function CustomFieldEditorModal({
           />
         </Form.Item>
       </div>
+
+      {isButton && (
+        <Form.Item label="跳转链接" required>
+          <Input
+            value={buttonUrl}
+            onChange={(e) => setButtonUrl(e.target.value)}
+            placeholder="https://example.com"
+          />
+        </Form.Item>
+      )}
 
       {needsOptions && (
         <Form.Item label="选项">

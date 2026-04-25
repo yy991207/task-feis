@@ -8,6 +8,7 @@ export type CustomFieldType =
   | 'text'
   | 'date'
   | 'member'
+  | 'button'
 
 export interface FieldOption {
   id?: string | null

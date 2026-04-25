@@ -72,6 +72,7 @@ export type CustomFieldType =
   | 'select'
   | 'multi_select'
   | 'text'
+  | 'button'
 
 export interface SelectOption {
   guid: string
