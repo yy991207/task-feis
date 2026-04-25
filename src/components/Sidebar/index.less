@@ -122,6 +122,7 @@
     display: flex !important;
     align-items: center;
     flex: 1;
+    min-width: 0;
     overflow: visible;
     line-height: 22px !important;
 
@@ -209,15 +210,32 @@
     min-height: 22px;
 
     .group-title-main {
+      display: flex;
       flex: 1;
       min-width: 0;
       align-items: center;
       overflow: hidden;
     }
 
-    .group-name {
-      flex: 1;
+    .group-name-wrap {
+      flex: 0 1 calc(100% * 0.8);
       min-width: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-group-name-preview {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .group-name {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       color: #1f2329;
       cursor: pointer;
     }

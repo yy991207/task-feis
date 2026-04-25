@@ -5532,6 +5532,7 @@ function TaskTitleCell({
           {task.subtask_count > 0 ? (
             <CaretRightOutlined
               className="subtask-icon"
+              data-keep-task-detail-open="true"
               style={{
                 cursor: 'pointer',
                 transform: expanded ? 'rotate(90deg)' : 'rotate(0)',

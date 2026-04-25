@@ -128,6 +128,10 @@ function isTaskDetailFloatingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(TASK_DETAIL_FLOATING_SELECTOR))
 }
 
+function isTaskDetailKeepOpenTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest('[data-keep-task-detail-open="true"]'))
+}
+
 function getActionErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
@@ -863,7 +867,11 @@ export default function TaskDetailPanel({
       const isInsideDetailPanel = detailPanelRef.current
         ? detailPanelRef.current.contains(target)
         : false
-      if (isInsideDetailPanel || isTaskDetailFloatingTarget(target)) {
+      if (
+        isInsideDetailPanel ||
+        isTaskDetailFloatingTarget(target) ||
+        isTaskDetailKeepOpenTarget(target)
+      ) {
         return
       }
 

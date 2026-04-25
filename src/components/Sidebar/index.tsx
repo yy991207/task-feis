@@ -512,11 +512,16 @@ export default function Sidebar({
     }
     return (
       <Flex align="center" justify="space-between" className="group-title-row">
-        <Space size={8} className="group-title-main">
-          <Text ellipsis className="group-name">
-            {group.name}
-          </Text>
-        </Space>
+        <div className="group-title-main">
+          <div className="group-name-wrap">
+            <NameOverflowPreview
+              name={group.name}
+              previewClassName="sidebar-group-name-preview"
+            >
+              <Text className="group-name">{group.name}</Text>
+            </NameOverflowPreview>
+          </div>
+        </div>
         <Space size={2} className="group-actions">
           <Dropdown
             menu={buildGroupActionMenu(group)}
@@ -553,11 +558,16 @@ export default function Sidebar({
 
   const renderRootTitle = () => (
     <Flex align="center" justify="space-between" className="group-title-row">
-      <Space size={8} className="group-title-main">
-        <Text ellipsis className="group-name">
-          任务清单
-        </Text>
-      </Space>
+      <div className="group-title-main">
+        <div className="group-name-wrap">
+          <NameOverflowPreview
+            name="任务清单"
+            previewClassName="sidebar-group-name-preview"
+          >
+            <Text className="group-name">任务清单</Text>
+          </NameOverflowPreview>
+        </div>
+      </div>
       <Space size={2} className="group-actions">
         <Button
           type="text"
