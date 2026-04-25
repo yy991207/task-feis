@@ -59,7 +59,6 @@ const TYPE_OPTIONS: { label: string; value: CustomFieldType }[] = [
   { label: '单选', value: 'select' },
   { label: '多选', value: 'multi_select' },
   { label: '成员', value: 'member' },
-  { label: '按钮', value: 'button' },
 ]
 
 const BUTTON_NAME_MAX = 12

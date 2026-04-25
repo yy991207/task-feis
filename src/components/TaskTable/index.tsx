@@ -3405,7 +3405,6 @@ export default function TaskTable({
     { key: 'number', label: '数值', type: 'number' as ApiCustomFieldType, icon: <NumberOutlined /> },
     { key: 'date', label: '日期', type: 'date' as ApiCustomFieldType, icon: <CalendarOutlined /> },
     { key: 'text', label: '文本', type: 'text' as ApiCustomFieldType, icon: <FontSizeOutlined /> },
-    { key: 'button', label: '按钮', type: 'button' as ApiCustomFieldType, icon: <LinkOutlined /> },
   ]
 
   const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
