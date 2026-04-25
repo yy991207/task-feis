@@ -451,7 +451,10 @@
      这里单独把分组行的隐藏占位收窄到 9px，让展开箭头和左侧菜单图标列对齐。 */
   .ant-tree .tree-section > .ant-tree-draggable-icon,
   .ant-tree .empty-group-placeholder > .ant-tree-draggable-icon {
-    display: none;
+    width: 9px;
+    min-width: 9px;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .ant-tree .ant-tree-treenode:hover .ant-tree-draggable-icon {

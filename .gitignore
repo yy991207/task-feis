@@ -31,3 +31,5 @@ scripts/
 .claude/
 doc/
 docs/
+.tmp/
+tmp/
