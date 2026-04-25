@@ -683,6 +683,7 @@ export default function TaskDetailPanel({
   const [startTimeEnabled, setStartTimeEnabled] = useState(Boolean(task.start?.timestamp && !dayjs(Number(task.start.timestamp)).startOf('day').isSame(dayjs(Number(task.start.timestamp)))))
   const [dueTimeEnabled, setDueTimeEnabled] = useState(Boolean(task.due?.timestamp && !dayjs(Number(task.due.timestamp)).startOf('day').isSame(dayjs(Number(task.due.timestamp)))))
   const [subtaskCreateDueTimeEnabled, setSubtaskCreateDueTimeEnabled] = useState(false)
+  const [subtaskDueTimeEnabledByGuid, setSubtaskDueTimeEnabledByGuid] = useState<Record<string, boolean>>({})
   const [parentTaskChain, setParentTaskChain] = useState<Task[]>([])
   const [detailTasklistSections, setDetailTasklistSections] = useState<Section[]>([])
   const [detailTasklistSectionsLoading, setDetailTasklistSectionsLoading] = useState(false)
@@ -1401,6 +1402,27 @@ export default function TaskDetailPanel({
     setDueTimeEnabled(Boolean(dueDate && !dueDate.startOf('day').isSame(dueDate)))
   }, [task.start?.timestamp, task.due?.timestamp])
 
+  useEffect(() => {
+    setSubtaskDueTimeEnabledByGuid((prev) => {
+      const nextState: Record<string, boolean> = {}
+      let changed = false
+
+      for (const item of subtaskDrafts) {
+        const dueDate = item.due?.timestamp ? dayjs(Number(item.due.timestamp)) : null
+        const enabled = Boolean(dueDate && !dueDate.startOf('day').isSame(dueDate))
+        nextState[item.guid] = enabled
+        if (prev[item.guid] !== enabled) {
+          changed = true
+        }
+      }
+
+      if (!changed && Object.keys(prev).length === subtaskDrafts.length) {
+        return prev
+      }
+      return nextState
+    })
+  }, [subtaskDrafts])
+
   const MAX_DEPTH = 4 // 父任务 depth=0，最深子任务 depth=4，共 5 层
   const canCreateSubtask = (task.depth ?? 0) < MAX_DEPTH
   const subtaskCompletionCount = subtaskDrafts.filter((item) => item.status === 'done').length
@@ -1635,8 +1657,17 @@ export default function TaskDetailPanel({
       })
       const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => prev.map((item) => (item.guid === subtask.guid ? next : item)))
+      setSubtaskDueTimeEnabledByGuid((prev) => {
+        const nextEnabled = Boolean(value && !value.startOf('day').isSame(value))
+        if (prev[subtask.guid] === nextEnabled) {
+          return prev
+        }
+        return {
+          ...prev,
+          [subtask.guid]: nextEnabled,
+        }
+      })
       onTaskUpdated?.(next)
-      setActiveSubtaskDueGuid(null)
       message.success(value ? '已更新子任务截止时间' : '已清空子任务截止时间')
     } catch (err) {
       message.error(getActionErrorMessage(err, '更新子任务截止时间失败'))
@@ -2703,11 +2734,16 @@ export default function TaskDetailPanel({
                             <div style={{ width: 280 }} onMouseDown={(e) => e.preventDefault()}>
                               <DateValuePanel
                                 value={dueDate}
-                                showTimeToggle={Boolean(dueDate && !dueDate.startOf('day').isSame(dueDate))}
+                                showTimeToggle={subtaskDueTimeEnabledByGuid[subtask.guid] ?? Boolean(dueDate && !dueDate.startOf('day').isSame(dueDate))}
                                 datePlaceholder="截止日期"
                                 timePlaceholder="截止时间"
                                 onChange={(value) => void handleSubtaskDueChange(subtask, value)}
-                                onShowTimeToggle={() => undefined}
+                                onShowTimeToggle={(checked) => {
+                                  setSubtaskDueTimeEnabledByGuid((prev) => ({
+                                    ...prev,
+                                    [subtask.guid]: checked,
+                                  }))
+                                }}
                                 onClear={() => void handleSubtaskDueChange(subtask, null)}
                                 disabledDate={(current) =>
                                   current && current < dayjs().startOf('day')

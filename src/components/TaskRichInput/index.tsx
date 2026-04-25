@@ -1111,13 +1111,13 @@ export default function TaskRichInput({
           onPaste={handlePaste}
           onKeyDown={handleEditorKeyDown}
         />
+        {attachments.length > 0 && (
+          <div className="detail-attachment-list task-rich-input-attachment-list">
+            {attachments.map((attachment) => renderAttachmentItem(attachment))}
+          </div>
+        )}
       </div>
       {renderToolbar()}
-      {attachments.length > 0 && (
-        <div className="detail-attachment-list task-rich-input-attachment-list">
-          {attachments.map((attachment) => renderAttachmentItem(attachment))}
-        </div>
-      )}
     </div>
   )
 }
