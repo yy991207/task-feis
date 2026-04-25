@@ -5720,6 +5720,7 @@ function TaskDateCell({
   const [pickerOpen, setPickerOpen] = useState(false)
   const isSubtask = Boolean(task.parent_task_guid)
   const date = task[field] ? dayjs(Number(task[field]!.timestamp)) : null
+  const timestamp = task[field]?.timestamp
   const [showTimeEnabled, setShowTimeEnabled] = useState(Boolean(date && !date.startOf('day').isSame(date)))
 
   useEffect(() => {
@@ -5727,8 +5728,9 @@ function TaskDateCell({
   }, [onEditingChange, pickerOpen])
 
   useEffect(() => {
+    // 这里只跟真实时间戳同步，避免点击“具体时间”后因为每次渲染都会新建 dayjs 对象而把开关立刻重置回去。
     setShowTimeEnabled(Boolean(date && !date.startOf('day').isSame(date)))
-  }, [date])
+  }, [timestamp])
 
   const handleDateChange = async (nextDate: dayjs.Dayjs | null) => {
     if (field === 'start' && isSubtask) {

@@ -172,14 +172,15 @@ export default function DateValuePanel({
           />
         </div>
       </div>
-      <Checkbox
-        checked={showTimeToggle}
-        className="date-value-panel-toggle"
-        onMouseDown={(event) => event.stopPropagation()}
-        onChange={(event) => handleToggleChange(event.target.checked)}
-      >
-        具体时间
-      </Checkbox>
+      <div onMouseDown={(event) => event.stopPropagation()}>
+        <Checkbox
+          checked={showTimeToggle}
+          className="date-value-panel-toggle"
+          onChange={(event) => handleToggleChange(event.target.checked)}
+        >
+          具体时间
+        </Checkbox>
+      </div>
       <Divider className="date-value-panel-divider" />
       <div className="date-value-panel-footer">
         <Button
