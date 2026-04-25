@@ -138,7 +138,7 @@ export interface TaskRichInputProps {
   onAttachmentUploaded?: (attachment: ApiAttachment, source?: TaskRichAttachmentSource) => void
   onPreviewAttachment?: (attachment: ApiAttachment) => void
   onDownloadAttachment?: (attachment: ApiAttachment) => void
-  onRemoveAttachment?: (attachmentId: string) => void
+  onRemoveAttachment?: (attachmentId: string, nextValue?: string) => void
 }
 
 function escapeHtml(text: string): string {
@@ -299,6 +299,17 @@ export function extractMentionIds(value: string): string[] {
     .filter((item): item is string => Boolean(item))
 }
 
+export function extractAttachmentIds(value: string): string[] {
+  const html = normalizeRichContent(value)
+  if (!html) {
+    return []
+  }
+
+  return Array.from(html.matchAll(/data-attachment-id="([^"]+)"/g))
+    .map((match) => match[1]?.trim())
+    .filter((item): item is string => Boolean(item))
+}
+
 function decoratePlainMentionsForReadOnly(value: string): string {
   const parser = getParser()
   if (!parser || !value) return value
@@ -402,6 +413,7 @@ export default function TaskRichInput({
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkLabel, setLinkLabel] = useState('')
   const [linkHref, setLinkHref] = useState('')
+  const [descriptionContentVersion, setDescriptionContentVersion] = useState(0)
   const editorRef = useRef<HTMLDivElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const selectionRef = useRef<Range | null>(null)
@@ -441,7 +453,7 @@ export default function TaskRichInput({
 
   const syncFromEditor = () => {
     const editor = editorRef.current
-    if (!editor) return
+    if (!editor) return ''
 
     const nextHtml = normalizeRichContent(editor.innerHTML)
 
@@ -450,6 +462,8 @@ export default function TaskRichInput({
     if (mode === 'description') {
       // 描述区只有真正发生输入时才算进入编辑态，避免只聚焦就挡住后续内容回填。
       isDescriptionEditingRef.current = true
+      // 描述区底部图片预览依赖当前编辑器里的附件引用，需要用局部重渲染同步展示。
+      setDescriptionContentVersion((prev) => prev + 1)
     }
 
     const extractedMentionIds = extractMentionIds(nextHtml)
@@ -457,9 +471,10 @@ export default function TaskRichInput({
     onMentionIdsChange?.(extractedMentionIds)
     if (mode === 'description') {
       // 描述区是本地编辑态，不在输入过程中回写父组件，避免每次按键都触发重绘。
-      return
+      return nextHtml
     }
     onChange(nextHtml)
+    return nextHtml
   }
 
   const saveSelection = () => {
@@ -665,6 +680,42 @@ export default function TaskRichInput({
     saveSelection()
   }
 
+  const removeDescriptionAttachmentFromEditor = (attachmentId: string) => {
+    const editor = editorRef.current
+    if (!editor) {
+      return editorHtmlRef.current
+    }
+
+    let changed = false
+    editor.querySelectorAll('img[data-attachment-id]').forEach((node) => {
+      if (!(node instanceof HTMLImageElement)) {
+        return
+      }
+      if (node.dataset.attachmentId !== attachmentId) {
+        return
+      }
+      node.remove()
+      changed = true
+    })
+
+    if (!changed) {
+      return editorHtmlRef.current
+    }
+
+    return syncFromEditor()
+  }
+
+  const visibleAttachments =
+    mode === 'description'
+      ? attachments.filter((attachment) => {
+          if (!isImageAttachment(attachment)) {
+            return false
+          }
+          const currentAttachmentIds = new Set(extractAttachmentIds(editorHtmlRef.current))
+          return currentAttachmentIds.has(attachment.attachment_id)
+        })
+      : attachments
+
   const renderAttachmentItem = (attachment: ApiAttachment) => {
     const attachmentSource = attachmentOrigins[attachment.attachment_id] ?? 'upload'
     const ext = (attachment.file_name.split('.').pop() ?? '').toLowerCase()
@@ -674,7 +725,7 @@ export default function TaskRichInput({
         ? `${(sizeKB / 1024).toFixed(1)} MB`
         : `${Math.max(1, Math.round(sizeKB))} KB`
 
-    if (attachmentSource === 'paste' && isImageAttachment(attachment)) {
+    if (isImageAttachment(attachment) && (attachmentSource === 'paste' || mode === 'description')) {
       return (
         <div key={attachment.attachment_id} className="comment-image-preview-item">
           <button
@@ -694,7 +745,13 @@ export default function TaskRichInput({
                 type="text"
                 size="small"
                 className="attachment-delete comment-image-delete"
-                onClick={() => onRemoveAttachment(attachment.attachment_id)}
+                onClick={() => {
+                  const nextValue =
+                    mode === 'description'
+                      ? removeDescriptionAttachmentFromEditor(attachment.attachment_id)
+                      : undefined
+                  onRemoveAttachment?.(attachment.attachment_id, nextValue)
+                }}
                 icon={<CloseOutlined />}
                 aria-label="移除评论图片"
               />
@@ -1087,6 +1144,7 @@ export default function TaskRichInput({
       ref={wrapperRef}
       className={className ? `task-rich-input ${className}` : 'task-rich-input'}
       onBlurCapture={handleRootBlur}
+      data-description-version={mode === 'description' ? descriptionContentVersion : undefined}
     >
       <div className="task-rich-input-shell">
         <div
@@ -1111,9 +1169,9 @@ export default function TaskRichInput({
           onPaste={handlePaste}
           onKeyDown={handleEditorKeyDown}
         />
-        {attachments.length > 0 && (
+        {visibleAttachments.length > 0 && (
           <div className="detail-attachment-list task-rich-input-attachment-list">
-            {attachments.map((attachment) => renderAttachmentItem(attachment))}
+            {visibleAttachments.map((attachment) => renderAttachmentItem(attachment))}
           </div>
         )}
       </div>

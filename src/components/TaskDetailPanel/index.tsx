@@ -194,54 +194,6 @@ function renderUserAvatar(
   )
 }
 
-function renderDetailPersonSummary(
-  users: Array<Pick<User, 'id' | 'name' | 'avatar'>>,
-  options: {
-    avatarSize: number
-    groupMaxCount: number
-    avatarStyle?: CSSProperties
-    getCompletionBadge?: (userId: string) => ReactNode
-  },
-): ReactNode {
-  if (users.length === 0) {
-    return null
-  }
-
-  if (users.length === 1) {
-    const singleUser = users[0]
-    return (
-      <div className="detail-person-summary">
-        <Tooltip title={getUserDisplayName(singleUser)}>
-          <span className="detail-assignee-avatar-wrap">
-            {renderUserAvatar(singleUser, {
-              size: options.avatarSize,
-              style: options.avatarStyle,
-            })}
-            {options.getCompletionBadge?.(singleUser.id)}
-          </span>
-        </Tooltip>
-        <span className="detail-person-name">{getUserDisplayName(singleUser)}</span>
-      </div>
-    )
-  }
-
-  return (
-    <Avatar.Group size={options.avatarSize} max={{ count: options.groupMaxCount }}>
-      {users.map((user) => (
-        <Tooltip key={user.id} title={getUserDisplayName(user)}>
-          <span className="detail-assignee-avatar-wrap">
-            {renderUserAvatar(user, {
-              size: options.avatarSize,
-              style: options.avatarStyle,
-            })}
-            {options.getCompletionBadge?.(user.id)}
-          </span>
-        </Tooltip>
-      ))}
-    </Avatar.Group>
-  )
-}
-
 function getTaskCompletionModeLabel(task: Task): string {
   return task.completion_mode === 'all' ? '全部负责人均需完成' : '任一负责人完成即可'
 }
@@ -1812,6 +1764,25 @@ export default function TaskDetailPanel({
     }
   }
 
+  const handleDescriptionAttachmentDelete = async (attachmentId: string, nextValue?: string) => {
+    try {
+      await deleteAttachment(attachmentId)
+      const nextAttachmentCount = Math.max(0, attachmentCountRef.current - 1)
+      setAttachments((prev) => prev.filter((a) => a.attachment_id !== attachmentId))
+      updateTaskAttachmentCount(nextAttachmentCount)
+
+      const normalizedNextValue = normalizeRichContent(nextValue ?? descriptionDraft)
+      setDescriptionDraft(normalizedNextValue)
+      await handleTaskPatch(
+        { description: normalizedNextValue.trim() },
+        { descriptionMentions: [] },
+      )
+      message.success('图片已删除')
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }
+
   const handleAttachmentDownload = async (att: ApiAttachment) => {
     try {
       await downloadAttachment(att.attachment_id, att.file_name)
@@ -2619,6 +2590,17 @@ export default function TaskDetailPanel({
                   placeholder="输入任务描述"
                   className="detail-description-editor"
                   autoFocus
+                  attachments={attachments}
+                  attachmentOrigins={attachments.reduce<Record<string, TaskRichAttachmentSource>>(
+                    (acc, attachment) => {
+                      if (isImageAttachment(attachment)) {
+                        acc[attachment.attachment_id] = 'paste'
+                      }
+                      return acc
+                    },
+                    {},
+                  )}
+                  attachmentUploading={attachmentUploading}
                   onChange={setDescriptionDraft}
                   onBlurCommit={async (nextValue) => {
                     // 描述区支持 @ 选人，保存时要把提及人一起传给后端，后端才能据此生成通知。
@@ -2633,9 +2615,16 @@ export default function TaskDetailPanel({
                     }
                   }}
                   onRequestAttachmentUpload={(file) => handleAttachmentUpload(file)}
+                  onAttachmentUploaded={(attachment) => {
+                    setAttachments((prev) =>
+                      prev.some((item) => item.attachment_id === attachment.attachment_id)
+                        ? prev
+                        : [...prev, attachment],
+                    )
+                  }}
                   onPreviewAttachment={handleOpenAttachmentPreview}
                   onDownloadAttachment={(attachment) => void handleAttachmentDownload(attachment)}
-                  onRemoveAttachment={handleAttachmentDelete}
+                  onRemoveAttachment={handleDescriptionAttachmentDelete}
                 />
               ) : (
                 <div
