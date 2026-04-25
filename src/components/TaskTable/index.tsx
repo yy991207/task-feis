@@ -14,11 +14,11 @@ import Avatar from 'antd/es/avatar'
 import Tag from 'antd/es/tag'
 import Tooltip from 'antd/es/tooltip'
 import Badge from 'antd/es/badge'
-import Divider from 'antd/es/divider'
 import Skeleton from 'antd/es/skeleton'
 import Modal from 'antd/es/modal'
 import theme from 'antd/es/theme'
 import message from 'antd/es/message'
+import Flex from 'antd/es/flex'
 import {
   PlusOutlined,
   FilterOutlined,
@@ -43,10 +43,8 @@ import {
   LinkOutlined,
   ClockCircleOutlined,
   CalendarOutlined,
-  LeftOutlined,
   RightOutlined,
   ReloadOutlined,
-  UpOutlined,
   FlagOutlined,
   TeamOutlined,
   NumberOutlined,
@@ -330,8 +328,6 @@ type StatusFilterKey = 'all' | 'todo' | 'done'
 type SortModeKey = 'custom' | 'due' | 'start' | 'created'
 type VisibleSortModeKey = Exclude<SortModeKey, 'custom'>
 type GroupModeKey = BaseGroupModeKey | CustomFieldGroupModeKey
-type DateFieldKey = 'start' | 'due'
-type CalendarViewMode = 'month' | 'year'
 type FilterFieldType = 'member' | 'date' | 'text' | 'number' | 'select' | 'multiSelect'
 type FilterOperator =
   | 'contains'
@@ -877,15 +873,6 @@ interface TaskTableProps {
   onTaskDeleted?: (taskGuid: string) => void
 }
 
-interface DateConfigPanelProps {
-  initialField: DateFieldKey
-  startDate: dayjs.Dayjs | null
-  dueDate: dayjs.Dayjs | null
-  onStartChange: (value: dayjs.Dayjs | null) => void
-  onDueChange: (value: dayjs.Dayjs | null) => void
-  onInteract?: () => void
-}
-
 interface AssigneePickerProps {
   pickerKey: string
   open: boolean
@@ -1001,9 +988,11 @@ function AssigneePicker({
         </div>
       }
     >
-      <div
+      <Button
+        type="text"
         className={triggerClassName ? `assignee-cell ${triggerClassName}` : 'assignee-cell'}
         onMouseDown={onInteract}
+        onClick={(event) => event.stopPropagation()}
       >
         {selectedUsers.length > 0 ? (
           isTasklistView ? (
@@ -1079,142 +1068,13 @@ function AssigneePicker({
         ) : (
           placeholderIcon
         )}
-      </div>
+      </Button>
     </Popover>
   )
 }
 
 function isInlineCreateRow(record: TaskTableDisplayRow): record is TaskTableInlineCreateRow {
   return record.rowKind === 'inlineCreate'
-}
-
-function DateConfigPanel({
-  initialField,
-  startDate,
-  dueDate,
-  onStartChange,
-  onDueChange,
-  onInteract,
-}: DateConfigPanelProps) {
-  const defaultCalendarValue =
-    (initialField === 'start' ? startDate : dueDate) ?? startDate ?? dueDate ?? dayjs()
-  const [activeField, setActiveField] = useState<DateFieldKey>(initialField)
-  const [calendarValue, setCalendarValue] = useState<dayjs.Dayjs>(defaultCalendarValue)
-  const [calendarMode, setCalendarMode] = useState<CalendarViewMode>('month')
-
-  const focusField = (field: DateFieldKey) => {
-    setActiveField(field)
-    setCalendarMode('month')
-    setCalendarValue((field === 'start' ? startDate : dueDate) ?? startDate ?? dueDate ?? dayjs())
-  }
-
-  const handleSelect = (
-    value: dayjs.Dayjs,
-    selectInfo: { source: 'year' | 'month' | 'date' | 'customize' },
-  ) => {
-    // 月份面板只负责切换浏览月份，不直接改开始/截止日期。
-    if (selectInfo.source === 'month') {
-      setCalendarValue(value.startOf('month'))
-      setCalendarMode('month')
-      return
-    }
-
-    const nextValue = value.startOf('day')
-    setCalendarValue(nextValue)
-    if (activeField === 'start') {
-      onStartChange(nextValue)
-      return
-    }
-    onDueChange(nextValue)
-  }
-
-  const handleClearAll = () => {
-    onStartChange(null)
-    onDueChange(null)
-    setCalendarMode('month')
-    setCalendarValue(dayjs())
-  }
-
-  return (
-    <div className="date-config-panel" onMouseDown={onInteract}>
-      <Calendar
-        fullscreen={false}
-        value={calendarValue}
-        mode={calendarMode}
-        onSelect={handleSelect}
-        onPanelChange={(value, mode) => {
-          setCalendarValue(value)
-          setCalendarMode(mode)
-        }}
-        headerRender={({ value, type, onTypeChange }) => (
-          <div className="date-config-header">
-            <Button
-              type="text"
-              size="small"
-              icon={<LeftOutlined />}
-              onClick={() => setCalendarValue(
-                value.clone().subtract(1, type === 'year' ? 'year' : 'month'),
-              )}
-            />
-            <Button
-              type="text"
-              size="small"
-              className="date-config-month-btn"
-              icon={type === 'year' ? <UpOutlined /> : <DownOutlined />}
-              iconPlacement="end"
-              onClick={() => onTypeChange(type === 'month' ? 'year' : 'month')}
-            >
-              {value.format('YYYY年 M月')}
-            </Button>
-            <Button
-              type="text"
-              size="small"
-              icon={<RightOutlined />}
-              onClick={() => setCalendarValue(
-                value.clone().add(1, type === 'year' ? 'year' : 'month'),
-              )}
-            />
-          </div>
-        )}
-      />
-
-      <Space vertical size={8} className="date-config-inputs">
-        <Input
-          readOnly
-          value={startDate ? startDate.format('YYYY/MM/DD') : ''}
-          placeholder="开始日期"
-          className={activeField === 'start' ? 'date-config-input active' : 'date-config-input'}
-          onClick={() => focusField('start')}
-        />
-        <Input
-          readOnly
-          value={dueDate ? dueDate.format('YYYY/MM/DD') : ''}
-          placeholder="截止日期"
-          className={activeField === 'due' ? 'date-config-input active' : 'date-config-input'}
-          onClick={() => focusField('due')}
-        />
-      </Space>
-
-      <Checkbox className="date-config-checkbox">具体时间</Checkbox>
-
-      <Divider className="date-config-divider" />
-
-      <Button type="text" icon={<ClockCircleOutlined />} className="date-config-link-btn">
-        到期提醒
-      </Button>
-
-      <div className="date-config-footer">
-        <Button
-          type="text"
-          icon={<ReloadOutlined />}
-          className="date-config-clear-btn"
-          onClick={handleClearAll}
-        >
-          全部清除
-        </Button>
-      </div>
-    </div>
-  )
 }
 
 function isInlineCreateFloatingTarget(target: EventTarget | null): boolean {
@@ -3737,151 +3597,153 @@ export default function TaskTable({
   }
 
   const renderInlineCreateTitleCell = (sectionGuid: string) => (
-    <div className="inline-create-title-cell">
-      <div className="cell cell-checkbox">
-        <Checkbox disabled />
-      </div>
-      <div
-        className={`cell cell-title ${inlineCreateFocusedField === 'title' ? 'active' : ''}`}
-        style={{ overflow: 'visible' }}
-      >
-        <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
-          <TaskTitleEditBox
-            active={inlineCreateFocusedField === 'title'}
-            placeholder="输入标题，回车确认"
-            value={newTaskTitle}
-            onChange={setNewTaskTitle}
-            onSubmit={() => {
-              void handleInlineCreate(sectionGuid)
-            }}
-            onFocus={() => setInlineCreateFocusedField('title')}
-            onBeforeBlurSubmit={() => {
-              if (inlineCreateInteractingRef.current) {
-                inlineCreateInteractingRef.current = false
-                return false
-              }
-              if (inlineCreateFocusedField !== 'title') {
-                return false
-              }
-              return true
-            }}
-          />
-        </Tooltip>
-      </div>
-    </div>
+    <Flex
+      align="center"
+      className="cell cell-title task-edit-cell task-edit-cell-title"
+      style={{ overflow: 'visible' }}
+    >
+      <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
+        <TaskTitleEditBox
+          active={inlineCreateFocusedField === 'title'}
+          placeholder="输入标题，回车确认"
+          value={newTaskTitle}
+          prefix={<Checkbox disabled onClick={(e) => e.stopPropagation()} />}
+          onChange={setNewTaskTitle}
+          onSubmit={() => {
+            void handleInlineCreate(sectionGuid)
+          }}
+          onFocus={() => setInlineCreateFocusedField('title')}
+          onBeforeBlurSubmit={() => {
+            if (inlineCreateInteractingRef.current) {
+              inlineCreateInteractingRef.current = false
+              return false
+            }
+            if (inlineCreateFocusedField !== 'title') {
+              return false
+            }
+            return true
+          }}
+        />
+      </Tooltip>
+    </Flex>
   )
 
   const renderInlineCreatePriorityCell = (sectionGuid: string) => (
     <div
-      className={`inline-create-field-cell cell cell-priority ${
+      className={`cell cell-priority task-edit-cell ${
         inlineCreateFocusedField === 'priority' ? 'active' : ''
       }`}
       onMouseDownCapture={markInlineCreateInteracting}
       data-section-guid={sectionGuid}
     >
-      <div className="inline-create-field-shell task-edit-field-trigger">
-        <Select
-          size="middle"
-          variant="borderless"
-          className="inline-create-priority-select"
-          value={newTaskPriority}
-          onChange={(value) => setNewTaskPriority(value)}
-          onDropdownVisibleChange={(open) => {
-            if (open) markInlineCreateInteracting()
-            setInlineCreateFocusedField(open ? 'priority' : null)
-          }}
-          style={{ width: '100%' }}
-          options={[
-            { label: '无优先级', value: Priority.None },
-            { label: '低', value: Priority.Low },
-            { label: '中', value: Priority.Medium },
-            { label: '高', value: Priority.High },
-            { label: '紧急', value: Priority.Urgent },
-          ]}
-        />
-      </div>
+      <Select
+        size="middle"
+        variant="borderless"
+        className="task-edit-select inline-create-priority-select"
+        value={newTaskPriority}
+        onChange={(value) => setNewTaskPriority(value)}
+        onDropdownVisibleChange={(open) => {
+          if (open) markInlineCreateInteracting()
+          setInlineCreateFocusedField(open ? 'priority' : null)
+        }}
+        style={{ width: '100%' }}
+        options={[
+          { label: '无优先级', value: Priority.None },
+          { label: '低', value: Priority.Low },
+          { label: '中', value: Priority.Medium },
+          { label: '高', value: Priority.High },
+          { label: '紧急', value: Priority.Urgent },
+        ]}
+      />
     </div>
   )
 
   const renderInlineCreateAssigneeCell = (sectionGuid: string) => (
     <div
-      className={`inline-create-field-cell cell cell-assignee ${
+      className={`cell cell-assignee task-edit-cell ${
         inlineCreateFocusedField === 'assignee' ? 'active' : ''
       }`}
     >
-      <div className="inline-create-field-shell task-edit-field-trigger">
-        <AssigneePicker
-          pickerKey={`inline-assignee-${sectionGuid}`}
-          open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
-          task={{
-            guid: '__inline-create__',
-            task_id: '__inline-create__',
-            summary: '',
-            description: '',
-            status: 'todo',
-            completed_at: '0',
-            created_at: '0',
-            updated_at: '0',
-            creator: { id: currentUser.id, type: 'user', name: currentUser.name },
-            mode: newTaskCompletionMode === 'all' ? 1 : 2,
-            completion_mode: newTaskCompletionMode,
-            assignee_completions: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
-              user_id: id,
-              is_completed: false,
-              completed_at: null,
-              user_name: users.find((user) => user.id === id)?.name ?? id,
-              avatar_url: users.find((user) => user.id === id)?.avatar ?? null,
-            })),
-            priority: Priority.None,
-            tags: [],
-            is_milestone: false,
-            source: 1,
-            parent_task_guid: '',
-            attachment_count: 0,
-            comment_count: 0,
-            subtask_count: 0,
-            participant_ids: [],
-            members: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
-              id,
-              role: 'assignee' as const,
-              type: 'user' as const,
-              name: users.find((user) => user.id === id)?.name ?? id,
-              avatar: users.find((user) => user.id === id)?.avatar,
-            })),
-            tasklists: [],
-            dependencies: [],
-            custom_fields: [],
-            reminders: [],
-            url: '',
-          }}
-          value={newTaskAssigneeIds}
-          users={users}
-          isTasklistView={isTasklistView}
-          triggerClassName="task-edit-field-trigger assignee-trigger inline-create-assignee-trigger"
-          placeholderIcon={
-            <UserAddOutlined
-              className="empty-assignee"
-              style={{ color: '#b8bcc5', fontSize: 16 }}
-            />
-          }
-          onChange={setNewTaskAssigneeIds}
-          onCompletionModeChange={setNewTaskCompletionMode}
-          onInteract={markInlineCreateInteracting}
-          onOpenChange={(open) => {
-            setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
-            setInlineCreateFocusedField(open ? 'assignee' : null)
-          }}
-        />
-      </div>
+      <AssigneePicker
+        pickerKey={`inline-assignee-${sectionGuid}`}
+        open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
+        task={{
+          guid: '__inline-create__',
+          task_id: '__inline-create__',
+          summary: '',
+          description: '',
+          status: 'todo',
+          completed_at: '0',
+          created_at: '0',
+          updated_at: '0',
+          creator: { id: currentUser.id, type: 'user', name: currentUser.name },
+          mode: newTaskCompletionMode === 'all' ? 1 : 2,
+          completion_mode: newTaskCompletionMode,
+          assignee_completions: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
+            user_id: id,
+            is_completed: false,
+            completed_at: null,
+            user_name: users.find((user) => user.id === id)?.name ?? id,
+            avatar_url: users.find((user) => user.id === id)?.avatar ?? null,
+          })),
+          priority: Priority.None,
+          tags: [],
+          is_milestone: false,
+          source: 1,
+          parent_task_guid: '',
+          attachment_count: 0,
+          comment_count: 0,
+          subtask_count: 0,
+          participant_ids: [],
+          members: (newTaskAssigneeIds.length > 0 ? newTaskAssigneeIds : [currentUser.id]).map((id) => ({
+            id,
+            role: 'assignee' as const,
+            type: 'user' as const,
+            name: users.find((user) => user.id === id)?.name ?? id,
+            avatar: users.find((user) => user.id === id)?.avatar,
+          })),
+          tasklists: [],
+          dependencies: [],
+          custom_fields: [],
+          reminders: [],
+          url: '',
+        }}
+        value={newTaskAssigneeIds}
+        users={users}
+        isTasklistView={isTasklistView}
+        triggerClassName="task-edit-trigger assignee-trigger inline-create-assignee-trigger"
+        placeholderIcon={
+          <UserAddOutlined
+            className="empty-assignee"
+            style={{ color: '#b8bcc5', fontSize: 16 }}
+          />
+        }
+        onChange={setNewTaskAssigneeIds}
+        onCompletionModeChange={setNewTaskCompletionMode}
+        onInteract={markInlineCreateInteracting}
+        onOpenChange={(open) => {
+          setActiveAssigneePickerKey(open ? `inline-assignee-${sectionGuid}` : null)
+          setInlineCreateFocusedField(open ? 'assignee' : null)
+        }}
+      />
     </div>
   )
 
-  const renderInlineCreateDateCell = (sectionGuid: string, field: 'start' | 'due') => {
+  const renderInlineCreateDateCell = (_sectionGuid: string, field: 'start' | 'due') => {
     const date = field === 'start' ? newTaskStart : newTaskDue
+    void _sectionGuid
+
+    const handleInlineCreateDateChange = (dateField: 'start' | 'due', nextDate: dayjs.Dayjs | null) => {
+      if (dateField === 'start') {
+        setNewTaskStart(nextDate)
+        return
+      }
+      setNewTaskDue(nextDate)
+    }
 
       return (
       <div
-        className={`inline-create-field-cell cell cell-${field} ${
+        className={`cell cell-${field} task-edit-cell ${
           inlineCreateFocusedField === field ? 'active' : ''
         }`}
       >
@@ -3889,43 +3751,51 @@ export default function TaskTable({
           trigger="click"
           placement="bottomLeft"
           content={
-            <DateConfigPanel
-              initialField={field}
-              startDate={newTaskStart}
-              dueDate={newTaskDue}
-              onStartChange={setNewTaskStart}
-              onDueChange={setNewTaskDue}
-              onInteract={markInlineCreateInteracting}
-            />
+            <div style={{ width: 260 }} onMouseDown={(e) => e.preventDefault()}>
+              <Calendar
+                fullscreen={false}
+                value={date ?? undefined}
+                onSelect={(value) => void handleInlineCreateDateChange(field, value)}
+                disabledDate={
+                  field === 'due'
+                    ? (current) => current && current < dayjs().startOf('day')
+                    : undefined
+                }
+              />
+              {date && (
+                <div style={{ textAlign: 'right', padding: '4px 8px' }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => void handleInlineCreateDateChange(field, null)}
+                  >
+                    清除
+                  </Button>
+                </div>
+              )}
+            </div>
           }
           onOpenChange={(open) => {
             setInlineCreateFocusedField(open ? field : null)
           }}
         >
-          <div
-            className={[
-              'inline-create-field-shell',
-              'task-edit-field-trigger',
-              field === 'start' ? 'inline-create-date-shell-start' : 'inline-create-date-shell-due',
-            ].join(' ')}
+          <Button
+            type="text"
+            className="task-edit-trigger task-edit-date-trigger"
+            block
+            onMouseDown={markInlineCreateInteracting}
           >
-            <div
-              className="date-trigger task-edit-field-trigger inline-create-date-trigger"
-              onMouseDown={markInlineCreateInteracting}
-              data-section-guid={sectionGuid}
-            >
-              <span className="date-text">{date ? date.format('M月D日') : ''}</span>
-              <CalendarOutlined className="empty-date-icon" />
-            </div>
-          </div>
+            <span className="date-text">{date ? date.format('M月D日') : ''}</span>
+            <CalendarOutlined className="empty-date-icon" />
+          </Button>
         </Popover>
       </div>
     )
   }
 
   const renderInlineCreateCreatorCell = () => (
-    <div className="inline-create-field-cell cell cell-creator">
-      <Space size={4} className="inline-create-field-shell task-edit-field-trigger inline-create-creator-trigger">
+    <div className="cell cell-creator task-edit-cell">
+      <Space size={4} className="task-edit-trigger inline-create-creator-trigger">
         <Avatar size={20} style={{ backgroundColor: '#7b67ee', fontSize: 11 }}>
           {currentUser.name.slice(0, 1)}
         </Avatar>
@@ -4298,7 +4168,7 @@ export default function TaskTable({
         title: renderAdjustableColumnTitle('estimate', <span>预估工时</span>),
         render: (_value, record) =>
           isInlineCreateRow(record) ? (
-            <div className="inline-create-field-cell cell cell-estimate">
+            <div className="cell cell-estimate task-edit-cell">
               <span className="custom-field-text">-</span>
             </div>
           ) : (
@@ -4408,7 +4278,7 @@ export default function TaskTable({
         title: renderAdjustableColumnTitle('created', <span>创建时间</span>),
         render: (value: string, record) =>
           isInlineCreateRow(record) ? (
-            <div className="inline-create-field-cell cell cell-created" />
+            <div className="cell cell-created task-edit-cell" />
           ) : isTaskTableTaskRow(record) ? (
             renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
           ) : null,
@@ -5056,6 +4926,7 @@ interface TaskTitleEditBoxProps {
   placeholder: string
   active?: boolean
   autoFocus?: boolean
+  prefix?: React.ReactNode
   onChange: (value: string) => void
   onSubmit: (value: string) => void
   onFocus?: () => void
@@ -5067,6 +4938,7 @@ function TaskTitleEditBox({
   placeholder,
   active = false,
   autoFocus = true,
+  prefix,
   onChange,
   onSubmit,
   onFocus,
@@ -5084,39 +4956,38 @@ function TaskTitleEditBox({
   }
 
   return (
-    <div className={`task-title-edit-box inline-create-title-box${active ? ' task-title-edit-box-active' : ''}`}>
-      <Input
-        size="middle"
-        className="inline-title-input"
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => {
-          submittedRef.current = false
-          onChange(e.target.value)
-        }}
-        onFocus={onFocus}
-        onCompositionStart={() => {
-          composingRef.current = true
-        }}
-        onCompositionEnd={() => {
-          composingRef.current = false
-        }}
-        onPressEnter={() => {
-          if (composingRef.current) {
-            return
-          }
-          submit()
-        }}
-        onBlur={() => {
-          if (onBeforeBlurSubmit && !onBeforeBlurSubmit()) {
-            return
-          }
-          submit()
-        }}
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
+    <Input
+      size="middle"
+      className={`task-edit-input${active ? ' task-edit-input-active' : ''}`}
+      autoFocus={autoFocus}
+      placeholder={placeholder}
+      value={value}
+      prefix={prefix}
+      onChange={(e) => {
+        submittedRef.current = false
+        onChange(e.target.value)
+      }}
+      onFocus={onFocus}
+      onCompositionStart={() => {
+        composingRef.current = true
+      }}
+      onCompositionEnd={() => {
+        composingRef.current = false
+      }}
+      onPressEnter={() => {
+        if (composingRef.current) {
+          return
+        }
+        submit()
+      }}
+      onBlur={() => {
+        if (onBeforeBlurSubmit && !onBeforeBlurSubmit()) {
+          return
+        }
+        submit()
+      }}
+      onClick={(e) => e.stopPropagation()}
+    />
   )
 }
 
@@ -5545,7 +5416,7 @@ function TaskTitleCell({
           className={[
             'cell',
             'cell-title',
-            editingName || isEditingRow ? 'inline-create-field-cell task-title-edit-cell' : '',
+            editingName || isEditingRow ? 'task-edit-cell task-title-edit-cell' : '',
             editingName ? 'active' : '',
           ].filter(Boolean).join(' ')}
         >
@@ -5568,16 +5439,14 @@ function TaskTitleCell({
             </span>
           ) : null}
           {editingName ? (
-            <div className="inline-create-field-shell task-title-edit-shell">
-              <TaskTitleEditBox
-                placeholder="输入任务名称"
-                value={editingTitleValue}
-                onChange={setEditingTitleValue}
-                onSubmit={(value) => {
-                  void handleRenameSummary(value)
-                }}
-              />
-            </div>
+            <TaskTitleEditBox
+              placeholder="输入任务名称"
+              value={editingTitleValue}
+              onChange={setEditingTitleValue}
+              onSubmit={(value) => {
+                void handleRenameSummary(value)
+              }}
+            />
           ) : (
             <span
               className={isVisuallyDone ? 'done-text' : 'title-text'}
@@ -5661,7 +5530,7 @@ function TaskPriorityCell({
         'cell',
         'cell-priority',
         'task-edit-field-cell',
-        isEditingRow ? 'inline-create-field-cell' : '',
+        isEditingRow ? 'task-edit-cell' : '',
         priorityMenuOpen ? 'active' : '',
       ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
@@ -5686,7 +5555,7 @@ function TaskPriorityCell({
           },
         }}
       >
-        <div className="inline-create-field-shell task-edit-field-trigger">
+        <Button type="text" className="task-edit-trigger" block onClick={(event) => event.stopPropagation()}>
           {showPriority ? (
             renderOverflowTooltip(
               PriorityLabel[task.priority],
@@ -5711,7 +5580,7 @@ function TaskPriorityCell({
               -
             </span>
           )}
-        </div>
+        </Button>
       </Dropdown>
     </div>
   )
@@ -5793,29 +5662,27 @@ function TaskAssigneeCell({
         'cell',
         'cell-assignee',
         'task-edit-field-cell',
-        isEditingRow ? 'inline-create-field-cell' : '',
+        isEditingRow ? 'task-edit-cell' : '',
         isPickerOpen ? 'active' : '',
       ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="inline-create-field-shell task-edit-field-trigger">
-        <AssigneePicker
-          pickerKey={assigneePickerKey}
-          open={isPickerOpen}
-          task={task}
-          value={assigneeIds}
-          users={users}
-          taskMembers={task.members.filter((m) => m.role === 'assignee')}
-          isTasklistView={isTasklistView}
-          triggerClassName="assignee-trigger inline-create-assignee-trigger"
-          placeholderIcon={<UserOutlined className="empty-assignee" />}
-          onChange={(value) => void handleAssigneeChange(value)}
-          onCompletionModeChange={(mode) => void handleCompletionModeChange(mode)}
-          onOpenChange={(open) => {
-            onAssigneePickerOpenChange(open ? assigneePickerKey : null)
-          }}
-        />
-      </div>
+      <AssigneePicker
+        pickerKey={assigneePickerKey}
+        open={isPickerOpen}
+        task={task}
+        value={assigneeIds}
+        users={users}
+        taskMembers={task.members.filter((m) => m.role === 'assignee')}
+        isTasklistView={isTasklistView}
+        triggerClassName="task-edit-trigger assignee-trigger inline-create-assignee-trigger"
+        placeholderIcon={<UserOutlined className="empty-assignee" />}
+        onChange={(value) => void handleAssigneeChange(value)}
+        onCompletionModeChange={(mode) => void handleCompletionModeChange(mode)}
+        onOpenChange={(open) => {
+          onAssigneePickerOpenChange(open ? assigneePickerKey : null)
+        }}
+      />
     </div>
   )
 }
@@ -5866,24 +5733,25 @@ function TaskDateCell({
         'cell',
         `cell-${field}`,
         'task-edit-field-cell',
-        isEditingRow ? 'inline-create-field-cell' : '',
+        isEditingRow ? 'task-edit-cell' : '',
         pickerOpen ? 'active' : '',
       ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
     >
       {field === 'start' && isSubtask ? (
-        <div className="inline-create-field-shell task-edit-field-trigger">
-          <div
-            className="date-trigger date-trigger-readonly"
-            title="子任务开始时间跟随父任务，不能单独修改"
-          >
-            {date ? (
-              renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
-            ) : (
-              <CalendarOutlined className="empty-date-icon" />
-            )}
-          </div>
-        </div>
+        <Button
+          type="text"
+          className="task-edit-trigger task-edit-date-trigger date-trigger-readonly"
+          block
+          title="子任务开始时间跟随父任务，不能单独修改"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {date ? (
+            renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
+          ) : (
+            <CalendarOutlined className="empty-date-icon" />
+          )}
+        </Button>
       ) : (
         <Popover
           trigger="click"
@@ -5916,15 +5784,18 @@ function TaskDateCell({
           }
           onOpenChange={setPickerOpen}
         >
-          <div className="inline-create-field-shell task-edit-field-trigger">
-            <div className="date-trigger">
-              {date ? (
-                renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
-              ) : (
-                <CalendarOutlined className="empty-date-icon" />
-              )}
-            </div>
-          </div>
+          <Button
+            type="text"
+            className="task-edit-trigger task-edit-date-trigger"
+            block
+            onClick={(event) => event.stopPropagation()}
+          >
+            {date ? (
+              renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
+            ) : (
+              <CalendarOutlined className="empty-date-icon" />
+            )}
+          </Button>
         </Popover>
       )}
     </div>

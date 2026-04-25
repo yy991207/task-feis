@@ -14,224 +14,58 @@ async function testNewTaskEntryUsesBlockContainer() {
       ? source.slice(buildRowsStart, buildRowsEnd)
       : source
 
-  assert.match(
-    source,
-    /className="new-task-entry"/,
-    '分组下的“新建任务”入口应该有独立的大块容器 new-task-entry，不能继续只靠按钮本身撑样式。',
-  )
-
-  assert.match(
-    source,
-    /className="new-task-entry-label"/,
-    '“新建任务”入口应该有独立文案节点，方便做整块 hover 和留白控制。',
-  )
-
-  assert.match(
-    buildRowsSource,
-    /rowKind: 'newTask'/,
-    '分组下应该继续渲染 newTask 行，不能把入口直接删掉。',
-  )
-
-  assert.doesNotMatch(
-    buildRowsSource,
-    /config\.toolbar\.showCreate\s*&&\s*isSectionGroupMode/,
-    'newTask 行不应该再依赖 toolbar.showCreate；这个入口要在 section 分组里直接可见。',
-  )
+  assert.match(source, /className="new-task-entry"/)
+  assert.match(source, /className="new-task-entry-label"/)
+  assert.match(buildRowsSource, /rowKind: 'newTask'/)
+  assert.doesNotMatch(buildRowsSource, /config\.toolbar\.showCreate\s*&&\s*isSectionGroupMode/)
 }
 
-async function testInlineCreateUsesLargeFieldShells() {
+async function testInlineCreateUsesAntdComposition() {
   const source = await readSource('src/components/TaskTable/index.tsx')
 
-  assert.match(
-    source,
-    /className="inline-create-title-box"/,
-    '标题编辑态应该包在 inline-create-title-box 里，做成大方框输入样式。',
-  )
+  assert.match(source, /import Flex from 'antd\/es\/flex'/)
+  assert.match(source, /<Flex[\s\S]*className="cell cell-title task-edit-cell task-edit-cell-title"/)
+  assert.match(source, /<TaskTitleEditBox[\s\S]*prefix=\{\s*<Checkbox disabled/)
+  assert.match(source, /className="task-edit-select inline-create-priority-select"/)
+  assert.match(source, /triggerClassName="task-edit-trigger assignee-trigger inline-create-assignee-trigger"/)
+  assert.match(source, /className="task-edit-trigger task-edit-date-trigger"/)
 
-  assert.match(
-    source,
-    /className=\{`inline-create-field-shell \$\{field === 'start' \? 'inline-create-date-shell-start' : 'inline-create-date-shell-due'\}`\}/,
-    '日期编辑态应该使用独立的大方框字段壳层，不能直接把 date-trigger 裸放在单元格里。',
-  )
+  assert.doesNotMatch(source, /className="inline-create-title-cell"/)
+  assert.doesNotMatch(source, /className="inline-create-title-box"/)
+  assert.doesNotMatch(source, /className="task-title-edit-box"/)
+  assert.doesNotMatch(source, /className="inline-create-field-shell task-edit-field-trigger"/)
 }
 
-async function testStylesPromoteBlockLayoutInsteadOfLightweightControls() {
-  const style = await readSource('src/components/TaskTable/index.less')
-
-  assert.match(
-    style,
-    /\.new-task-entry \{[\s\S]*min-height: 44px[\s\S]*border-radius: 10px/,
-    '“新建任务”入口样式应该是整块点击区，至少包含更高的行高和圆角。',
-  )
-
-  assert.match(
-    style,
-    /\.inline-create-table-row > td \{[\s\S]*background: #edf4ff !important;/,
-    '行内新建态整行底色应该升级成更明显的整块浅蓝背景。',
-  )
-
-  assert.match(
-    style,
-    /\.inline-create-title-box \{[\s\S]*height: 100%[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
-    '标题输入框外层应该是白底描边的大方框，而不是透明输入框。',
-  )
-}
-
-async function testOnlyActiveFieldUsesHighlightedEditorShell() {
+async function testExistingTaskEditingUsesSameAntdShell() {
   const source = await readSource('src/components/TaskTable/index.tsx')
-  const style = await readSource('src/components/TaskTable/index.less')
 
-  assert.match(
-    source,
-    /inlineCreateFocusedField === 'title' \? 'active' : ''/,
-    '标题输入框应该继续只在当前激活时带 active 状态。',
-  )
-
-  assert.match(
-    source,
-    /inlineCreateFocusedField === 'priority' \? 'active' : ''/,
-    '优先级字段应该继续只在当前激活时带 active 状态。',
-  )
-
-  assert.match(
-    source,
-    /inlineCreateFocusedField === 'assignee' \? 'active' : ''/,
-    '负责人字段应该继续只在当前激活时带 active 状态。',
-  )
-
-  assert.match(
-    source,
-    /inlineCreateFocusedField === field \? 'active' : ''/,
-    '日期字段应该继续只在当前激活时带 active 状态。',
-  )
-
-  assert.doesNotMatch(
-    style,
-    /\.inline-create-field-shell \{[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;[\s\S]*box-shadow: 0 1px 2px/,
-    '普通字段默认不应该全部渲染成白色编辑框，否则一整排都会像同时进入编辑态。',
-  )
-
-  assert.match(
-    style,
-    /\.inline-create-field-shell \{[\s\S]*border: 1px solid transparent[\s\S]*background: transparent[\s\S]*box-shadow: none;/,
-    '普通字段默认应该是透明壳层，只保留轻量占位效果。',
-  )
-
-  assert.match(
-    style,
-    /\.inline-create-field-cell \{\s*[\s\S]*&\.active \{\s*[\s\S]*\.inline-create-field-shell \{\s*[\s\S]*border: 1px solid #d7deeb[\s\S]*background: #fff;/,
-    '通用字段应该只在 active 状态时切成白底描边的大方框。',
-  )
+  assert.match(source, /className=\{`task-edit-input\$\{active \? ' task-edit-input-active' : ''\}`\}/)
+  assert.match(source, /<Button type="text" className="task-edit-trigger" block/)
+  assert.match(source, /triggerClassName="task-edit-trigger assignee-trigger inline-create-assignee-trigger"/)
+  assert.match(source, /className="task-edit-trigger task-edit-date-trigger date-trigger-readonly"/)
 }
 
-async function testTitleEditorUsesFullHeightRectStyle() {
-  const source = await readSource('src/components/TaskTable/index.tsx')
-  const style = await readSource('src/components/TaskTable/index.less')
-  const editableInputSource = await readSource('src/components/EditableInput/index.tsx')
-
-  assert.match(
-    style,
-    /\.inline-create-title-box \{[\s\S]*height: 100%[\s\S]*padding: 0[\s\S]*border-radius: 0/,
-    '新建任务标题输入框应该是矩形外框，且上下没有额外留白。',
-  )
-
-  assert.match(
-    style,
-    /\.inline-title-input \{[\s\S]*&\.ant-input \{[\s\S]*height: 100%[\s\S]*padding: 0 14px/,
-    '新建任务标题输入框内容应该撑满外框高度，只保留左右内边距。',
-  )
-
-  assert.match(
-    source,
-    /className="task-title-edit-box"/,
-    '已创建任务进入编辑态时应该有独立的 task-title-edit-box，和新建任务标题框保持统一。',
-  )
-
-  assert.match(
-    style,
-    /\.task-title-edit-box \{[\s\S]*height: 100%[\s\S]*padding: 0[\s\S]*border-radius: 0/,
-    '已创建任务编辑框也应该是矩形满高样式，不能继续保留旧的小输入框外观。',
-  )
-
-  assert.match(
-    editableInputSource,
-    /size="middle"/,
-    '已创建任务编辑态里的输入框应该至少切到 middle，不能继续用 small。',
-  )
-
-  assert.match(
-    style,
-    /\.inline-create-field-shell \{[\s\S]*height: 100%[\s\S]*padding: 0 12px[\s\S]*border-radius: 0/,
-    '新建任务里除了标题以外的配置项壳层也应该撑满整行高度，不能继续居中留白。',
-  )
-
-  assert.match(
-    style,
-    /\.custom-field-editor \{[\s\S]*height: 100%[\s\S]*min-height: 40px[\s\S]*border-radius: 0/,
-    '已创建任务的自定义字段编辑态也应该同步成满高矩形，不要继续保持小号轻量输入框。',
-  )
-}
-
-async function testExistingTaskEditableCellsReuseRectEditorShell() {
-  const source = await readSource('src/components/TaskTable/index.tsx')
+async function testStylesTargetAntdControlsDirectly() {
   const style = await readSource('src/components/TaskTable/index.less')
 
-  assert.match(
-    source,
-    /className=\{`cell cell-priority task-edit-field-cell \$\{priorityMenuOpen \? 'active' : ''\}`\}/,
-    '已创建任务的优先级单元格也要挂 task-edit-field-cell，打开后才能和截图一样出现矩形编辑壳。',
-  )
+  assert.match(style, /\.new-task-entry \{[\s\S]*min-height: 44px[\s\S]*border-radius: 10px/)
+  assert.match(style, /\.inline-create-table-row > td \{[\s\S]*background: #edf4ff !important;/)
+  assert.match(style, /\.task-edit-input\.ant-input \{[\s\S]*min-height: 40px/)
+  assert.match(style, /\.task-edit-trigger\.ant-btn \{[\s\S]*min-height: 40px/)
+  assert.match(style, /\.task-edit-select\.ant-select \{[\s\S]*width: 100%/)
+  assert.match(style, /\.inline-create-table-row \{[\s\S]*\.task-edit-cell \{/)
 
-  assert.match(
-    source,
-    /triggerClassName="task-edit-field-trigger assignee-trigger"/,
-    '已创建任务的负责人触发器也要复用 task-edit-field-trigger，不能继续保留旧的小号 hover 壳。',
-  )
-
-  assert.match(
-    source,
-    /className=\{`cell cell-\$\{field\} task-edit-field-cell \$\{pickerOpen \? 'active' : ''\}`\}/,
-    '已创建任务的日期单元格也要在弹层打开时切到 task-edit-field-cell active，和截图里的白底蓝框一致。',
-  )
-
-  assert.match(
-    source,
-    /className="custom-field-trigger task-edit-field-trigger"/,
-    '已创建任务的自定义字段展示态也要走 task-edit-field-trigger，才能和标题框统一成满高矩形交互。',
-  )
-
-  assert.match(
-    source,
-    /className="custom-field-editor custom-field-editor-text task-edit-field-trigger"/,
-    '已创建任务的自定义字段输入态也要复用 task-edit-field-trigger，不能只有标题框是矩形壳。',
-  )
-
-  assert.match(
-    style,
-    /\.task-edit-field-cell \{[\s\S]*min-height: 40px[\s\S]*align-self: stretch;/,
-    '已创建任务的可编辑字段单元格需要统一撑满整行高度，不能继续各自保留不同的行高。',
-  )
-
-  assert.match(
-    style,
-    /\.task-edit-field-trigger \{[\s\S]*height: 100%[\s\S]*padding: 0 12px[\s\S]*border: 1px solid transparent[\s\S]*border-radius: 0/,
-    '已创建任务的可编辑字段触发器需要统一成满高矩形壳，不能继续是圆角轻量按钮。',
-  )
-
-  assert.match(
-    style,
-    /\.task-edit-field-cell \{[\s\S]*&\.active \{[\s\S]*\.task-edit-field-trigger \{[\s\S]*border-color: #3370ff[\s\S]*background: #fff;/,
-    '已创建任务字段进入编辑态时，也要像截图一样切到白底蓝框，不是只改标题框一处。',
-  )
+  assert.doesNotMatch(style, /\.inline-create-title-cell \{/)
+  assert.doesNotMatch(style, /\.inline-create-title-box \{/)
+  assert.doesNotMatch(style, /\.task-title-edit-box \{/)
+  assert.doesNotMatch(style, /\.inline-create-field-shell \{/)
 }
 
 async function main() {
   await testNewTaskEntryUsesBlockContainer()
-  await testInlineCreateUsesLargeFieldShells()
-  await testStylesPromoteBlockLayoutInsteadOfLightweightControls()
-  await testOnlyActiveFieldUsesHighlightedEditorShell()
-  await testTitleEditorUsesFullHeightRectStyle()
-  await testExistingTaskEditableCellsReuseRectEditorShell()
+  await testInlineCreateUsesAntdComposition()
+  await testExistingTaskEditingUsesSameAntdShell()
+  await testStylesTargetAntdControlsDirectly()
   console.log('task table inline create style check ok')
 }
 
