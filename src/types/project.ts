@@ -13,4 +13,5 @@ export interface Project {
   is_deleted: boolean
   task_count: number
   done_count: number
+  sort_order?: number
 }

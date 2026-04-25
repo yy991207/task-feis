@@ -188,6 +188,12 @@ export default function Sidebar({
   const [emptyGroupDropTargetId, setEmptyGroupDropTargetId] = useState<string | null>(null)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
 
+  const refreshProjectsFromApi = async () => {
+    const latestProjects = await listProjects()
+    setProjects(latestProjects)
+    return latestProjects
+  }
+
   useEffect(() => {
     listProjectGroups()
       .then((list) => {
@@ -203,10 +209,7 @@ export default function Sidebar({
         message.error(msg)
       })
 
-    listProjects()
-      .then((list) => {
-        setProjects(list)
-      })
+    refreshProjectsFromApi()
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : '加载清单失败'
         message.error(msg)
@@ -443,8 +446,15 @@ export default function Sidebar({
   }, [groups, projects])
 
   const ungroupedProjects = defaultGroup
-    ? (projectsByGroup[defaultGroup.group_id] || [])
-    : projects.filter((p) => !getProjectGroupId(p, groups))
+    ? projects
+      .filter((p) => {
+        const groupId = getProjectGroupId(p, groups)
+        return !groupId || groupId === defaultGroup.group_id
+      })
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    : projects
+      .filter((p) => !getProjectGroupId(p, groups))
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   const buildGroupActionMenu = (group: ProjectGroup) => ({
     items: [
@@ -665,7 +675,7 @@ export default function Sidebar({
       .filter((g) => !g.is_default)
       .sort((a, b) => a.sort_order - b.sort_order)
     const groupNodes: DataNode[] = nonDefaultGroups.map((group) => {
-      const memberProjects = projectsByGroup[group.group_id] || []
+      const memberProjects = (projectsByGroup[group.group_id] || []).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
       const children: DataNode[] = memberProjects.length > 0
         ? memberProjects.map((proj) => ({
             key: encodeTasklistKey(proj.project_id),
@@ -814,14 +824,14 @@ export default function Sidebar({
     event.preventDefault()
     event.stopPropagation()
     setEmptyGroupDropTargetId(null)
-    applySidebarTasklistDrop(
+    void applySidebarTasklistDrop(
       draggingTasklistKey.slice(3),
       `${EMPTY_GROUP_PLACEHOLDER_PREFIX}${groupId}`,
       0,
     )
   }
 
-  const applySidebarTasklistDrop = (
+  const applySidebarTasklistDrop = async (
     projectId: string,
     dropKey: string,
     dropPosition: -1 | 0 | 1,
@@ -835,20 +845,17 @@ export default function Sidebar({
     })
     if (!dropResult) return
 
-    // 后端暂时没有清单排序接口，所以同组拖拽只更新本地顺序；跨组拖拽先乐观更新 UI，再调用移动接口。
-    if (!dropResult.changedGroup) {
-      setProjects(dropResult.projects)
-      return
-    }
-
     const prevProjects = projects
     setProjects(dropResult.projects)
 
-    moveProjectToGroup(projectId, dropResult.targetGroupId).catch((err: unknown) => {
+    try {
+      await moveProjectToGroup(projectId, dropResult.targetGroupId, dropResult.sortOrder)
+      await refreshProjectsFromApi()
+    } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '操作失败'
       message.error(msg)
       setProjects(prevProjects)
-    })
+    }
   }
 
   const handleDrop: TreeProps['onDrop'] = (info) => {
@@ -909,7 +916,7 @@ export default function Sidebar({
       info.dropPosition,
       'pos' in info.node ? String(info.node.pos) : undefined,
     )
-    applySidebarTasklistDrop(projectId, dropKey, dropPosition)
+    void applySidebarTasklistDrop(projectId, dropKey, dropPosition)
   }
 
   const clearDragPreview = () => {

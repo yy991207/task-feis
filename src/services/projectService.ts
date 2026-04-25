@@ -79,6 +79,7 @@ export function archiveProject(projectId: string): Promise<void> {
 export function moveProjectToGroup(
   projectId: string,
   groupId: string,
+  sortOrder?: number,
 ): Promise<void> {
   return request<void>(
     `api/v1/task-center/projects/${projectId}/user-group`,
@@ -87,6 +88,7 @@ export function moveProjectToGroup(
       body: JSON.stringify({
         user_id: appConfig.user_id,
         group_id: groupId,
+        ...(sortOrder === undefined ? {} : { sort_order: sortOrder }),
       }),
     },
   )

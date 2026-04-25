@@ -19,6 +19,7 @@ export interface TasklistDropResult {
   projects: Project[]
   targetGroupId: string
   changedGroup: boolean
+  sortOrder: number
 }
 
 export function getProjectGroupId(project: Project): string {
@@ -67,6 +68,27 @@ function resolveTargetGroupId(
   return null
 }
 
+function computeInsertedSortOrder(
+  projects: Project[],
+  insertIndex: number,
+): number {
+  const prev = insertIndex > 0 ? projects[insertIndex - 1] : undefined
+  const next = projects[insertIndex]
+  const prevSortOrder = prev?.sort_order
+  const nextSortOrder = next?.sort_order
+
+  if (prevSortOrder === undefined && nextSortOrder === undefined) {
+    return 1024
+  }
+  if (prevSortOrder === undefined) {
+    return nextSortOrder! - 1024
+  }
+  if (nextSortOrder === undefined) {
+    return prevSortOrder + 1024
+  }
+  return (prevSortOrder + nextSortOrder) / 2
+}
+
 export function applyTasklistDrop({
   projects,
   projectId,
@@ -112,11 +134,14 @@ export function applyTasklistDrop({
   }
 
   const reorderedTargetProjects = [...targetProjects]
+  const sortOrder = computeInsertedSortOrder(reorderedTargetProjects, insertIndex)
+  movedProject.sort_order = sortOrder
   reorderedTargetProjects.splice(insertIndex, 0, movedProject)
 
   return {
     projects: [...otherProjects, ...reorderedTargetProjects],
     targetGroupId,
     changedGroup: currentGroupId !== targetGroupId,
+    sortOrder,
   }
 }
