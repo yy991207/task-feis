@@ -1461,7 +1461,7 @@ body.detail-panel-resizing {
   }
 
   img {
-    display: block;
+    display: none;
     width: 160px;
     max-width: 100%;
     height: 108px;
@@ -1472,6 +1472,13 @@ body.detail-panel-resizing {
     object-fit: cover;
     cursor: pointer;
   }
+}
+
+.detail-description-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .detail-description-content {

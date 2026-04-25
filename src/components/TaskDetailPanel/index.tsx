@@ -82,6 +82,7 @@ import DateValuePanel, {
   formatDateValueLabel,
 } from '@/components/DateValuePanel'
 import TaskRichInput, {
+  extractAttachmentIds,
   TaskRichText,
   normalizeRichContent,
   type TaskRichAttachmentSource,
@@ -1155,6 +1156,9 @@ export default function TaskDetailPanel({
   ]))
   const followedUsers = followedUserIds.map((userId) => resolveTaskUserById(userId))
   const visibleFollowedUsers = followedUsers.slice(0, 3)
+  const descriptionImageAttachments = extractAttachmentIds(descriptionDraft)
+    .map((attachmentId) => attachments.find((item) => item.attachment_id === attachmentId))
+    .filter((item): item is ApiAttachment => Boolean(item && isImageAttachment(item)))
 
   const handleTaskPatch = async (
     patch: Partial<Task>,
@@ -2658,7 +2662,34 @@ export default function TaskDetailPanel({
                   }}
                 >
                   {descriptionDraft.trim() ? (
-                    <TaskRichText html={descriptionDraft} className="detail-description-text" />
+                    <>
+                      <TaskRichText html={descriptionDraft} className="detail-description-text" />
+                      {descriptionImageAttachments.length > 0 && (
+                        <div className="detail-description-image-grid">
+                          {descriptionImageAttachments.map((attachment) => (
+                            <Tooltip
+                              key={attachment.attachment_id}
+                              title="预览描述图片"
+                            >
+                              <button
+                                type="button"
+                                className="comment-image-card"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleOpenAttachmentPreview(attachment)
+                                }}
+                              >
+                                <img
+                                  className="comment-image-thumb"
+                                  src={buildAttachmentPreviewUrl(attachment)}
+                                  alt={attachment.file_name}
+                                />
+                              </button>
+                            </Tooltip>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <span className="detail-description-placeholder">输入任务描述</span>
                   )}
