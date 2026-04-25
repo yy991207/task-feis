@@ -1,17 +1,28 @@
 import { appConfig } from '@/config/appConfig'
 import type { TeamMember } from '@/services/teamService'
-import type { Task } from '@/types/task'
-
-export interface TaskCompletionAction {
-  key: string
-  label: string
-  status: 'done' | 'todo'
-  scope?: 'self' | 'all'
-}
+import type { Task, Tasklist } from '@/types/task'
+import {
+  type TaskCompletionAction,
+  type TaskCompletionConfirm,
+  type TaskCompletionPolicyContext,
+  type TaskCompletionTriggerState,
+  getTaskCompletionActions as getTaskCompletionActionsByPolicy,
+  getTaskCompletionConfirm as getTaskCompletionConfirmByPolicy,
+  getTaskCompletionTriggerState as getTaskCompletionTriggerStateByPolicy,
+  isCurrentUserAssigneeCompleted as isCurrentUserAssigneeCompletedByPolicy,
+  isCurrentUserTaskAssignee as isCurrentUserTaskAssigneeByPolicy,
+} from './taskCompletionPolicy'
 
 export interface TaskCompletionSummary {
   doneCount: number
   totalCount: number
+}
+
+function buildPolicyContext(tasklist?: Tasklist | null): TaskCompletionPolicyContext {
+  return {
+    currentUserId: appConfig.user_id,
+    tasklistCreatorId: tasklist?.creator.id ?? null,
+  }
 }
 
 export function getTaskCompletionSummary(task: Task): TaskCompletionSummary {
@@ -31,23 +42,19 @@ export function getTaskCompletionSummary(task: Task): TaskCompletionSummary {
   return { doneCount: task.status === 'done' ? assigneeCount : 0, totalCount: assigneeCount }
 }
 
+export type { TaskCompletionAction, TaskCompletionConfirm, TaskCompletionTriggerState }
+
 export function isCurrentUserTaskAssignee(task: Task): boolean {
-  return task.members.some((member) => member.role === 'assignee' && member.id === appConfig.user_id)
+  return isCurrentUserTaskAssigneeByPolicy(task, buildPolicyContext())
 }
 
 export function isCurrentUserAssigneeCompleted(task: Task): boolean {
-  const currentCompletion = task.assignee_completions?.find(
-    (item) => item.user_id === appConfig.user_id,
-  )
-  if (currentCompletion) {
-    return currentCompletion.is_completed
-  }
-  return isCurrentUserTaskAssignee(task) ? task.status === 'done' : false
+  return isCurrentUserAssigneeCompletedByPolicy(task, buildPolicyContext())
 }
 
 export function isCurrentUserTaskAdmin(teamMembers: TeamMember[]): boolean {
-  const currentMember = teamMembers.find((member) => member.user_id === appConfig.user_id)
-  return currentMember?.role === 'owner' || currentMember?.role === 'admin'
+  void teamMembers
+  return false
 }
 
 export function canConfigureTaskCompletionMode(task: Task): boolean {
@@ -57,31 +64,23 @@ export function canConfigureTaskCompletionMode(task: Task): boolean {
 
 export function getTaskCompletionActions(
   task: Task,
-  teamMembers: TeamMember[],
+  _teamMembers: TeamMember[],
+  tasklist?: Tasklist | null,
 ): TaskCompletionAction[] {
-  const assigneeCount = task.members.filter((member) => member.role === 'assignee').length
-  const isDone = task.status === 'done'
-  const isSelfCompleted = isCurrentUserAssigneeCompleted(task)
-  const isAssignee = isCurrentUserTaskAssignee(task)
-  const isAdmin = isCurrentUserTaskAdmin(teamMembers)
-  const isAdminAndAssignee = isAdmin && isAssignee
+  return getTaskCompletionActionsByPolicy(task, buildPolicyContext(tasklist))
+}
 
-  if (assigneeCount > 1 && isAdminAndAssignee) {
-    if (!isSelfCompleted) {
-      return [
-        { key: 'done:self', label: '仅我完成', status: 'done', scope: 'self' },
-        { key: 'done:all', label: '为所有负责人完成', status: 'done', scope: 'all' },
-      ]
-    }
-    return [
-      { key: 'todo:self', label: '重启任务', status: 'todo', scope: 'self' },
-      { key: 'todo:all', label: '为所有负责人完成', status: 'done', scope: 'all' },
-    ]
-  }
+export function getTaskCompletionTriggerState(
+  task: Task,
+  tasklist?: Tasklist | null,
+): TaskCompletionTriggerState {
+  return getTaskCompletionTriggerStateByPolicy(task, buildPolicyContext(tasklist))
+}
 
-  if (!isDone) {
-    return [{ key: 'done', label: '标记完成', status: 'done' }]
-  }
-
-  return [{ key: 'todo', label: '重启任务', status: 'todo' }]
+export function getTaskCompletionConfirm(
+  task: Task,
+  action: TaskCompletionAction,
+  tasklist?: Tasklist | null,
+): TaskCompletionConfirm | null {
+  return getTaskCompletionConfirmByPolicy(task, action, buildPolicyContext(tasklist))
 }

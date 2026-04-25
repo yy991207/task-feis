@@ -16,6 +16,7 @@ import Tooltip from 'antd/es/tooltip'
 import Badge from 'antd/es/badge'
 import Divider from 'antd/es/divider'
 import Skeleton from 'antd/es/skeleton'
+import Modal from 'antd/es/modal'
 import theme from 'antd/es/theme'
 import message from 'antd/es/message'
 import {
@@ -127,8 +128,9 @@ import {
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
   getTaskCompletionActions,
+  getTaskCompletionConfirm,
   getTaskCompletionSummary,
-  isCurrentUserAssigneeCompleted,
+  getTaskCompletionTriggerState,
 } from '@/utils/taskCompletion'
 import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
 import {
@@ -2006,12 +2008,55 @@ export default function TaskTable({
     action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
   ) => {
     e.stopPropagation()
-    const nextStatus = action?.status ?? (task.status === 'done' ? 'todo' : 'done')
+    const nextAction = action ?? getTaskCompletionActions(task, teamMembers, tasklist)[0]
+    if (!nextAction) {
+      return
+    }
+
+    let latestTask = task
+    if (nextAction.scope === 'all') {
+      try {
+        // all 作用域要先读一次最新任务状态，避免拿旧的负责人完成态把确认弹窗误弹出来。
+        const fresh = await getTask(task.guid)
+        latestTask = apiTaskToTask(fresh, tasklist?.guid)
+      } catch (err) {
+        message.error(getActionErrorMessage(err, '获取任务最新状态失败'))
+        return
+      }
+    }
+
+    const confirmConfig = getTaskCompletionConfirm(latestTask, nextAction, tasklist)
+    if (confirmConfig) {
+      Modal.confirm({
+        title: confirmConfig.title,
+        content: confirmConfig.content,
+        okText: confirmConfig.okText,
+        cancelText: '取消',
+        onOk: async () => {
+          const optimistic = { ...task, status: nextAction.status as Task['status'] }
+          handleTaskUpdate(optimistic)
+          updateSubtaskInCache(optimistic)
+          try {
+            const apiTask = await patchTaskStatus(task.guid, nextAction.status, { scope: nextAction.scope })
+            const next = apiTaskToTask(apiTask, tasklist?.guid)
+            handleTaskUpdate(next)
+            updateSubtaskInCache(next)
+          } catch (err) {
+            handleTaskUpdate(task)
+            updateSubtaskInCache(task)
+            message.error(getActionErrorMessage(err, '更新状态失败'))
+          }
+        },
+      })
+      return
+    }
+
+    const nextStatus = nextAction.status
     const optimistic = { ...task, status: nextStatus as Task['status'] }
     handleTaskUpdate(optimistic)
     updateSubtaskInCache(optimistic)
     try {
-      const apiTask = await patchTaskStatus(task.guid, nextStatus, { scope: action?.scope })
+      const apiTask = await patchTaskStatus(task.guid, nextStatus, { scope: nextAction.scope })
       const next = apiTaskToTask(apiTask, tasklist?.guid)
       handleTaskUpdate(next)
       updateSubtaskInCache(next)
@@ -4127,8 +4172,9 @@ export default function TaskTable({
             depth={record.tableDepth}
             expanded={expandedTaskGuids.has(record.guid)}
             loadedSubtaskCount={(subtasksByGuid[record.guid] ?? []).length}
+            tasklist={tasklist}
             onToggleExpand={handleToggleExpand}
-            statusActions={getTaskCompletionActions(record, teamMembers)}
+            statusActions={getTaskCompletionActions(record, teamMembers, tasklist)}
             onToggleStatus={handleToggleStatus}
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
@@ -4893,6 +4939,7 @@ interface TaskTitleCellProps {
   depth?: number
   expanded?: boolean
   loadedSubtaskCount?: number
+  tasklist?: Tasklist
   onToggleExpand?: (task: Task) => void
   statusActions: Array<{ key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' }>
   onToggleStatus: (
@@ -5175,6 +5222,7 @@ function TaskTitleCell({
   depth = 0,
   expanded = false,
   loadedSubtaskCount,
+  tasklist,
   onToggleExpand,
   statusActions,
   onToggleStatus,
@@ -5183,9 +5231,10 @@ function TaskTitleCell({
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
-  const isSelfCompleted = isCurrentUserAssigneeCompleted(task)
-  const statusToggleTooltip = isSelfCompleted ? '重启任务' : '标记已完成'
+  const statusTriggerState = getTaskCompletionTriggerState(task, tasklist)
+  const statusToggleTooltip = statusTriggerState.tooltip
   const primaryStatusAction = statusActions[0]
+  const isVisuallyDone = statusTriggerState.checked
 
   const handleRenameSummary = async (rawName: string) => {
     setEditingName(false)
@@ -5202,7 +5251,7 @@ function TaskTitleCell({
   }
 
   return (
-    <div className={`task-title-cell ${task.status === 'done' ? 'done' : ''}`}>
+    <div className={`task-title-cell ${isVisuallyDone ? 'done' : ''}`}>
       <div className="task-row-main">
         {depth > 0 && (
           <span
@@ -5241,7 +5290,7 @@ function TaskTitleCell({
                   styles={{ container: { color: '#fff' } }}
                 >
                   <Checkbox
-                    checked={isSelfCompleted}
+                    checked={statusTriggerState.checked}
                     onClick={(e) => {
                       e.stopPropagation()
                       setStatusMenuOpen((open) => !open)
@@ -5259,7 +5308,7 @@ function TaskTitleCell({
               styles={{ container: { color: '#fff' } }}
             >
               <Checkbox
-                checked={isSelfCompleted}
+                checked={statusTriggerState.checked}
                 onClick={(e) => onToggleStatus(e, task, primaryStatusAction)}
               />
             </Tooltip>
@@ -5298,7 +5347,7 @@ function TaskTitleCell({
             </div>
           ) : (
             <span
-              className={task.status === 'done' ? 'done-text' : 'title-text'}
+              className={isVisuallyDone ? 'done-text' : 'title-text'}
               onClick={(e) => {
                 e.stopPropagation()
                 setEditingName(true)

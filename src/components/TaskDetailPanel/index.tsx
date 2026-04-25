@@ -88,8 +88,9 @@ import UserSearchSelect from '@/components/UserSearchSelect'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
   getTaskCompletionActions,
+  getTaskCompletionConfirm,
   getTaskCompletionSummary,
-  isCurrentUserAssigneeCompleted,
+  getTaskCompletionTriggerState,
 } from '@/utils/taskCompletion'
 import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
 import './index.less'
@@ -726,10 +727,6 @@ export default function TaskDetailPanel({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const commentInputUsers = availableUsers
   const assignees = task.members.filter((m) => m.role === 'assignee')
-  const taskStatusActions = getTaskCompletionActions(task, teamMembers)
-  const primaryTaskStatusAction = taskStatusActions[0]
-  const isCurrentTaskCompleted = isCurrentUserAssigneeCompleted(task)
-  const taskCompletionSummary = getTaskCompletionSummary(task)
   const isSubtask = Boolean(task.parent_task_guid)
   const creator: User = {
     id: task.creator.id,
@@ -743,6 +740,10 @@ export default function TaskDetailPanel({
     ? tasklists.find((item) => item.guid === primaryTasklistRef.tasklist_guid)
     : undefined
   const primaryTasklist = currentTasklist
+  const taskStatusActions = getTaskCompletionActions(task, teamMembers, primaryTasklist)
+  const primaryTaskStatusAction = taskStatusActions[0]
+  const taskStatusTriggerState = getTaskCompletionTriggerState(task, primaryTasklist)
+  const taskCompletionSummary = getTaskCompletionSummary(task)
   const currentTasklistRefs = task.tasklists.filter(
     (item) => item.tasklist_guid === currentTasklist?.guid,
   )
@@ -1282,9 +1283,46 @@ export default function TaskDetailPanel({
   const handleToggleTaskStatus = async (
     action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
   ) => {
+    const nextAction = action ?? taskStatusActions[0]
+    if (!nextAction) {
+      return
+    }
+
+    let latestTask = task
+    if (nextAction.scope === 'all') {
+      try {
+        // all 作用域会影响其他负责人，先查最新任务状态再决定是否要确认。
+        const fresh = await getTask(task.guid)
+        latestTask = apiTaskToTask(fresh)
+      } catch (err) {
+        message.error(getActionErrorMessage(err, '获取任务最新状态失败'))
+        return
+      }
+    }
+
+    const confirmConfig = getTaskCompletionConfirm(latestTask, nextAction, primaryTasklist)
+    if (confirmConfig) {
+      Modal.confirm({
+        title: confirmConfig.title,
+        content: confirmConfig.content,
+        okText: confirmConfig.okText,
+        cancelText: '取消',
+        onOk: async () => {
+          try {
+            const apiTask = await patchTaskStatus(task.guid, nextAction.status, { scope: nextAction.scope })
+            const nextTask = apiTaskToTask(apiTask)
+            onTaskUpdated?.(nextTask)
+            if (!onTaskUpdated) onRefresh?.()
+          } catch (err) {
+            message.error(getActionErrorMessage(err, '状态更新失败'))
+          }
+        },
+      })
+      return
+    }
+
     try {
-      const nextStatus = action?.status ?? (task.status === 'done' ? 'todo' : 'done')
-      const apiTask = await patchTaskStatus(task.guid, nextStatus, { scope: action?.scope })
+      const apiTask = await patchTaskStatus(task.guid, nextAction.status, { scope: nextAction.scope })
       const nextTask = apiTaskToTask(apiTask)
       onTaskUpdated?.(nextTask)
       if (!onTaskUpdated) onRefresh?.()
@@ -1487,9 +1525,45 @@ export default function TaskDetailPanel({
     subtask: Task,
     action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
   ) => {
-    const nextStatus = action?.status ?? (subtask.status !== 'done' ? 'done' : 'todo')
+    const nextAction = action ?? getTaskCompletionActions(subtask, teamMembers, primaryTasklist)[0]
+    if (!nextAction) {
+      return
+    }
+
+    let latestSubtask = subtask
+    if (nextAction.scope === 'all') {
+      try {
+        const fresh = await getTask(subtask.guid)
+        latestSubtask = inheritParentStartForTasks([apiTaskToTask(fresh)], task)[0]
+      } catch (err) {
+        message.error(getActionErrorMessage(err, '获取任务最新状态失败'))
+        return
+      }
+    }
+
+    const confirmConfig = getTaskCompletionConfirm(latestSubtask, nextAction, primaryTasklist)
+    if (confirmConfig) {
+      Modal.confirm({
+        title: confirmConfig.title,
+        content: confirmConfig.content,
+        okText: confirmConfig.okText,
+        cancelText: '取消',
+        onOk: async () => {
+          try {
+            const apiTask = await patchTaskStatus(subtask.guid, nextAction.status, { scope: nextAction.scope })
+            const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
+            setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
+            onTaskUpdated?.(next)
+          } catch (err) {
+            message.error(getActionErrorMessage(err, '状态更新失败'))
+          }
+        },
+      })
+      return
+    }
+
     try {
-      const apiTask = await patchTaskStatus(subtask.guid, nextStatus, { scope: action?.scope })
+      const apiTask = await patchTaskStatus(subtask.guid, nextAction.status, { scope: nextAction.scope })
       const next = inheritParentStartForTasks([apiTaskToTask(apiTask)], task)[0]
       setSubtaskDrafts((prev) => prev.map((s) => (s.guid === subtask.guid ? next : s)))
       onTaskUpdated?.(next)
@@ -2034,7 +2108,7 @@ export default function TaskDetailPanel({
           )}
 
           {/* Title */}
-          <div className={`detail-title-row ${task.status === 'done' ? 'is-done' : ''}`}>
+          <div className={`detail-title-row ${taskStatusTriggerState.checked ? 'is-done' : ''}`}>
             {taskStatusActions.length > 1 && primaryTaskStatusAction ? (
               <Dropdown
                 trigger={['click']}
@@ -2058,14 +2132,14 @@ export default function TaskDetailPanel({
               >
                 <span>
                   <Tooltip
-                    title={isCurrentTaskCompleted ? '重启任务' : '标记已完成'}
+                    title={taskStatusTriggerState.tooltip}
                     placement="top"
                     color="#000"
                     styles={{ container: { color: '#fff' } }}
                   >
                     <Checkbox
                       className="detail-title-checkbox"
-                      checked={isCurrentTaskCompleted}
+                      checked={taskStatusTriggerState.checked}
                       onClick={(e) => {
                         e.stopPropagation()
                         setTaskStatusMenuOpen((open) => !open)
@@ -2077,14 +2151,14 @@ export default function TaskDetailPanel({
               </Dropdown>
             ) : (
               <Tooltip
-                title={isCurrentTaskCompleted ? '重启任务' : '标记已完成'}
+                title={taskStatusTriggerState.tooltip}
                 placement="top"
                 color="#000"
                 styles={{ container: { color: '#fff' } }}
               >
                 <Checkbox
                   className="detail-title-checkbox"
-                  checked={isCurrentTaskCompleted}
+                  checked={taskStatusTriggerState.checked}
                   onClick={(e) => {
                     e.stopPropagation()
                     void handleToggleTaskStatus(primaryTaskStatusAction)
@@ -2510,11 +2584,10 @@ export default function TaskDetailPanel({
           <div className="detail-field-indent">
             <div className="detail-subtasks">
               {subtaskDrafts.map((subtask) => {
-                const isDone = subtask.status === 'done'
-                const isSubtaskCompleted = isCurrentUserAssigneeCompleted(subtask)
                 const isSubtaskTitleEditing = editingSubtaskGuid === subtask.guid
-                const subtaskStatusActions = getTaskCompletionActions(subtask, teamMembers)
+                const subtaskStatusActions = getTaskCompletionActions(subtask, teamMembers, primaryTasklist)
                 const primarySubtaskStatusAction = subtaskStatusActions[0]
+                const subtaskStatusTriggerState = getTaskCompletionTriggerState(subtask, primaryTasklist)
                 const assigneeUsers = subtask.members
                   .filter((m) => m.role === 'assignee')
                   .map((assignee) =>
@@ -2527,7 +2600,7 @@ export default function TaskDetailPanel({
                 return (
                   <div
                     key={subtask.guid}
-                    className={`detail-subtask-row ${isDone ? 'is-done' : ''}`}
+                    className={`detail-subtask-row ${subtaskStatusTriggerState.checked ? 'is-done' : ''}`}
                   >
                     {subtaskStatusActions.length > 1 && primarySubtaskStatusAction ? (
                       <Dropdown
@@ -2549,35 +2622,35 @@ export default function TaskDetailPanel({
                       >
                         <span>
                           <Tooltip
-                            title={isSubtaskCompleted ? '重启任务' : '标记已完成'}
+                            title={subtaskStatusTriggerState.tooltip}
                             placement="top"
                             color="#000"
                             styles={{ container: { color: '#fff' } }}
                           >
                             <span
-                              className={`subtask-check ${isSubtaskCompleted ? 'checked' : ''}`}
+                              className={`subtask-check ${subtaskStatusTriggerState.checked ? 'checked' : ''}`}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {isSubtaskCompleted && <CheckOutlined />}
+                              {subtaskStatusTriggerState.checked && <CheckOutlined />}
                             </span>
                           </Tooltip>
                         </span>
                       </Dropdown>
                     ) : (
                       <Tooltip
-                        title={isSubtaskCompleted ? '重启任务' : '标记已完成'}
+                        title={subtaskStatusTriggerState.tooltip}
                         placement="top"
                         color="#000"
                         styles={{ container: { color: '#fff' } }}
                       >
                         <span
-                          className={`subtask-check ${isSubtaskCompleted ? 'checked' : ''}`}
+                          className={`subtask-check ${subtaskStatusTriggerState.checked ? 'checked' : ''}`}
                           onClick={(e) => {
                             e.stopPropagation()
                             void handleToggleSubtaskStatus(subtask, primarySubtaskStatusAction)
                           }}
                         >
-                          {isSubtaskCompleted && <CheckOutlined />}
+                          {subtaskStatusTriggerState.checked && <CheckOutlined />}
                         </span>
                       </Tooltip>
                     )}
