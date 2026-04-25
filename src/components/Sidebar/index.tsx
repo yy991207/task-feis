@@ -627,15 +627,27 @@ export default function Sidebar({
   }
 
   const treeData = useMemo<DataNode[]>(() => {
-    const rootChildren: DataNode[] = ungroupedProjects.map((proj) => ({
-      key: encodeTasklistKey(proj.project_id),
-      title: renderProjectTitle(proj),
-      isLeaf: true,
-      className: buildSidebarDragNodeClassName(
-        encodeTasklistKey(proj.project_id),
-        draggingTasklistKey,
-      ),
-    }))
+    const rootChildren: DataNode[] = ungroupedProjects.length > 0
+      ? ungroupedProjects.map((proj) => ({
+          key: encodeTasklistKey(proj.project_id),
+          title: renderProjectTitle(proj),
+          isLeaf: true,
+          className: buildSidebarDragNodeClassName(
+            encodeTasklistKey(proj.project_id),
+            draggingTasklistKey,
+          ),
+        }))
+      : defaultGroup
+        ? [
+            buildEmptyGroupPlaceholderNode({
+              groupId: defaultGroup.group_id,
+              active: emptyGroupDropTargetId === defaultGroup.group_id,
+              onDragOver: handleEmptyGroupDragOver,
+              onDragLeave: handleEmptyGroupDragLeave,
+              onDrop: handleEmptyGroupDrop,
+            }),
+          ]
+        : []
 
     const rootNode: DataNode = {
       key: 'root',
