@@ -1283,6 +1283,23 @@ function buildTaskAssigneeUsers(task: Task, users: User[]): User[] {
     })
 }
 
+function buildTaskFollowerUsers(task: Task, users: User[]): User[] {
+  const followerIds = Array.from(new Set([
+    ...(task.participant_ids ?? []),
+    ...task.members.filter((member) => member.role === 'follower').map((member) => member.id),
+  ]))
+
+  return followerIds.map((id) => {
+    const matchedUser = users.find((user) => user.id === id)
+    const matchedMember = task.members.find((member) => member.id === id)
+    return {
+      id,
+      name: matchedUser?.name ?? matchedMember?.name ?? id,
+      avatar: normalizeAvatarSrc(matchedUser?.avatar ?? matchedMember?.avatar),
+    }
+  })
+}
+
 type ResizableHeaderCellProps = React.ThHTMLAttributes<HTMLTableCellElement> & {
   columnKey?: ResizableColumnKey
   width?: number
@@ -4496,13 +4513,57 @@ export default function TaskTable({
           if (!isTaskTableTaskRow(record)) {
             return null
           }
-          const followerCount = new Set([
-            ...(record.participant_ids ?? []),
-            ...record.members
-              .filter((member) => member.role === 'follower')
-              .map((member) => member.id),
-          ]).size
-          return renderOverflowText(followerCount || '-')
+          const followerUsers = buildTaskFollowerUsers(record, users)
+          if (followerUsers.length === 0) {
+            return renderOverflowText('-')
+          }
+          if (followerUsers.length === 1) {
+            const singleFollower = followerUsers[0]
+            return (
+              <div className="cell cell-followers-single">
+                <Tooltip title={getUserDisplayName(singleFollower)}>
+                  <Avatar
+                    size={20}
+                    src={singleFollower.avatar}
+                    className="tasklist-assignee-avatar"
+                    style={{
+                      backgroundColor: singleFollower.avatar ? undefined : '#7b67ee',
+                      color: '#fff',
+                      fontSize: 11,
+                    }}
+                  >
+                    {singleFollower.avatar ? null : getUserDisplayName(singleFollower).slice(0, 1)}
+                  </Avatar>
+                </Tooltip>
+                <span className="followers-single-name">{getUserDisplayName(singleFollower)}</span>
+              </div>
+            )
+          }
+          return (
+            <div className="cell cell-participants">
+              <Avatar.Group size={20} max={{ count: 3 }}>
+                {followerUsers.map((followerUser) => (
+                  <Tooltip
+                    key={followerUser.id}
+                    title={getUserDisplayName(followerUser)}
+                  >
+                    <Avatar
+                      size={20}
+                      src={followerUser.avatar}
+                      className="tasklist-assignee-avatar"
+                      style={{
+                        backgroundColor: followerUser.avatar ? undefined : '#7b67ee',
+                        color: '#fff',
+                        fontSize: 11,
+                      }}
+                    >
+                      {followerUser.avatar ? null : getUserDisplayName(followerUser).slice(0, 1)}
+                    </Avatar>
+                  </Tooltip>
+                ))}
+              </Avatar.Group>
+            </div>
+          )
         },
       }, 'followers'))
       return
