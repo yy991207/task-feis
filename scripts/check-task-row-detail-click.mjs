@@ -9,12 +9,12 @@ if (source.includes('<div className="cell cell-title" onClick={(e) => e.stopProp
   failures.push(`${file}: 标题整格还在阻止冒泡，点标题区域空白处不会打开任务详情。`)
 }
 
-if (!source.includes('className={task.status === \'done\' ? \'done-text\' : \'title-text\'}')) {
-  failures.push(`${file}: 没找到标题文字节点，无法确认是否只在文字上保留编辑点击。`)
+if (!source.includes('<NameOverflowPreview')) {
+  failures.push(`${file}: 标题区域还没有接入统一的长名称预览组件。`)
 }
 
-if (!source.includes('setEditingName(true)')) {
-  failures.push(`${file}: 标题文字还没有保留单独进入编辑态的点击逻辑。`)
+if (!source.includes('onDoubleClick={(e) => {')) {
+  failures.push(`${file}: 标题文字还没有改成双击进入编辑态。`)
 }
 
 if (failures.length > 0) {

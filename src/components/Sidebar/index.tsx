@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import message from 'antd/es/message'
 import Dropdown from 'antd/es/dropdown'
 import Tree from 'antd/es/tree'
@@ -53,6 +53,7 @@ import {
   moveProjectToGroup,
 } from '@/services/projectService'
 import EditableInput from '@/components/EditableInput'
+import NameOverflowPreview from '@/components/NameOverflowPreview'
 import {
   EMPTY_GROUP_PLACEHOLDER_PREFIX,
   applyTasklistDrop,
@@ -149,6 +150,7 @@ export default function Sidebar({
   const [customFieldsProjectId, setCustomFieldsProjectId] = useState<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
   const [draggingTasklistKey, setDraggingTasklistKey] = useState<string | null>(null)
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     listProjectGroups()
@@ -555,13 +557,19 @@ export default function Sidebar({
     return (
       <div
         className={`tasklist-title ${isActive ? 'active' : ''}`}
+        data-sidebar-tasklist-key={encodeTasklistKey(proj.project_id)}
         onDoubleClick={(e) => {
           e.stopPropagation()
           setEditingTasklistGuid(proj.project_id)
         }}
       >
         <FileDoneOutlined className="tasklist-icon" />
-        <span className="tasklist-name">{proj.name}</span>
+        <NameOverflowPreview
+          name={proj.name}
+          previewClassName="sidebar-tasklist-name-preview"
+        >
+          <span className="tasklist-name">{proj.name}</span>
+        </NameOverflowPreview>
         <Dropdown
           menu={buildTasklistActionMenu(proj)}
           trigger={['click']}
@@ -798,6 +806,43 @@ export default function Sidebar({
     })
   }
 
+  const clearDragPreview = () => {
+    if (!dragPreviewRef.current) {
+      return
+    }
+    dragPreviewRef.current.remove()
+    dragPreviewRef.current = null
+  }
+
+  const buildTasklistDragPreview = (tasklistKey: string): HTMLDivElement | null => {
+    if (typeof document === 'undefined') {
+      return null
+    }
+    const sourceTitle = document.querySelector(
+      `[data-sidebar-tasklist-key="${tasklistKey}"]`,
+    ) as HTMLElement | null
+    if (!sourceTitle) {
+      return null
+    }
+
+    const preview = document.createElement('div')
+    preview.className = 'sidebar-drag-preview'
+
+    const icon = sourceTitle.querySelector('.tasklist-icon')?.cloneNode(true)
+    if (icon) {
+      preview.appendChild(icon)
+    }
+
+    const label = document.createElement('span')
+    label.className = 'sidebar-drag-preview__label'
+    label.textContent = sourceTitle.querySelector('.tasklist-name')?.textContent?.trim() ?? ''
+    preview.appendChild(label)
+
+    document.body.appendChild(preview)
+    dragPreviewRef.current = preview
+    return preview
+  }
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -892,10 +937,30 @@ export default function Sidebar({
             )
           }}
           onDragStart={(info) => {
-            setDraggingTasklistKey(String(info.node.key))
+            const dragKey = String(info.node.key)
+            setDraggingTasklistKey(dragKey)
+
+            if (!dragKey.startsWith('tl:')) {
+              return
+            }
+
+            const preview = buildTasklistDragPreview(dragKey)
+            if (!preview) {
+              return
+            }
+
+            const event = info.event
+            const previewHeight = preview.offsetHeight
+            event.dataTransfer?.setDragImage(preview, 18, previewHeight / 2)
+
+            // 预览节点只给浏览器生成拖拽影像，不参与页面布局，下一帧就移除。
+            requestAnimationFrame(() => {
+              clearDragPreview()
+            })
           }}
           onDragEnd={() => {
             setDraggingTasklistKey(null)
+            clearDragPreview()
           }}
           onDrop={handleDrop}
           switcherIcon={({ expanded }) =>

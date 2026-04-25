@@ -88,6 +88,7 @@ import TaskRichInput, {
   type TaskRichAttachmentSource,
 } from '@/components/TaskRichInput'
 import UserSearchSelect from '@/components/UserSearchSelect'
+import NameOverflowPreview from '@/components/NameOverflowPreview'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
 import {
   getTaskCompletionActions,
@@ -1394,7 +1395,9 @@ export default function TaskDetailPanel({
         ) : (
           <Avatar size={20} style={{ backgroundColor: '#7b67ee' }} icon={<UserOutlined />} />
         )}
-        <span className="followers-text">{followedUsers.length > 1 ? `${followedUsers.length} 人关注` : '关注人'}</span>
+        {followedUsers.length > 1 ? (
+          <span className="followers-text">{`${followedUsers.length} 人关注`}</span>
+        ) : null}
         <span className="followers-summary-action">管理</span>
       </Button>
     </div>
@@ -2291,9 +2294,14 @@ export default function TaskDetailPanel({
               <button
                 type="button"
                 className="detail-title-button"
-                onClick={() => setTitleEditing(true)}
+                onDoubleClick={() => setTitleEditing(true)}
               >
-                <span className="detail-title">{task.summary}</span>
+                <NameOverflowPreview
+                  name={task.summary}
+                  previewClassName="detail-title-name-preview"
+                >
+                  <span className="detail-title">{task.summary}</span>
+                </NameOverflowPreview>
               </button>
             )}
           </div>
@@ -2517,9 +2525,14 @@ export default function TaskDetailPanel({
                         style={{ maxWidth: 180 }}
                       />
                     ) : (
-                      <span className="tasklist-name">
-                        {currentTasklist.name}
-                      </span>
+                      <NameOverflowPreview
+                        name={currentTasklist.name}
+                        previewClassName="detail-tasklist-name-preview"
+                      >
+                        <span className="tasklist-name">
+                          {currentTasklist.name}
+                        </span>
+                      </NameOverflowPreview>
                     )}
                     <span className="tasklist-divider">|</span>
                     <Popover
@@ -2835,9 +2848,14 @@ export default function TaskDetailPanel({
                         <button
                           type="button"
                           className="subtask-title-btn"
-                          onClick={() => handleStartSubtaskTitleEdit(subtask)}
+                          onDoubleClick={() => handleStartSubtaskTitleEdit(subtask)}
                         >
-                          <span className="subtask-title">{subtask.summary}</span>
+                          <NameOverflowPreview
+                            name={subtask.summary}
+                            previewClassName="detail-subtask-name-preview"
+                          >
+                            <span className="subtask-title">{subtask.summary}</span>
+                          </NameOverflowPreview>
                         </button>
                       )}
                       <div

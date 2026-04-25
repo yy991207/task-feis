@@ -48,7 +48,7 @@ export default function TaskListPage() {
   const [tasklists, setTasklists] = useState<Tasklist[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
-  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const [sidebarWidth, setSidebarWidth] = useState(312)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [reloadVersion, setReloadVersion] = useState(0)
   const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
@@ -59,7 +59,7 @@ export default function TaskListPage() {
   const sidebarResizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
     startX: 0,
-    startWidth: 240,
+    startWidth: 312,
   })
 
   const currentUserId = appConfig.user_id

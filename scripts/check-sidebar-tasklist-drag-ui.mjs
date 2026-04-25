@@ -70,8 +70,20 @@ if (componentSource.includes('dropIndicatorState')) {
   failures.push(`${componentFile}: 不应保留额外 dropIndicatorState，拖拽反馈应尽量复用 Tree 内部 drag-over/drop-target 类。`)
 }
 
+if (!componentSource.includes('setDragImage(')) {
+  failures.push(`${componentFile}: 拖拽预览不应继续使用浏览器默认截图，需通过 setDragImage 只渲染被拖拽的清单对象。`)
+}
+
+if (!componentSource.includes('sidebar-drag-preview')) {
+  failures.push(`${componentFile}: 需要为侧栏拖拽预览提供单独的预览节点，避免把整行区域一起截图进拖拽对象。`)
+}
+
 if (styleSource.includes('.ant-tree-treenode.dragging > .ant-tree-node-content-wrapper {\n    background: #eff0f1 !important;')) {
   failures.push(`${styleFile}: 拖拽源节点不应继续使用灰色背景。`)
+}
+
+if (styleSource.includes('.tasklist-tree-wrap {\n  .sidebar-drag-preview')) {
+  failures.push(`${styleFile}: sidebar-drag-preview 挂在 document.body 下，样式不能继续嵌在 .tasklist-tree-wrap 作用域里。`)
 }
 
 const forbiddenStyleSnippets = [
@@ -96,6 +108,11 @@ const requiredStyleSnippets = [
   'box-shadow: inset 0 0 0 1px rgba(51, 112, 255, 0.14);',
   '.ant-tree-treenode.dragging:after',
   'display: none;',
+  '.sidebar-drag-preview',
+  '.sidebar-drag-preview__label',
+  'border: 1px solid rgba(51, 112, 255, 0.18);',
+  '0 8px 24px rgba(31, 35, 41, 0.12)',
+  'min-width: 120px;',
   '.ant-tree-treenode.drag-over > .ant-tree-node-content-wrapper',
   '.sidebar-drop-indicator',
   'height: 2px;',

@@ -22,7 +22,9 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    flex: 1;
     min-width: 0;
+    overflow: hidden;
   }
 
   .table-title {
@@ -30,6 +32,10 @@
     color: #1f2329 !important;
     font-size: 18px !important;
     font-weight: 600 !important;
+    flex: 1 1 auto;
+    min-width: 0 !important;
+    max-width: min(100%, 720px);
+    overflow: hidden;
 
     &.editable {
       cursor: text;
@@ -53,7 +59,7 @@
   .table-title-editor {
     flex: 1;
     min-width: 120px;
-    max-width: 400px;
+    max-width: min(100%, 720px);
 
     .ant-input {
       font-size: 18px !important;
@@ -62,6 +68,21 @@
       padding: 0 4px;
       height: 28px;
     }
+  }
+
+  .table-title-name-preview {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .table-title-name-text {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tasklist-head-meta {
@@ -626,11 +647,13 @@
 
     .title-text,
     .done-text {
+      display: block;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       color: #1f2329;
-      cursor: text;
+      cursor: pointer;
     }
 
     .title-text {

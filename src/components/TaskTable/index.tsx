@@ -39,7 +39,6 @@ import {
   DownOutlined,
   CheckOutlined,
   FontSizeOutlined,
-  PlayCircleOutlined,
   ClockCircleOutlined,
   CalendarOutlined,
   RightOutlined,
@@ -119,6 +118,7 @@ import DateValuePanel, {
   applyDateValueDetail,
   formatDateValueLabel,
 } from '@/components/DateValuePanel'
+import NameOverflowPreview from '@/components/NameOverflowPreview'
 import {
   appendSection,
   buildDeleteSectionPlan,
@@ -4795,9 +4795,18 @@ export default function TaskTable({
                 <Title
                   level={5}
                   className={`table-title${isTasklistView ? ' editable' : ''}`}
-                  onClick={isTasklistView ? () => setEditingTitle(true) : undefined}
+                  onDoubleClick={isTasklistView ? () => setEditingTitle(true) : undefined}
                 >
-                  {config.title}
+                  {isTasklistView ? (
+                    <NameOverflowPreview
+                      name={config.title}
+                      previewClassName="table-title-name-preview"
+                    >
+                      <span className="table-title-name-text">{config.title}</span>
+                    </NameOverflowPreview>
+                  ) : (
+                    config.title
+                  )}
                 </Title>
               )}
             </div>
@@ -5182,9 +5191,8 @@ function CustomFieldCell({
         <Button
           type="text"
           size="small"
-          icon={<PlayCircleOutlined />}
           className="custom-field-button-trigger"
-          aria-label={field.name || '查看'}
+          aria-label={field.name || '去完成'}
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -5196,7 +5204,9 @@ function CustomFieldCell({
               window.open(legacyUrl, '_blank', 'noopener,noreferrer')
             }
           }}
-        />
+        >
+          去完成
+        </Button>
       </div>,
     )
   }
@@ -5536,16 +5546,24 @@ function TaskTitleCell({
               }}
             />
           ) : (
-            <span
-              className={isVisuallyDone ? 'done-text' : 'title-text'}
-              onClick={(e) => {
-                e.stopPropagation()
-                setEditingTitleValue(task.summary)
-                setEditingName(true)
-              }}
+            <NameOverflowPreview
+              name={task.summary}
+              previewClassName={isVisuallyDone ? 'done-text' : 'title-text'}
             >
-              {task.summary}
-            </span>
+              <span
+                className={isVisuallyDone ? 'done-text' : 'title-text'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  setEditingTitleValue(task.summary)
+                  setEditingName(true)
+                }}
+              >
+                {task.summary}
+              </span>
+            </NameOverflowPreview>
           )}
           {!editingName && (
             <span className="task-meta-stats">
