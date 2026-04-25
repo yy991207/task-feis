@@ -11,6 +11,7 @@ import Upload from 'antd/es/upload'
 import message from 'antd/es/message'
 import {
   BoldOutlined,
+  CloseOutlined,
   ContainerOutlined,
   DeleteOutlined,
   ItalicOutlined,
@@ -692,12 +693,11 @@ export default function TaskRichInput({
               <Button
                 type="text"
                 size="small"
-                danger
                 className="attachment-delete comment-image-delete"
                 onClick={() => onRemoveAttachment(attachment.attachment_id)}
-              >
-                删除
-              </Button>
+                icon={<CloseOutlined />}
+                aria-label="移除评论图片"
+              />
             </Tooltip>
           )}
         </div>
