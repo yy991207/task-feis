@@ -3718,7 +3718,7 @@ export default function TaskTable({
         style={{ overflow: 'visible' }}
       >
         <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
-          <div className="inline-create-title-box">
+          <div className="task-title-edit-box inline-create-title-box">
             <Input
               size="middle"
               className="inline-title-input"
@@ -3753,7 +3753,7 @@ export default function TaskTable({
       onMouseDownCapture={markInlineCreateInteracting}
       data-section-guid={sectionGuid}
     >
-      <div className="inline-create-field-shell">
+      <div className="inline-create-field-shell task-edit-field-trigger">
         <Select
           size="middle"
           variant="borderless"
@@ -3783,7 +3783,7 @@ export default function TaskTable({
         inlineCreateFocusedField === 'assignee' ? 'active' : ''
       }`}
     >
-      <div className="inline-create-field-shell">
+      <div className="inline-create-field-shell task-edit-field-trigger">
         <AssigneePicker
           pickerKey={`inline-assignee-${sectionGuid}`}
           open={activeAssigneePickerKey === `inline-assignee-${sectionGuid}`}
@@ -3831,7 +3831,7 @@ export default function TaskTable({
           value={newTaskAssigneeIds}
           users={users}
           isTasklistView={isTasklistView}
-          triggerClassName="inline-create-assignee-trigger"
+          triggerClassName="task-edit-field-trigger assignee-trigger inline-create-assignee-trigger"
           placeholderIcon={
             <UserAddOutlined
               className="empty-assignee"
@@ -3853,7 +3853,7 @@ export default function TaskTable({
   const renderInlineCreateDateCell = (sectionGuid: string, field: 'start' | 'due') => {
     const date = field === 'start' ? newTaskStart : newTaskDue
 
-    return (
+      return (
       <div
         className={`inline-create-field-cell cell cell-${field} ${
           inlineCreateFocusedField === field ? 'active' : ''
@@ -3876,9 +3876,15 @@ export default function TaskTable({
             setInlineCreateFocusedField(open ? field : null)
           }}
         >
-          <div className={`inline-create-field-shell ${field === 'start' ? 'inline-create-date-shell-start' : 'inline-create-date-shell-due'}`}>
+          <div
+            className={[
+              'inline-create-field-shell',
+              'task-edit-field-trigger',
+              field === 'start' ? 'inline-create-date-shell-start' : 'inline-create-date-shell-due',
+            ].join(' ')}
+          >
             <div
-              className="date-trigger"
+              className="date-trigger task-edit-field-trigger inline-create-date-trigger"
               onMouseDown={markInlineCreateInteracting}
               data-section-guid={sectionGuid}
             >
@@ -3893,7 +3899,7 @@ export default function TaskTable({
 
   const renderInlineCreateCreatorCell = () => (
     <div className="inline-create-field-cell cell cell-creator">
-      <Space size={4}>
+      <Space size={4} className="inline-create-field-shell task-edit-field-trigger inline-create-creator-trigger">
         <Avatar size={20} style={{ backgroundColor: '#7b67ee', fontSize: 11 }}>
           {currentUser.name.slice(0, 1)}
         </Avatar>

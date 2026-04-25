@@ -4,14 +4,13 @@ import type { ProjectGroup } from '@/types/projectGroup'
 
 export function listProjectGroups(): Promise<ProjectGroup[]> {
   return request<ProjectGroup[]>(
-    `api/v1/task-center/teams/${appConfig.team_id}/project-groups` +
-      `?user_id=${encodeURIComponent(appConfig.user_id)}`,
+    `api/v1/task-center/user-project-groups?user_id=${encodeURIComponent(appConfig.user_id)}`,
   )
 }
 
 export function createProjectGroup(name: string): Promise<ProjectGroup> {
   return request<ProjectGroup>(
-    `api/v1/task-center/teams/${appConfig.team_id}/project-groups`,
+    `api/v1/task-center/user-project-groups`,
     {
       method: 'POST',
       body: JSON.stringify({ user_id: appConfig.user_id, name }),
@@ -21,7 +20,7 @@ export function createProjectGroup(name: string): Promise<ProjectGroup> {
 
 export function updateProjectGroup(groupId: string, name: string): Promise<ProjectGroup> {
   return request<ProjectGroup>(
-    `api/v1/task-center/project-groups/${groupId}`,
+    `api/v1/task-center/user-project-groups/${groupId}`,
     {
       method: 'PUT',
       body: JSON.stringify({ user_id: appConfig.user_id, name }),
@@ -31,7 +30,7 @@ export function updateProjectGroup(groupId: string, name: string): Promise<Proje
 
 export function deleteProjectGroup(groupId: string): Promise<void> {
   return request<void>(
-    `api/v1/task-center/project-groups/${groupId}` +
+    `api/v1/task-center/user-project-groups/${groupId}` +
       `?user_id=${encodeURIComponent(appConfig.user_id)}`,
     { method: 'DELETE' },
   )
@@ -42,7 +41,7 @@ export function updateGroupSortOrder(
   sortOrder: number,
 ): Promise<void> {
   return request<void>(
-    `api/v1/task-center/project-groups/${groupId}/sort-order`,
+    `api/v1/task-center/user-project-groups/${groupId}/sort-order`,
     {
       method: 'PATCH',
       body: JSON.stringify({ user_id: appConfig.user_id, sort_order: sortOrder }),

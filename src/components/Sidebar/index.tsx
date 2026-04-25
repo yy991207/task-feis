@@ -152,6 +152,11 @@ function generateDefaultTasklistName(projects: Project[]): string {
   return `任务清单 ${maxIndex + 1}`
 }
 
+function getProjectGroupId(project: Project): string {
+  // 新接口返回 user_group_id；保留 group_id 作为旧数据兼容，避免切换期间侧栏丢分组。
+  return project.user_group_id || project.group_id
+}
+
 export default function Sidebar({
   activeKey,
   tasklists,
@@ -530,7 +535,7 @@ export default function Sidebar({
   const projectsByGroup = useMemo(() => {
     const map: Record<string, Project[]> = {}
     for (const p of projects) {
-      const gid = p.group_id
+      const gid = getProjectGroupId(p)
       if (!map[gid]) map[gid] = []
       map[gid].push(p)
     }
@@ -538,7 +543,7 @@ export default function Sidebar({
   }, [projects])
 
   const ungroupedProjects = useMemo(
-    () => defaultGroup ? (projectsByGroup[defaultGroup.group_id] || []) : projects.filter((p) => !groups.some((g) => g.group_id === p.group_id)),
+    () => defaultGroup ? (projectsByGroup[defaultGroup.group_id] || []) : projects.filter((p) => !groups.some((g) => g.group_id === getProjectGroupId(p))),
     [projects, groups, defaultGroup, projectsByGroup],
   )
 
@@ -941,17 +946,17 @@ export default function Sidebar({
       // Dropped next to another tasklist → use that tasklist's group
       const droppedProjectId = dropKey.slice(3)
       const ownerProject = projects.find((p) => p.project_id === droppedProjectId)
-      targetGroupId = ownerProject?.group_id ?? defaultGroup?.group_id ?? null
+      targetGroupId = ownerProject ? getProjectGroupId(ownerProject) : defaultGroup?.group_id ?? null
     }
 
     if (!targetGroupId) return
 
     // If the target group is the same as current, we treat it as local-only reorder.
     // (Backend has no project sort_order endpoint, so order isn't persisted.)
-    if (currentProject.group_id === targetGroupId) {
+    if (getProjectGroupId(currentProject) === targetGroupId) {
       // reorder: rebuild projects array so the dragged one lands at the drop position
-      const sameGroup = projects.filter((p) => p.group_id === targetGroupId)
-      const others = projects.filter((p) => p.group_id !== targetGroupId)
+      const sameGroup = projects.filter((p) => getProjectGroupId(p) === targetGroupId)
+      const others = projects.filter((p) => getProjectGroupId(p) !== targetGroupId)
       const fromIndex = sameGroup.findIndex((p) => p.project_id === projectId)
       if (fromIndex === -1) return
 
@@ -980,7 +985,9 @@ export default function Sidebar({
     const prevProjects = projects
     setProjects((prev) =>
       prev.map((p) =>
-        p.project_id === projectId ? { ...p, group_id: targetGroupId! } : p,
+        p.project_id === projectId
+          ? { ...p, group_id: targetGroupId!, user_group_id: targetGroupId! }
+          : p,
       ),
     )
 

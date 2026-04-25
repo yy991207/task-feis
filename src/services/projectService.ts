@@ -17,14 +17,14 @@ export interface ProjectSummary {
 
 export function listProjects(params?: {
   status?: 'active' | 'archived'
-  group_id?: string
+  user_group_id?: string
 }): Promise<Project[]> {
   const qs = new URLSearchParams({
     user_id: appConfig.user_id,
     team_id: appConfig.team_id,
   })
   if (params?.status) qs.set('status', params.status)
-  if (params?.group_id) qs.set('group_id', params.group_id)
+  if (params?.user_group_id) qs.set('user_group_id', params.user_group_id)
   return request<Project[]>(`api/v1/task-center/projects?${qs}`)
 }
 
@@ -83,7 +83,7 @@ export function moveProjectToGroup(
   groupId: string,
 ): Promise<void> {
   return request<void>(
-    `api/v1/task-center/projects/${projectId}/group`,
+    `api/v1/task-center/projects/${projectId}/user-group`,
     {
       method: 'PATCH',
       body: JSON.stringify({
