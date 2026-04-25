@@ -643,40 +643,6 @@
       }
     }
 
-    .task-name-editor {
-      display: flex;
-      align-self: stretch;
-      min-width: 0;
-      max-width: 100%;
-      flex: 1;
-
-      .task-title-edit-box {
-        display: flex;
-        align-items: center;
-        width: 100%;
-        height: 100%;
-        padding: 0;
-        border: 1px solid #3370ff;
-        border-radius: 0;
-        background: #fff;
-        box-shadow: 0 0 0 1px rgba(51, 112, 255, 0.12);
-      }
-
-      .ant-input {
-        font-size: 14px !important;
-        padding: 0 14px;
-        height: 100%;
-        width: 100%;
-        min-width: 80px;
-        max-width: 100%;
-        border: none !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-        field-sizing: content;
-      }
-    }
-
     .subtask-icon {
       font-size: 10px;
       color: #8f959e;
@@ -886,6 +852,61 @@
   }
 }
 
+.task-title-edit-box {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid #d7deeb;
+  border-right: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+
+  &:hover {
+    border-color: #bec8da;
+    background: #fff;
+  }
+
+  &.task-title-edit-box-active {
+    border-color: #3370ff;
+    box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.14);
+  }
+
+  .inline-title-input {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    font-size: 13px;
+
+    &.ant-input {
+      height: 100%;
+      padding: 0 14px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      font-size: 13px;
+      line-height: normal;
+      box-sizing: border-box;
+    }
+
+    &:focus {
+      box-shadow: none;
+    }
+  }
+}
+
 .task-grid-table {
   .cell-priority {
     width: auto;
@@ -922,8 +943,10 @@
   .task-edit-field-trigger {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
     padding: 0 12px;
     border: 1px solid transparent;
     border-radius: 0;
@@ -938,6 +961,7 @@
 
   .custom-field-trigger {
     min-height: 30px;
+    box-sizing: border-box;
     cursor: pointer;
     transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 
@@ -1009,10 +1033,12 @@
   .custom-field-editor {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     width: 100%;
     max-width: 100%;
     min-height: 40px;
     height: 100%;
+    box-sizing: border-box;
     border-radius: 0;
 
     .ant-picker,
@@ -1066,6 +1092,15 @@
     .ant-select {
       width: 100%;
       min-width: 0;
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+
+    .ant-select-selector {
+      display: flex;
+      align-items: center;
+      height: 100% !important;
     }
   }
 }
@@ -1787,52 +1822,6 @@
           border-color: #3370ff;
           box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.14);
         }
-      }
-    }
-
-    .inline-create-title-box {
-      display: flex;
-      align-items: center;
-      width: 100%;
-      height: 100%;
-      box-sizing: border-box;
-      padding: 0;
-      border: 1px solid #d7deeb;
-      border-right: 0;
-      border-radius: 0;
-      background: #fff;
-      box-shadow: none;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-
-      &:hover {
-        border-color: #bec8da;
-        background: #fff;
-      }
-    }
-
-    .inline-title-input {
-      width: 100%;
-      height: 100%;
-      padding: 0;
-      border: none;
-      box-shadow: none;
-      background: transparent;
-      font-size: 13px;
-
-      &.ant-input {
-        height: 100%;
-        padding: 0 14px;
-        border: none;
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-        font-size: 13px;
-        line-height: normal;
-        box-sizing: border-box;
-      }
-
-      &:focus {
-        box-shadow: none;
       }
     }
   }

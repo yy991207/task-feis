@@ -1436,8 +1436,18 @@ export default function TaskTable({
   const [hasLocalSectionEdits, setHasLocalSectionEdits] = useState(false)
   const [creatingSection, setCreatingSection] = useState(false)
   const [activeAssigneePickerKey, setActiveAssigneePickerKey] = useState<string | null>(null)
+  const [editingTaskGuid, setEditingTaskGuid] = useState<string | null>(null)
   const [expandedTaskGuids, setExpandedTaskGuids] = useState<Set<string>>(new Set())
   const [subtasksByGuid, setSubtasksByGuid] = useState<Record<string, Task[]>>({})
+
+  const setTaskEditing = useCallback((taskGuid: string, editing: boolean) => {
+    setEditingTaskGuid((prev) => {
+      if (editing) {
+        return taskGuid
+      }
+      return prev === taskGuid ? null : prev
+    })
+  }, [])
 
   // 外部 tasks 是权威数据源：详情页增删子任务后，要同步已展开父任务的子任务缓存。
   useEffect(() => {
@@ -3718,28 +3728,26 @@ export default function TaskTable({
         style={{ overflow: 'visible' }}
       >
         <Tooltip title="新建任务到此任务分组" placement="top" defaultOpen>
-          <div className="task-title-edit-box inline-create-title-box">
-            <Input
-              size="middle"
-              className="inline-title-input"
-              placeholder="输入标题，回车确认"
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              onPressEnter={() => handleInlineCreate(sectionGuid)}
-              onFocus={() => setInlineCreateFocusedField('title')}
-              onBlur={() => {
-                if (inlineCreateInteractingRef.current) {
-                  inlineCreateInteractingRef.current = false
-                  return
-                }
-                if (inlineCreateFocusedField !== 'title') {
-                  return
-                }
-                void handleInlineCreate(sectionGuid)
-              }}
-              autoFocus
-            />
-          </div>
+          <TaskTitleEditBox
+            active={inlineCreateFocusedField === 'title'}
+            placeholder="输入标题，回车确认"
+            value={newTaskTitle}
+            onChange={setNewTaskTitle}
+            onSubmit={() => {
+              void handleInlineCreate(sectionGuid)
+            }}
+            onFocus={() => setInlineCreateFocusedField('title')}
+            onBeforeBlurSubmit={() => {
+              if (inlineCreateInteractingRef.current) {
+                inlineCreateInteractingRef.current = false
+                return false
+              }
+              if (inlineCreateFocusedField !== 'title') {
+                return false
+              }
+              return true
+            }}
+          />
         </Tooltip>
       </div>
     </div>
@@ -4184,6 +4192,8 @@ export default function TaskTable({
             onToggleStatus={handleToggleStatus}
             onOpenDetail={() => onTaskClick(record)}
             onUpdate={handleTaskUpdate}
+            isEditingRow={editingTaskGuid === record.guid}
+            onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
           />
         )
       },
@@ -4222,7 +4232,12 @@ export default function TaskTable({
           isInlineCreateRow(record) ? (
             renderInlineCreatePriorityCell(record.section.guid)
           ) : isTaskTableTaskRow(record) ? (
-            <TaskPriorityCell task={record} onUpdate={handleTaskUpdate} />
+            <TaskPriorityCell
+              task={record}
+              isEditingRow={editingTaskGuid === record.guid}
+              onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
+              onUpdate={handleTaskUpdate}
+            />
           ) : null,
       }, 'priority'))
       return
@@ -4250,6 +4265,8 @@ export default function TaskTable({
               activeAssigneePickerKey={activeAssigneePickerKey}
               onUpdate={handleTaskUpdate}
               onAssigneePickerOpenChange={setActiveAssigneePickerKey}
+              isEditingRow={editingTaskGuid === record.guid}
+              onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
             />
           ) : null,
       }, 'assignee'))
@@ -4288,7 +4305,13 @@ export default function TaskTable({
           isInlineCreateRow(record) ? (
             renderInlineCreateDateCell(record.section.guid, 'start')
           ) : isTaskTableTaskRow(record) ? (
-            <TaskDateCell task={record} field="start" onUpdate={handleTaskUpdate} />
+            <TaskDateCell
+              task={record}
+              field="start"
+              isEditingRow={editingTaskGuid === record.guid}
+              onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
+              onUpdate={handleTaskUpdate}
+            />
           ) : null,
       }, 'start'))
       return
@@ -4309,7 +4332,13 @@ export default function TaskTable({
           isInlineCreateRow(record) ? (
             renderInlineCreateDateCell(record.section.guid, 'due')
           ) : isTaskTableTaskRow(record) ? (
-            <TaskDateCell task={record} field="due" onUpdate={handleTaskUpdate} />
+            <TaskDateCell
+              task={record}
+              field="due"
+              isEditingRow={editingTaskGuid === record.guid}
+              onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
+              onUpdate={handleTaskUpdate}
+            />
           ) : null,
       }, 'due'))
       return
@@ -4673,6 +4702,7 @@ export default function TaskTable({
           isTaskTableTaskRow(record) && record.guid === animatedTaskGuid ? 'task-row-new' : '',
           isTaskTableTaskRow(record) && record.guid === selectedTaskGuid ? 'selected' : '',
           isTaskTableTaskRow(record) && draggingTaskGuid === record.guid ? 'dragging' : '',
+          isTaskTableTaskRow(record) && editingTaskGuid === record.guid ? 'task-editing-table-row' : '',
           record.rowKind === 'section' &&
           dragOverSectionGuid === record.section.guid &&
           dragOverMode === 'task-into'
@@ -4955,10 +4985,83 @@ interface TaskTitleCellProps {
   ) => void
   onOpenDetail: () => void
   onUpdate: (task: Task) => void
+  isEditingRow: boolean
+  onEditingChange: (editing: boolean) => void
+}
+
+interface TaskTitleEditBoxProps {
+  value: string
+  placeholder: string
+  active?: boolean
+  autoFocus?: boolean
+  onChange: (value: string) => void
+  onSubmit: (value: string) => void
+  onFocus?: () => void
+  onBeforeBlurSubmit?: () => boolean
+}
+
+function TaskTitleEditBox({
+  value,
+  placeholder,
+  active = false,
+  autoFocus = true,
+  onChange,
+  onSubmit,
+  onFocus,
+  onBeforeBlurSubmit,
+}: TaskTitleEditBoxProps) {
+  const composingRef = useRef(false)
+  const submittedRef = useRef(false)
+
+  const submit = () => {
+    if (submittedRef.current) {
+      return
+    }
+    submittedRef.current = true
+    onSubmit(value)
+  }
+
+  return (
+    <div className={`task-title-edit-box inline-create-title-box${active ? ' task-title-edit-box-active' : ''}`}>
+      <Input
+        size="middle"
+        className="inline-title-input"
+        autoFocus={autoFocus}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          submittedRef.current = false
+          onChange(e.target.value)
+        }}
+        onFocus={onFocus}
+        onCompositionStart={() => {
+          composingRef.current = true
+        }}
+        onCompositionEnd={() => {
+          composingRef.current = false
+        }}
+        onPressEnter={() => {
+          if (composingRef.current) {
+            return
+          }
+          submit()
+        }}
+        onBlur={() => {
+          if (onBeforeBlurSubmit && !onBeforeBlurSubmit()) {
+            return
+          }
+          submit()
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  )
 }
 
 interface TaskPriorityCellProps {
   task: Task
+  isEditingRow: boolean
+  onEditingChange: (editing: boolean) => void
   onUpdate: (task: Task) => void
 }
 
@@ -4969,11 +5072,15 @@ interface TaskAssigneeCellProps {
   activeAssigneePickerKey: string | null
   onUpdate: (task: Task) => void
   onAssigneePickerOpenChange: (key: string | null) => void
+  isEditingRow: boolean
+  onEditingChange: (editing: boolean) => void
 }
 
 interface TaskDateCellProps {
   task: Task
   field: 'start' | 'due'
+  isEditingRow: boolean
+  onEditingChange: (editing: boolean) => void
   onUpdate: (task: Task) => void
 }
 
@@ -5234,13 +5341,26 @@ function TaskTitleCell({
   onToggleStatus,
   onOpenDetail,
   onUpdate,
+  isEditingRow,
+  onEditingChange,
 }: TaskTitleCellProps) {
   const [editingName, setEditingName] = useState(false)
+  const [editingTitleValue, setEditingTitleValue] = useState(task.summary)
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   const statusTriggerState = getTaskCompletionTriggerState(task, tasklist)
   const statusToggleTooltip = statusTriggerState.tooltip
   const primaryStatusAction = statusActions[0]
   const isVisuallyDone = statusTriggerState.checked
+
+  useEffect(() => {
+    if (!editingName) {
+      setEditingTitleValue(task.summary)
+    }
+  }, [editingName, task.summary])
+
+  useEffect(() => {
+    onEditingChange(editingName)
+  }, [editingName, onEditingChange])
 
   const handleRenameSummary = async (rawName: string) => {
     setEditingName(false)
@@ -5320,7 +5440,14 @@ function TaskTitleCell({
             </Tooltip>
           )}
         </div>
-        <div className="cell cell-title">
+        <div
+          className={[
+            'cell',
+            'cell-title',
+            editingName || isEditingRow ? 'inline-create-field-cell task-title-edit-cell' : '',
+            editingName ? 'active' : '',
+          ].filter(Boolean).join(' ')}
+        >
           {task.subtask_count > 0 ? (
             <CaretRightOutlined
               className="subtask-icon"
@@ -5340,22 +5467,22 @@ function TaskTitleCell({
             </span>
           ) : null}
           {editingName ? (
-            <div className="task-name-editor">
-              <div className="task-title-edit-box">
-                <EditableInput
-                  placeholder="输入任务名称"
-                  defaultValue={task.summary}
-                  onSubmit={(value) => {
-                    void handleRenameSummary(value)
-                  }}
-                />
-              </div>
+            <div className="inline-create-field-shell task-title-edit-shell">
+              <TaskTitleEditBox
+                placeholder="输入任务名称"
+                value={editingTitleValue}
+                onChange={setEditingTitleValue}
+                onSubmit={(value) => {
+                  void handleRenameSummary(value)
+                }}
+              />
             </div>
           ) : (
             <span
               className={isVisuallyDone ? 'done-text' : 'title-text'}
               onClick={(e) => {
                 e.stopPropagation()
+                setEditingTitleValue(task.summary)
                 setEditingName(true)
               }}
             >
@@ -5399,9 +5526,18 @@ function TaskTitleCell({
   )
 }
 
-function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
+function TaskPriorityCell({
+  task,
+  isEditingRow,
+  onEditingChange,
+  onUpdate,
+}: TaskPriorityCellProps) {
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false)
   const showPriority = task.priority !== Priority.None
+
+  useEffect(() => {
+    onEditingChange(priorityMenuOpen)
+  }, [onEditingChange, priorityMenuOpen])
 
   const handlePriorityChange = async (nextPriority: Priority) => {
     if (nextPriority === task.priority) return
@@ -5420,7 +5556,13 @@ function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
 
   return (
     <div
-      className={`cell cell-priority task-edit-field-cell ${priorityMenuOpen ? 'active' : ''}`}
+      className={[
+        'cell',
+        'cell-priority',
+        'task-edit-field-cell',
+        isEditingRow ? 'inline-create-field-cell' : '',
+        priorityMenuOpen ? 'active' : '',
+      ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
     >
       <Dropdown
@@ -5443,7 +5585,7 @@ function TaskPriorityCell({ task, onUpdate }: TaskPriorityCellProps) {
           },
         }}
       >
-        <div className="task-edit-field-trigger">
+        <div className="inline-create-field-shell task-edit-field-trigger">
           {showPriority ? (
             renderOverflowTooltip(
               PriorityLabel[task.priority],
@@ -5481,10 +5623,17 @@ function TaskAssigneeCell({
   activeAssigneePickerKey,
   onUpdate,
   onAssigneePickerOpenChange,
+  isEditingRow,
+  onEditingChange,
 }: TaskAssigneeCellProps) {
   const assigneeUsers = buildTaskAssigneeUsers(task, users)
   const assigneeIds = assigneeUsers.map((user) => user.id)
   const assigneePickerKey = `task-assignee-${task.guid}`
+  const isPickerOpen = activeAssigneePickerKey === assigneePickerKey
+
+  useEffect(() => {
+    onEditingChange(isPickerOpen)
+  }, [isPickerOpen, onEditingChange])
 
   const handleAssigneeChange = async (values: string[]) => {
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
@@ -5539,35 +5688,51 @@ function TaskAssigneeCell({
 
   return (
     <div
-      className={`cell cell-assignee task-edit-field-cell ${
-        activeAssigneePickerKey === assigneePickerKey ? 'active' : ''
-      }`}
+      className={[
+        'cell',
+        'cell-assignee',
+        'task-edit-field-cell',
+        isEditingRow ? 'inline-create-field-cell' : '',
+        isPickerOpen ? 'active' : '',
+      ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
     >
-      <AssigneePicker
-        pickerKey={assigneePickerKey}
-        open={activeAssigneePickerKey === assigneePickerKey}
-        task={task}
-        value={assigneeIds}
-        users={users}
-        taskMembers={task.members.filter((m) => m.role === 'assignee')}
-        isTasklistView={isTasklistView}
-        triggerClassName="task-edit-field-trigger assignee-trigger"
-        placeholderIcon={<UserOutlined className="empty-assignee" />}
-        onChange={(value) => void handleAssigneeChange(value)}
-        onCompletionModeChange={(mode) => void handleCompletionModeChange(mode)}
-        onOpenChange={(open) => {
-          onAssigneePickerOpenChange(open ? assigneePickerKey : null)
-        }}
-      />
+      <div className="inline-create-field-shell task-edit-field-trigger">
+        <AssigneePicker
+          pickerKey={assigneePickerKey}
+          open={isPickerOpen}
+          task={task}
+          value={assigneeIds}
+          users={users}
+          taskMembers={task.members.filter((m) => m.role === 'assignee')}
+          isTasklistView={isTasklistView}
+          triggerClassName="assignee-trigger inline-create-assignee-trigger"
+          placeholderIcon={<UserOutlined className="empty-assignee" />}
+          onChange={(value) => void handleAssigneeChange(value)}
+          onCompletionModeChange={(mode) => void handleCompletionModeChange(mode)}
+          onOpenChange={(open) => {
+            onAssigneePickerOpenChange(open ? assigneePickerKey : null)
+          }}
+        />
+      </div>
     </div>
   )
 }
 
-function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
+function TaskDateCell({
+  task,
+  field,
+  isEditingRow,
+  onEditingChange,
+  onUpdate,
+}: TaskDateCellProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const isSubtask = Boolean(task.parent_task_guid)
   const date = task[field] ? dayjs(Number(task[field]!.timestamp)) : null
+
+  useEffect(() => {
+    onEditingChange(pickerOpen)
+  }, [onEditingChange, pickerOpen])
 
   const handleDateChange = async (nextDate: dayjs.Dayjs | null) => {
     if (field === 'start' && isSubtask) {
@@ -5596,19 +5761,27 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
 
   return (
     <div
-      className={`cell cell-${field} task-edit-field-cell ${pickerOpen ? 'active' : ''}`}
+      className={[
+        'cell',
+        `cell-${field}`,
+        'task-edit-field-cell',
+        isEditingRow ? 'inline-create-field-cell' : '',
+        pickerOpen ? 'active' : '',
+      ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
     >
       {field === 'start' && isSubtask ? (
-        <div
-          className="task-edit-field-trigger date-trigger date-trigger-readonly"
-          title="子任务开始时间跟随父任务，不能单独修改"
-        >
-          {date ? (
-            renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
-          ) : (
-            <CalendarOutlined className="empty-date-icon" />
-          )}
+        <div className="inline-create-field-shell task-edit-field-trigger">
+          <div
+            className="date-trigger date-trigger-readonly"
+            title="子任务开始时间跟随父任务，不能单独修改"
+          >
+            {date ? (
+              renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
+            ) : (
+              <CalendarOutlined className="empty-date-icon" />
+            )}
+          </div>
         </div>
       ) : (
         <Popover
@@ -5642,12 +5815,14 @@ function TaskDateCell({ task, field, onUpdate }: TaskDateCellProps) {
           }
           onOpenChange={setPickerOpen}
         >
-          <div className="task-edit-field-trigger date-trigger">
-            {date ? (
-              renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
-            ) : (
-              <CalendarOutlined className="empty-date-icon" />
-            )}
+          <div className="inline-create-field-shell task-edit-field-trigger">
+            <div className="date-trigger">
+              {date ? (
+                renderOverflowTooltip(date.format('M月D日'), <span className="date-text">{date.format('M月D日')}</span>)
+              ) : (
+                <CalendarOutlined className="empty-date-icon" />
+              )}
+            </div>
           </div>
         </Popover>
       )}

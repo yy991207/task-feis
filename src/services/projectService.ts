@@ -21,7 +21,6 @@ export function listProjects(params?: {
 }): Promise<Project[]> {
   const qs = new URLSearchParams({
     user_id: appConfig.user_id,
-    team_id: appConfig.team_id,
   })
   if (params?.status) qs.set('status', params.status)
   if (params?.user_group_id) qs.set('user_group_id', params.user_group_id)
@@ -43,7 +42,6 @@ export function createProject(
     method: 'POST',
     body: JSON.stringify({
       user_id: appConfig.user_id,
-      team_id: appConfig.team_id,
       name,
       ...(groupId ? { group_id: groupId } : {}),
       ...(description ? { description } : {}),

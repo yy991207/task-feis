@@ -325,7 +325,6 @@ export async function listTasks(params: {
 }): Promise<{ items: ApiTask[]; total: number }> {
   const qs = new URLSearchParams({
     user_id: appConfig.user_id,
-    team_id: appConfig.team_id,
   })
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null) qs.set(k, String(v))
