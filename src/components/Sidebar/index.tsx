@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import type { DragEvent as ReactDragEvent } from 'react'
 import message from 'antd/es/message'
 import Dropdown from 'antd/es/dropdown'
 import Tree from 'antd/es/tree'
@@ -101,12 +102,35 @@ function getProjectGroupId(project: Project, groups: ProjectGroup[]): string | n
   return null
 }
 
-const buildEmptyGroupPlaceholderNode = (groupId: string): DataNode => ({
+interface EmptyGroupPlaceholderNodeOptions {
+  groupId: string
+  active: boolean
+  onDragOver: (event: ReactDragEvent<HTMLDivElement>, groupId: string) => void
+  onDragLeave: (groupId: string) => void
+  onDrop: (event: ReactDragEvent<HTMLDivElement>, groupId: string) => void
+}
+
+const buildEmptyGroupPlaceholderNode = ({
+  groupId,
+  active,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: EmptyGroupPlaceholderNodeOptions): DataNode => ({
   key: `${EMPTY_GROUP_PLACEHOLDER_PREFIX}${groupId}`,
-  title: <div className="empty-group-drop-hint">可拖拽清单加入该分组</div>,
+  title: (
+    <div
+      className="empty-group-drop-hint"
+      onDragOver={(event) => onDragOver(event, groupId)}
+      onDragLeave={() => onDragLeave(groupId)}
+      onDrop={(event) => onDrop(event, groupId)}
+    >
+      可拖拽清单加入该分组
+    </div>
+  ),
   selectable: false,
   isLeaf: true,
-  className: 'empty-group-placeholder',
+  className: active ? 'empty-group-placeholder drop-target' : 'empty-group-placeholder',
 })
 
 function buildSidebarDragNodeClassName(
@@ -161,6 +185,7 @@ export default function Sidebar({
   const [customFieldsProjectId, setCustomFieldsProjectId] = useState<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
   const [draggingTasklistKey, setDraggingTasklistKey] = useState<string | null>(null)
+  const [emptyGroupDropTargetId, setEmptyGroupDropTargetId] = useState<string | null>(null)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -404,10 +429,7 @@ export default function Sidebar({
     }
   }
 
-  const defaultGroup = useMemo(
-    () => groups.find((g) => g.is_default),
-    [groups],
-  )
+  const defaultGroup = groups.find((g) => g.is_default)
 
   const projectsByGroup = useMemo(() => {
     const map: Record<string, Project[]> = {}
@@ -420,13 +442,9 @@ export default function Sidebar({
     return map
   }, [groups, projects])
 
-  const ungroupedProjects = useMemo(
-    () =>
-      defaultGroup
-        ? (projectsByGroup[defaultGroup.group_id] || [])
-        : projects.filter((p) => !getProjectGroupId(p, groups)),
-    [projects, groups, defaultGroup, projectsByGroup],
-  )
+  const ungroupedProjects = defaultGroup
+    ? (projectsByGroup[defaultGroup.group_id] || [])
+    : projects.filter((p) => !getProjectGroupId(p, groups))
 
   const buildGroupActionMenu = (group: ProjectGroup) => ({
     items: [
@@ -646,7 +664,15 @@ export default function Sidebar({
               draggingTasklistKey,
             ),
           }))
-        : [buildEmptyGroupPlaceholderNode(group.group_id)]
+        : [
+            buildEmptyGroupPlaceholderNode({
+              groupId: group.group_id,
+              active: emptyGroupDropTargetId === group.group_id,
+              onDragOver: handleEmptyGroupDragOver,
+              onDragLeave: handleEmptyGroupDragLeave,
+              onDrop: handleEmptyGroupDrop,
+            }),
+          ]
 
       return {
         key: encodeGroupKey(group.group_id),
@@ -701,6 +727,7 @@ export default function Sidebar({
     openedProjectMenuId,
     activeKey,
     draggingTasklistKey,
+    emptyGroupDropTargetId,
   ])
 
   const selectableTreeKeySet = useMemo(() => {
@@ -748,6 +775,40 @@ export default function Sidebar({
     setExpandedKeys(keys)
   }
 
+  function handleEmptyGroupDragOver(
+    event: ReactDragEvent<HTMLDivElement>,
+    groupId: string,
+  ) {
+    if (!draggingTasklistKey?.startsWith('tl:')) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+    setEmptyGroupDropTargetId((prev) => (prev === groupId ? prev : groupId))
+  }
+
+  function handleEmptyGroupDragLeave(groupId: string) {
+    setEmptyGroupDropTargetId((prev) => (prev === groupId ? null : prev))
+  }
+
+  function handleEmptyGroupDrop(
+    event: ReactDragEvent<HTMLDivElement>,
+    groupId: string,
+  ) {
+    if (!draggingTasklistKey?.startsWith('tl:')) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    setEmptyGroupDropTargetId(null)
+    applySidebarTasklistDrop(
+      draggingTasklistKey.slice(3),
+      `${EMPTY_GROUP_PLACEHOLDER_PREFIX}${groupId}`,
+      0,
+    )
+  }
+
   const applySidebarTasklistDrop = (
     projectId: string,
     dropKey: string,
@@ -779,6 +840,7 @@ export default function Sidebar({
   }
 
   const handleDrop: TreeProps['onDrop'] = (info) => {
+    setEmptyGroupDropTargetId(null)
     const dragKey = String(info.dragNode.key)
 
     // Group node drag → reorder groups
@@ -930,7 +992,7 @@ export default function Sidebar({
             icon: <DragOutlined className="tasklist-drag-handle" />,
             nodeDraggable: (node) => {
               const k = String(node.key)
-              return k.startsWith('tl:') || k.startsWith('grp:')
+              return k.startsWith('tl:')
             },
           }}
           allowDrop={({ dragNode, dropNode, dropPosition }) => {
@@ -993,6 +1055,7 @@ export default function Sidebar({
           }}
           onDragEnd={() => {
             setDraggingTasklistKey(null)
+            setEmptyGroupDropTargetId(null)
             clearDragPreview()
           }}
           onDrop={handleDrop}

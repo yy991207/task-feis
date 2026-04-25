@@ -121,8 +121,8 @@ export default function TaskListPage() {
         return
       }
       let tls = projects.map(projectToTasklist)
-      let nextProjectItems = projects
-      let nextInvolvedProjectIds = involvedProjectIds
+      const nextProjectItems = projects
+      let nextInvolvedProjectIds: string[] = []
 
       // Load sections for the active tasklist so drag-and-drop has real section_id
       if (typeof activeNav === 'object' && activeNav.type === 'tasklist') {

@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react'
 import Tabs from 'antd/es/tabs'
-import List from 'antd/es/list'
 import Empty from 'antd/es/empty'
-import Button from 'antd/es/button'
 import Tag from 'antd/es/tag'
 import Space from 'antd/es/space'
 import Typography from 'antd/es/typography'
@@ -23,6 +21,19 @@ function sortProjectsByUpdatedAtDesc(projects: Project[]): Project[] {
   return [...projects].sort(
     (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
   )
+}
+
+function buildClickableRowHandlers(onOpenTasklist: (projectId: string) => void, projectId: string) {
+  return {
+    onClick: () => onOpenTasklist(projectId),
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return
+      }
+      event.preventDefault()
+      onOpenTasklist(projectId)
+    },
+  }
 }
 
 export default function TasklistOverview({
@@ -63,29 +74,30 @@ export default function TasklistOverview({
     }
 
     return (
-      <List
-        dataSource={items}
-        renderItem={(project) => (
-          <List.Item
-            actions={[
-              <Button
-                key="open"
-                type="link"
-                onClick={() => onOpenTasklist(project.project_id)}
+      <div>
+        {items.map((project, index) => {
+          const rowHandlers = buildClickableRowHandlers(onOpenTasklist, project.project_id)
+          return (
+            <div
+              key={project.project_id}
+              role="button"
+              tabIndex={0}
+              {...rowHandlers}
+              style={{ cursor: 'pointer' }}
+            >
+              <div
+                style={{
+                  padding: '14px 0',
+                  borderBottom: index === items.length - 1 ? 'none' : '1px solid #f0f0f0',
+                }}
               >
-                打开
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={
-                <Space size={8}>
-                  <span>{project.name}</span>
+                <Space size={8} align="center">
+                  <span style={{ fontSize: 14, fontWeight: 500, color: '#1f2329' }}>
+                    {project.name}
+                  </span>
                   <Tag color="blue">{project.task_count} 个任务</Tag>
                 </Space>
-              }
-              description={
-                <Space size={12} wrap>
+                <Space size={12} wrap style={{ marginTop: 8 }}>
                   <Text type="secondary">
                     创建人: {project.creator_id === currentUserId ? '我' : project.creator_id}
                   </Text>
@@ -96,11 +108,11 @@ export default function TasklistOverview({
                     更新时间: {new Date(project.updated_at).toLocaleString('zh-CN')}
                   </Text>
                 </Space>
-              }
-            />
-          </List.Item>
-        )}
-      />
+              </div>
+            </div>
+          )
+        })}
+      </div>
     )
   }
 
@@ -112,7 +124,6 @@ export default function TasklistOverview({
             <Title level={4} className="table-title">
               任务清单
             </Title>
-            <Text type="secondary">这里展示全部清单，不区分自定义分组和默认分组。</Text>
           </div>
         </div>
       </div>

@@ -149,6 +149,8 @@ const requiredStyleSnippets = [
   '.empty-group-placeholder.drag-over > .ant-tree-node-content-wrapper',
   '.empty-group-placeholder.drop-target > .ant-tree-node-content-wrapper',
   'min-height: 44px;',
+  '.empty-group-drop-hint',
+  'padding-left: calc(16px + 15px + 8px);',
   '.sidebar-drop-indicator',
   'height: 2px;',
   'background: #3370ff;',
