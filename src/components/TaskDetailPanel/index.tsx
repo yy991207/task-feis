@@ -90,6 +90,7 @@ import TaskRichInput, {
 import UserSearchSelect from '@/components/UserSearchSelect'
 import NameOverflowPreview from '@/components/NameOverflowPreview'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
+import { syncExternalSubtaskDrafts } from '@/utils/subtaskSync'
 import {
   getTaskCompletionActions,
   getTaskCompletionConfirm,
@@ -647,6 +648,7 @@ interface TaskDetailPanelProps {
   onSubtaskCreated?: (task: Task) => void
   onTaskDeleted?: (taskGuid: string) => void
   onOpenTask?: (task: Task) => void
+  externalUpdatedTask?: Task | null
   onClose: () => void
 }
 
@@ -658,6 +660,7 @@ export default function TaskDetailPanel({
   onSubtaskCreated,
   onTaskDeleted,
   onOpenTask,
+  externalUpdatedTask,
   onClose,
 }: TaskDetailPanelProps) {
   const [panelWidth, setPanelWidth] = useState(DETAIL_PANEL_DEFAULT_WIDTH)
@@ -928,6 +931,14 @@ export default function TaskDetailPanel({
       setSubtaskDrafts(inheritParentStartForTasks(items.map((t) => apiTaskToTask(t)), task)),
     )
   }, [task.guid, task.start?.timestamp])
+
+  useEffect(() => {
+    if (!externalUpdatedTask?.parent_task_guid) {
+      return
+    }
+
+    setSubtaskDrafts((prev) => syncExternalSubtaskDrafts(prev, task, externalUpdatedTask))
+  }, [externalUpdatedTask, task])
 
   useEffect(() => {
     setActiveSubtaskDueGuid(null)

@@ -564,12 +564,14 @@ export default function Sidebar({
         }}
       >
         <FileDoneOutlined className="tasklist-icon" />
-        <NameOverflowPreview
-          name={proj.name}
-          previewClassName="sidebar-tasklist-name-preview"
-        >
-          <span className="tasklist-name">{proj.name}</span>
-        </NameOverflowPreview>
+        <div className="tasklist-name-wrap">
+          <NameOverflowPreview
+            name={proj.name}
+            previewClassName="sidebar-tasklist-name-preview"
+          >
+            <span className="tasklist-name">{proj.name}</span>
+          </NameOverflowPreview>
+        </div>
         <Dropdown
           menu={buildTasklistActionMenu(proj)}
           trigger={['click']}
@@ -898,7 +900,7 @@ export default function Sidebar({
             icon: <DragOutlined className="tasklist-drag-handle" />,
             nodeDraggable: (node) => {
               const k = String(node.key)
-              return k.startsWith('tl:') || k.startsWith('grp:')
+              return k.startsWith('tl:')
             },
           }}
           allowDrop={({ dragNode, dropNode, dropPosition }) => {

@@ -128,6 +128,7 @@ import {
   shouldEnterSectionEditMode,
 } from '@/components/TaskTable/sectionState'
 import { inheritParentStartForTasks } from '@/utils/taskDate'
+import { syncExternalSubtaskCache } from '@/utils/subtaskSync'
 import {
   getTaskCompletionActions,
   getTaskCompletionConfirm,
@@ -871,6 +872,7 @@ interface TaskTableProps {
   sortMode?: SortModeKey
   mineOnly?: boolean
   pendingExpandTaskGuid?: string | null
+  externalUpdatedTask?: Task | null
   onStatusFilterChange?: (v: StatusFilterKey) => void
   onSortModeChange?: (v: SortModeKey) => void
   onMineOnlyChange?: (v: boolean) => void
@@ -1301,6 +1303,7 @@ export default function TaskTable({
   sortMode: controlledSortMode,
   mineOnly,
   pendingExpandTaskGuid,
+  externalUpdatedTask,
   onStatusFilterChange,
   onSortModeChange,
   onMineOnlyChange,
@@ -1440,6 +1443,14 @@ export default function TaskTable({
       })
     })
   }, [tasks])
+
+  useEffect(() => {
+    if (!externalUpdatedTask?.parent_task_guid) {
+      return
+    }
+
+    setSubtasksByGuid((prev) => syncExternalSubtaskCache(prev, externalUpdatedTask))
+  }, [externalUpdatedTask])
 
   const handleToggleExpand = useCallback(async (parent: Task) => {
     const guid = parent.guid

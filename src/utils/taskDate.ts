@@ -1,4 +1,4 @@
-import type { Task } from '@/types/task'
+import type { Task } from '../types/task.ts'
 
 export function inheritParentStartForTasks(tasks: Task[], parent: Task): Task[] {
   return tasks.map((task) => {

@@ -55,6 +55,7 @@ export default function TaskListPage() {
   const [sortMode, setSortMode] = useState<'custom' | 'due' | 'start' | 'created'>('due')
   const [mineOnly, setMineOnly] = useState(false)
   const [pendingExpandTaskGuid, setPendingExpandTaskGuid] = useState<string | null>(null)
+  const [lastUpdatedTask, setLastUpdatedTask] = useState<Task | null>(null)
   const latestRequestIdRef = useRef(0)
   const sidebarResizeStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false,
@@ -224,6 +225,7 @@ export default function TaskListPage() {
       : undefined
 
   const updateTaskInState = useCallback((nextTask: Task) => {
+    setLastUpdatedTask(nextTask)
     setTasks((prev) => {
       const exists = prev.some((task) => task.guid === nextTask.guid)
       if (!exists) {
@@ -395,6 +397,7 @@ export default function TaskListPage() {
         onPendingExpandConsumed={(taskGuid) => {
           setPendingExpandTaskGuid((prev) => (prev === taskGuid ? null : prev))
         }}
+        externalUpdatedTask={lastUpdatedTask}
       />
     )
   }
@@ -455,6 +458,7 @@ export default function TaskListPage() {
           onTaskDeleted={removeTaskFromState}
           onOpenTask={(t) => setSelectedTask(t)}
           onClose={() => setSelectedTask(null)}
+          externalUpdatedTask={lastUpdatedTask}
         />
       )}
     </Layout>

@@ -155,6 +155,10 @@
     width: 16px !important;
   }
 
+  .ant-tree .ant-tree-treenode:not(.tree-section) > .ant-tree-switcher-noop {
+    display: none;
+  }
+
   .ant-tree .tree-section {
     > .ant-tree-node-content-wrapper {
       color: #1f2329;
@@ -266,6 +270,12 @@
       cursor: pointer;
     }
 
+    .tasklist-name-wrap {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
     .tasklist-name-editor {
       flex: 1;
       min-width: 0;
@@ -282,6 +292,8 @@
       font-weight: 700;
       color: #1f2329 !important;
       flex-shrink: 0;
+      margin-left: auto;
+      align-self: center;
 
       .anticon svg {
         stroke: currentColor;
@@ -429,9 +441,9 @@
 
   /* 清单分组行默认不显示拖拽图标，但 rc-tree 仍会预留 16px 占位。
      这里单独把分组行的隐藏占位收窄到 9px，让展开箭头和左侧菜单图标列对齐。 */
-  .ant-tree .tree-section > .ant-tree-draggable-icon {
-    width: 9px;
-    min-width: 9px;
+  .ant-tree .tree-section > .ant-tree-draggable-icon,
+  .ant-tree .empty-group-placeholder > .ant-tree-draggable-icon {
+    display: none;
   }
 
   .ant-tree .ant-tree-treenode:hover .ant-tree-draggable-icon {

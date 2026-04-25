@@ -82,6 +82,14 @@ if (!componentSource.includes('preview.style.width = `${sourceTitle.offsetWidth}
   failures.push(`${componentFile}: 拖拽预览宽度应与清单对象本体一致，不能继续随名称长短变化。`)
 }
 
+if (componentSource.includes("return k.startsWith('tl:') || k.startsWith('grp:')")) {
+  failures.push(`${componentFile}: 清单分组不支持拖动，不能继续把 grp: 节点设为可拖拽。`)
+}
+
+if (!componentSource.includes("return k.startsWith('tl:')")) {
+  failures.push(`${componentFile}: 侧栏树节点只应允许清单项拖拽。`)
+}
+
 if (styleSource.includes('.ant-tree-treenode.dragging > .ant-tree-node-content-wrapper {\n    background: #eff0f1 !important;')) {
   failures.push(`${styleFile}: 拖拽源节点不应继续使用灰色背景。`)
 }
@@ -112,6 +120,10 @@ const requiredStyleSnippets = [
   'box-shadow: inset 0 0 0 1px rgba(51, 112, 255, 0.14);',
   '.ant-tree-treenode.dragging:after',
   'display: none;',
+  '.ant-tree .ant-tree-treenode:not(.tree-section) > .ant-tree-switcher-noop',
+  'display: none;',
+  '.tasklist-name-wrap',
+  'margin-left: auto;',
   '.sidebar-drag-preview',
   '.sidebar-drag-preview__label',
   'border: 1px solid rgba(51, 112, 255, 0.18);',
