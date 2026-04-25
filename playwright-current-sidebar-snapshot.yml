@@ -1,0 +1,113 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - button "unordered-list" [ref=e9] [cursor=pointer]:
+            - img "unordered-list" [ref=e11]
+          - heading "任务" [level=5] [ref=e14]
+          - generic [ref=e15]:
+            - button "user-switch" [active] [ref=e16] [cursor=pointer]
+            - button "bell" [ref=e22] [cursor=pointer]
+        - menu [ref=e27]:
+          - menuitem "user 我负责的" [ref=e28] [cursor=pointer]:
+            - img "user" [ref=e29]
+            - generic [ref=e32]: 我负责的
+          - menuitem "eye 我关注的" [ref=e33] [cursor=pointer]:
+            - img "eye" [ref=e34]
+            - generic [ref=e37]: 我关注的
+          - menuitem "history 动态" [ref=e38] [cursor=pointer]:
+            - img "history" [ref=e39]
+            - generic [ref=e42]: 动态
+        - separator [ref=e43]
+        - menu [ref=e44]:
+          - text: 快速访问
+          - group [ref=e45]:
+            - menuitem "file-text 全部任务" [ref=e46] [cursor=pointer]
+            - menuitem "ordered-list 我创建的" [ref=e51] [cursor=pointer]
+            - menuitem "appstore 我分配的" [ref=e56] [cursor=pointer]
+            - menuitem "star 已完成" [ref=e61] [cursor=pointer]
+        - separator [ref=e66]
+        - tree [ref=e69]:
+          - generic [ref=e72]:
+            - treeitem "caret-down 任务清单 plus" [expanded] [ref=e148]
+            - treeitem "drag file-done Q2 市场活动主题 ellipsis" [ref=e153]
+            - treeitem "drag file-done Q2 市场活动主题 ellipsis" [ref=e173]
+            - treeitem "drag file-done 任务清单 1334 ellipsis" [ref=e193]
+            - treeitem "drag file-done Q2 市场活动主题 ellipsis" [ref=e213]
+            - treeitem "drag file-done 任务清单 1333 ellipsis" [ref=e233]
+            - treeitem "drag file-done 任务清单 1333 ellipsis" [ref=e253]
+            - treeitem "drag file-done 任务清单 2 ellipsis" [ref=e273]
+            - treeitem "drag file-done “任务”模块开发 ellipsis" [ref=e293]
+            - treeitem "caret-down 新分组 ellipsis plus" [expanded] [ref=e313]
+            - treeitem "可拖拽清单加入该分组" [ref=e340]
+            - treeitem "caret-down 接口测试分组-1777108525428-已改名 ellipsis plus" [expanded] [ref=e344]
+            - treeitem "可拖拽清单加入该分组" [ref=e371]
+            - treeitem "caret-down 接口测试分组-1777110042246-已改名 ellipsis plus" [expanded] [ref=e375]
+            - treeitem "可拖拽清单加入该分组" [ref=e402]
+        - button "plus 新建清单分组" [ref=e91] [cursor=pointer]:
+          - img "plus" [ref=e93]:
+            - img [ref=e94]
+          - generic [ref=e97]: 新建清单分组
+    - main [ref=e99]:
+      - generic [ref=e100]:
+        - heading "我负责的" [level=5] [ref=e104]
+        - generic [ref=e106]:
+          - button "filter 全部任务" [ref=e109] [cursor=pointer]:
+            - img "filter" [ref=e111]
+            - generic [ref=e114]: 全部任务
+          - button "filter 筛选" [ref=e116] [cursor=pointer]:
+            - img "filter" [ref=e118]
+            - generic [ref=e121]: 筛选
+          - button "sort-ascending 排序 · 截止时间" [ref=e123] [cursor=pointer]:
+            - img "sort-ascending" [ref=e125]
+            - generic [ref=e128]: 排序 · 截止时间
+          - button "setting 字段配置" [ref=e130] [cursor=pointer]:
+            - img "setting" [ref=e132]
+            - generic [ref=e135]: 字段配置
+        - table [ref=e412]:
+          - rowgroup [ref=e419]:
+            - row "font-size 任务标题 拖拽调整字段宽度 clock-circle 开始时间 打开字段菜单 拖拽调整字段宽度 calendar 截止时间 打开字段菜单 拖拽调整字段宽度 user 创建人 打开字段菜单 拖拽调整字段宽度 创建时间 打开字段菜单 拖拽调整字段宽度" [ref=e420]
+          - rowgroup [ref=e467]:
+            - generic [ref=e468]
+            - generic [ref=e473]
+            - generic [ref=e481]
+            - generic [ref=e488]
+            - generic [ref=e495]
+            - row "caret-down 默认分组 6" [ref=e498]
+            - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月24日 15:01" [ref=e511] [cursor=pointer]
+            - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月24日 15:01" [ref=e537] [cursor=pointer]
+            - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月25日 15:57" [ref=e563] [cursor=pointer]
+            - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月25日 15:57" [ref=e589] [cursor=pointer]
+            - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月25日 17:57" [ref=e615] [cursor=pointer]
+            - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月25日 17:57" [ref=e641] [cursor=pointer]
+  - 'tooltip "当前用户: 123456" [ref=e668]'
+  - menu [ref=e670]:
+    - text: 切换团队
+    - group
+    - menuitem "银河传说" [ref=e671] [cursor=pointer]:
+      - generic [ref=e674]: 银河传说
+    - menuitem "复仇者" [ref=e675] [cursor=pointer]:
+      - generic [ref=e678]: 复仇者
+    - menuitem "check 测试团队 当前" [ref=e679] [cursor=pointer]:
+      - generic [ref=e681]:
+        - img "check" [ref=e683]:
+          - img [ref=e684]
+        - generic [ref=e686]: 测试团队
+        - generic [ref=e687]: 当前
+    - text: 切换当前身份
+    - group
+    - menuitem "check 123456 所有者" [ref=e688] [cursor=pointer]:
+      - generic [ref=e690]:
+        - img "check" [ref=e692]:
+          - img [ref=e693]
+        - generic [ref=e695]: "123456"
+        - generic [ref=e696]: 所有者
+    - menuitem "张三" [ref=e697] [cursor=pointer]:
+      - generic [ref=e700]: 张三
+    - menuitem "李四" [ref=e702] [cursor=pointer]:
+      - generic [ref=e705]: 李四
+    - menuitem "王五" [ref=e707] [cursor=pointer]:
+      - generic [ref=e710]: 王五
+    - menuitem "赵六" [ref=e712] [cursor=pointer]:
+      - generic [ref=e715]: 赵六
