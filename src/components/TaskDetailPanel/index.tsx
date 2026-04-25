@@ -194,6 +194,54 @@ function renderUserAvatar(
   )
 }
 
+function renderDetailPersonSummary(
+  users: Array<Pick<User, 'id' | 'name' | 'avatar'>>,
+  options: {
+    avatarSize: number
+    groupMaxCount: number
+    avatarStyle?: CSSProperties
+    getCompletionBadge?: (userId: string) => ReactNode
+  },
+): ReactNode {
+  if (users.length === 0) {
+    return null
+  }
+
+  if (users.length === 1) {
+    const singleUser = users[0]
+    return (
+      <div className="detail-person-summary">
+        <Tooltip title={getUserDisplayName(singleUser)}>
+          <span className="detail-assignee-avatar-wrap">
+            {renderUserAvatar(singleUser, {
+              size: options.avatarSize,
+              style: options.avatarStyle,
+            })}
+            {options.getCompletionBadge?.(singleUser.id)}
+          </span>
+        </Tooltip>
+        <span className="detail-person-name">{getUserDisplayName(singleUser)}</span>
+      </div>
+    )
+  }
+
+  return (
+    <Avatar.Group size={options.avatarSize} max={{ count: options.groupMaxCount }}>
+      {users.map((user) => (
+        <Tooltip key={user.id} title={getUserDisplayName(user)}>
+          <span className="detail-assignee-avatar-wrap">
+            {renderUserAvatar(user, {
+              size: options.avatarSize,
+              style: options.avatarStyle,
+            })}
+            {options.getCompletionBadge?.(user.id)}
+          </span>
+        </Tooltip>
+      ))}
+    </Avatar.Group>
+  )
+}
+
 function getTaskCompletionModeLabel(task: Task): string {
   return task.completion_mode === 'all' ? '全部负责人均需完成' : '任一负责人完成即可'
 }
@@ -1357,21 +1405,40 @@ export default function TaskDetailPanel({
         htmlType="button"
         className="followers-summary"
       >
-        {visibleFollowedUsers.length > 0 ? (
-          <Avatar.Group max={{ count: 3 }} size={24}>
-            {visibleFollowedUsers.map((user) => (
-              <Tooltip key={user.id} title={getUserDisplayName(user)}>
-                {renderUserAvatar(user, {
-                  size: 20,
-                  style: { backgroundColor: '#7b67ee', color: '#fff' },
-                })}
-              </Tooltip>
-            ))}
-          </Avatar.Group>
+        {followedUsers.length > 0 ? (
+          followedUsers.length === 1 ? (
+            (() => {
+              const singleFollowedUser = followedUsers[0]
+              return (
+                <div className="detail-person-summary">
+                  <Tooltip title={getUserDisplayName(singleFollowedUser)}>
+                    <span className="detail-assignee-avatar-wrap">
+                      {renderUserAvatar(singleFollowedUser, {
+                        size: 20,
+                        style: { backgroundColor: '#7b67ee', color: '#fff' },
+                      })}
+                    </span>
+                  </Tooltip>
+                  <span className="detail-person-name">{getUserDisplayName(singleFollowedUser)}</span>
+                </div>
+              )
+            })()
+          ) : (
+            <Avatar.Group max={{ count: 3 }} size={24}>
+              {visibleFollowedUsers.map((user) => (
+                <Tooltip key={user.id} title={getUserDisplayName(user)}>
+                  {renderUserAvatar(user, {
+                    size: 20,
+                    style: { backgroundColor: '#7b67ee', color: '#fff' },
+                  })}
+                </Tooltip>
+              ))}
+            </Avatar.Group>
+          )
         ) : (
           <Avatar size={20} style={{ backgroundColor: '#7b67ee' }} icon={<UserOutlined />} />
         )}
-        <span className="followers-text">{followedUsers.length} 人关注</span>
+        <span className="followers-text">{followedUsers.length > 1 ? `${followedUsers.length} 人关注` : '关注人'}</span>
         <span className="followers-summary-action">管理</span>
       </Button>
     </div>
@@ -2311,35 +2378,69 @@ export default function TaskDetailPanel({
             >
               <div className="field-content field-clickable">
               {assignees.length > 0 ? (
-                <Avatar.Group size={16} max={{ count: 4 }}>
-                  {assignees.map((a) => (
-                    <Tooltip key={a.id} title={getUserDisplayName(resolveTaskUserById(a.id, {
-                      name: a.name ?? null,
-                      avatar: a.avatar ?? null,
-                    }))}>
-                      <span
-                        className={`detail-assignee-avatar-wrap ${
-                          task.assignee_completions?.find((item) => item.user_id === a.id)?.is_completed
-                            ? 'is-completed'
-                            : ''
-                        }`}
-                      >
-                        {renderUserAvatar(resolveTaskUserById(a.id, {
-                          name: a.name ?? null,
-                          avatar: a.avatar ?? null,
-                        }), {
-                          size: 16,
-                          style: { backgroundColor: '#7b67ee', fontSize: 10, color: '#fff' },
-                        })}
-                        {task.assignee_completions?.find((item) => item.user_id === a.id)?.is_completed ? (
-                          <span className="detail-assignee-completed-badge">
-                            <CheckOutlined />
+                assignees.length === 1 ? (
+                  (() => {
+                    const singleAssignee = assignees[0]
+                    const singleAssigneeUser = resolveTaskUserById(singleAssignee.id, {
+                      name: singleAssignee.name ?? null,
+                      avatar: singleAssignee.avatar ?? null,
+                    })
+                    const isCompleted = Boolean(
+                      task.assignee_completions?.find((item) => item.user_id === singleAssignee.id)?.is_completed,
+                    )
+                    return (
+                      <div className="detail-person-summary">
+                        <Tooltip title={getUserDisplayName(singleAssigneeUser)}>
+                          <span className={`detail-assignee-avatar-wrap ${isCompleted ? 'is-completed' : ''}`}>
+                            {renderUserAvatar(singleAssigneeUser, {
+                              size: 16,
+                              style: { backgroundColor: '#7b67ee', fontSize: 10, color: '#fff' },
+                            })}
+                            {isCompleted ? (
+                              <span className="detail-assignee-completed-badge">
+                                <CheckOutlined />
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
-                      </span>
-                    </Tooltip>
-                  ))}
-                </Avatar.Group>
+                        </Tooltip>
+                        <span className="detail-person-name">{getUserDisplayName(resolveTaskUserById(singleAssignee.id, {
+                          name: singleAssignee.name ?? null,
+                          avatar: singleAssignee.avatar ?? null,
+                        }))}</span>
+                      </div>
+                    )
+                  })()
+                ) : (
+                  <Avatar.Group size={16} max={{ count: 4 }}>
+                    {assignees.map((a) => (
+                      <Tooltip key={a.id} title={getUserDisplayName(resolveTaskUserById(a.id, {
+                        name: a.name ?? null,
+                        avatar: a.avatar ?? null,
+                      }))}>
+                        <span
+                          className={`detail-assignee-avatar-wrap ${
+                            task.assignee_completions?.find((item) => item.user_id === a.id)?.is_completed
+                              ? 'is-completed'
+                              : ''
+                          }`}
+                        >
+                          {renderUserAvatar(resolveTaskUserById(a.id, {
+                            name: a.name ?? null,
+                            avatar: a.avatar ?? null,
+                          }), {
+                            size: 16,
+                            style: { backgroundColor: '#7b67ee', fontSize: 10, color: '#fff' },
+                          })}
+                          {task.assignee_completions?.find((item) => item.user_id === a.id)?.is_completed ? (
+                            <span className="detail-assignee-completed-badge">
+                              <CheckOutlined />
+                            </span>
+                          ) : null}
+                        </span>
+                      </Tooltip>
+                    ))}
+                  </Avatar.Group>
+                )
               ) : (
                   <span className="field-placeholder">添加负责人</span>
                 )}
@@ -2831,7 +2932,32 @@ export default function TaskDetailPanel({
                             aria-label="设置子任务负责人"
                           >
                             {assigneeUsers.length > 0 ? (
-                              <>
+                              assigneeUsers.length === 1 ? (
+                                (() => {
+                                  const singleAssigneeUser = assigneeUsers[0]
+                                  const isCompleted = Boolean(
+                                    subtask.assignee_completions?.find((item) => item.user_id === singleAssigneeUser.id)?.is_completed,
+                                  )
+                                  return (
+                                    <div className="detail-person-summary">
+                                      <Tooltip title={getUserDisplayName(singleAssigneeUser)}>
+                                        <span className={`detail-assignee-avatar-wrap ${isCompleted ? 'is-completed' : ''}`}>
+                                          {renderUserAvatar(singleAssigneeUser, {
+                                            size: 20,
+                                            style: { backgroundColor: '#7b67ee', color: '#fff' },
+                                          })}
+                                          {isCompleted ? (
+                                            <span className="detail-assignee-completed-badge">
+                                              <CheckOutlined />
+                                            </span>
+                                          ) : null}
+                                        </span>
+                                      </Tooltip>
+                                      <span className="detail-person-name">{getUserDisplayName(singleAssigneeUser)}</span>
+                                    </div>
+                                  )
+                                })()
+                              ) : (
                                 <Avatar.Group size={20} max={{ count: 3 }}>
                                   {assigneeUsers.map((assigneeUser) => (
                                     <Tooltip key={assigneeUser.id} title={getUserDisplayName(assigneeUser)}>
@@ -2855,7 +2981,7 @@ export default function TaskDetailPanel({
                                     </Tooltip>
                                   ))}
                                 </Avatar.Group>
-                              </>
+                              )
                             ) : (
                               <>
                                 <UserOutlined />

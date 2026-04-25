@@ -999,40 +999,69 @@ function AssigneePicker({
       >
         {selectedUsers.length > 0 ? (
           isTasklistView ? (
-            <Avatar.Group size={20} max={{ count: 3 }}>
-              {selectedUsers.map((selectedUser) => (
-                <Tooltip
-                  key={selectedUser.id}
-                  title={selectedUser.name ?? selectedUser.id}
-                >
-                  <span
-                    className={`tasklist-assignee-avatar-wrap ${
-                      task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed
-                        ? 'is-completed'
-                        : ''
-                    }`}
-                  >
-                    <Avatar
-                      size={20}
-                      src={normalizeAvatarSrc(selectedUser.avatar)}
-                      className="tasklist-assignee-avatar"
-                      style={{
-                        backgroundColor: normalizeAvatarSrc(selectedUser.avatar) ? undefined : '#7b67ee',
-                        color: '#fff',
-                        fontSize: 11,
-                      }}
-                    >
-                      {normalizeAvatarSrc(selectedUser.avatar) ? null : getUserDisplayName(selectedUser).slice(0, 1)}
-                    </Avatar>
-                    {task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed ? (
-                      <span className="tasklist-assignee-completed-badge">
-                        <CheckOutlined />
+            selectedUsers.length === 1 ? (
+              (() => {
+                const singleSelectedUser = selectedUsers[0]
+                const isCompleted = Boolean(
+                  task?.assignee_completions?.find((item) => item.user_id === singleSelectedUser.id)?.is_completed,
+                )
+                return (
+                  <div className="cell cell-followers-single">
+                    <Tooltip title={getUserDisplayName(singleSelectedUser)}>
+                      <span className={`tasklist-assignee-avatar-wrap ${isCompleted ? 'is-completed' : ''}`}>
+                        {renderTablePersonAvatar(singleSelectedUser, {
+                          size: 20,
+                          className: 'tasklist-assignee-avatar',
+                          style: {
+                            backgroundColor: normalizeAvatarSrc(singleSelectedUser.avatar) ? undefined : '#7b67ee',
+                            color: '#fff',
+                            fontSize: 11,
+                          },
+                        })}
+                        {isCompleted ? (
+                          <span className="tasklist-assignee-completed-badge">
+                            <CheckOutlined />
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                </Tooltip>
-              ))}
-            </Avatar.Group>
+                    </Tooltip>
+                    <span className="followers-single-name">{getUserDisplayName(singleSelectedUser)}</span>
+                  </div>
+                )
+              })()
+            ) : (
+              <Avatar.Group size={20} max={{ count: 3 }}>
+                {selectedUsers.map((selectedUser) => (
+                  <Tooltip
+                    key={selectedUser.id}
+                    title={selectedUser.name ?? selectedUser.id}
+                  >
+                    <span
+                      className={`tasklist-assignee-avatar-wrap ${
+                        task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed
+                          ? 'is-completed'
+                          : ''
+                      }`}
+                    >
+                      {renderTablePersonAvatar(selectedUser, {
+                        size: 20,
+                        className: 'tasklist-assignee-avatar',
+                        style: {
+                          backgroundColor: normalizeAvatarSrc(selectedUser.avatar) ? undefined : '#7b67ee',
+                          color: '#fff',
+                          fontSize: 11,
+                        },
+                      })}
+                      {task?.assignee_completions?.find((item) => item.user_id === selectedUser.id)?.is_completed ? (
+                        <span className="tasklist-assignee-completed-badge">
+                          <CheckOutlined />
+                        </span>
+                      ) : null}
+                    </span>
+                  </Tooltip>
+                ))}
+              </Avatar.Group>
+            )
           ) : (
             <Avatar.Group size={24} max={{ count: 3 }}>
               {selectedUsers.map((selectedUser) => (
@@ -1125,6 +1154,27 @@ function getUserDisplayName(user: Pick<User, 'id' | 'name'>): string {
 
 function getTaskCompletionModeLabel(task: Task): string {
   return task.completion_mode === 'all' ? '全部负责人均需完成' : '任一负责人完成即可'
+}
+
+function renderTablePersonAvatar(
+  user: Pick<User, 'id' | 'name' | 'avatar'>,
+  options: {
+    size: number
+    className?: string
+    style?: React.CSSProperties
+  },
+): React.ReactNode {
+  const avatarSrc = normalizeAvatarSrc(user.avatar)
+  return (
+    <Avatar
+      size={options.size}
+      src={avatarSrc}
+      className={options.className}
+      style={options.style}
+    >
+      {avatarSrc ? null : getUserDisplayName(user).slice(0, 1)}
+    </Avatar>
+  )
 }
 
 function buildTaskAssigneeUsers(task: Task, users: User[]): User[] {
@@ -4277,15 +4327,21 @@ export default function TaskTable({
             avatar: record.creator.avatar ?? users.find((u) => u.id === record.creator.id)?.avatar,
           }
           return creatorUser ? (
-            <Tooltip title={creatorUser.name}>
-              <Avatar
-                src={creatorUser.avatar}
-                size={20}
-                style={{ backgroundColor: '#7b67ee', fontSize: 11, cursor: 'default' }}
-              >
-                {creatorUser.name.slice(0, 1)}
-              </Avatar>
-            </Tooltip>
+            <div className="cell cell-followers-single">
+              <Tooltip title={creatorUser.name}>
+                {renderTablePersonAvatar(creatorUser, {
+                  size: 20,
+                  className: 'tasklist-assignee-avatar',
+                  style: {
+                    backgroundColor: creatorUser.avatar ? undefined : '#7b67ee',
+                    fontSize: 11,
+                    cursor: 'default',
+                    color: '#fff',
+                  },
+                })}
+              </Tooltip>
+              <span className="followers-single-name">{creatorUser.name}</span>
+            </div>
           ) : null
         },
       }, 'creator'))
