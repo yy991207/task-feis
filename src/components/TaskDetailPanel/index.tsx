@@ -101,7 +101,7 @@ import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
 import './index.less'
 
 const PARENT_TASK_CHAIN_MAX_DEPTH = 5
-const DETAIL_PANEL_DEFAULT_WIDTH = 560
+const DETAIL_PANEL_DEFAULT_WIDTH = 672
 const DETAIL_PANEL_MIN_WIDTH = 520
 const DETAIL_PANEL_MAX_WIDTH = 720
 
@@ -2761,6 +2761,7 @@ export default function TaskDetailPanel({
                       avatar: assignee.avatar ?? null,
                     }),
                   )
+                const startDate = subtask.start ? dayjs(Number(subtask.start.timestamp)) : null
                 const dueDate = subtask.due ? dayjs(Number(subtask.due.timestamp)) : null
                 return (
                   <div
@@ -2902,16 +2903,26 @@ export default function TaskDetailPanel({
                             </div>
                           }
                         >
-                          <Tooltip title="设置子任务截止时间">
+                          {dueDate ? (
                             <Button
                               type="text"
                               size="small"
                               className="subtask-meta-trigger subtask-date-trigger"
-                              icon={dueDate ? undefined : <DateIconOutlined />}
                             >
-                              {dueDate ? `${formatDateValueLabel(dueDate)} 截止` : null}
+                              {startDate
+                                ? `${formatDateValueLabel(startDate)} – ${formatDateValueLabel(dueDate)}`
+                                : `${formatDateValueLabel(dueDate)} 截止`}
                             </Button>
-                          </Tooltip>
+                          ) : (
+                            <Tooltip title="设置截止时间">
+                              <Button
+                                type="text"
+                                size="small"
+                                className="subtask-meta-trigger subtask-date-trigger"
+                                icon={<DateIconOutlined />}
+                              />
+                            </Tooltip>
+                          )}
                         </Popover>
                         <Popover
                           trigger="click"
@@ -3002,7 +3013,6 @@ export default function TaskDetailPanel({
                                           ) : null}
                                         </span>
                                       </Tooltip>
-                                      <span className="detail-person-name">{getUserDisplayName(singleAssigneeUser)}</span>
                                     </div>
                                   )
                                 })()

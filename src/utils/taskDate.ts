@@ -6,10 +6,14 @@ export function inheritParentStartForTasks(tasks: Task[], parent: Task): Task[] 
       return task
     }
 
-    // 子任务开始时间跟随父任务，前端展示和本地缓存都以父任务为准。
+    // 子任务没有单独配置开始时间时，前端展示回退到父任务开始时间；一旦子任务自己设置了开始时间，就以子任务自身为准。
     return {
       ...task,
-      start: parent.start ? { ...parent.start } : undefined,
+      start: task.start
+        ? { ...task.start }
+        : parent.start
+          ? { ...parent.start }
+          : undefined,
     }
   })
 }

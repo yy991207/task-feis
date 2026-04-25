@@ -78,6 +78,14 @@ if (!componentSource.includes('sidebar-drag-preview')) {
   failures.push(`${componentFile}: 需要为侧栏拖拽预览提供单独的预览节点，避免把整行区域一起截图进拖拽对象。`)
 }
 
+if (componentSource.includes('buildEmptyGroupPlaceholderNode') && componentSource.includes('isLeaf: true')) {
+  failures.push(`${componentFile}: 空分组占位节点不能继续是 isLeaf: true，否则 rc-tree 不会把它稳定当成可接收清单的容器目标。`)
+}
+
+if (!componentSource.includes('switcherIcon: () => false')) {
+  failures.push(`${componentFile}: 空分组占位节点需要隐藏展开箭头，但底层仍要按可接收拖拽的容器节点处理。`)
+}
+
 if (!componentSource.includes('preview.style.width = `${sourceTitle.offsetWidth}px`')) {
   failures.push(`${componentFile}: 拖拽预览宽度应与清单对象本体一致，不能继续随名称长短变化。`)
 }
@@ -130,6 +138,9 @@ const requiredStyleSnippets = [
   '0 8px 24px rgba(31, 35, 41, 0.12)',
   'width: 100%;',
   '.ant-tree-treenode.drag-over > .ant-tree-node-content-wrapper',
+  '.empty-group-placeholder.drag-over > .ant-tree-node-content-wrapper',
+  '.empty-group-placeholder.drop-target > .ant-tree-node-content-wrapper',
+  'min-height: 44px;',
   '.sidebar-drop-indicator',
   'height: 2px;',
   'background: #3370ff;',

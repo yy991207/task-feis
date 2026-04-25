@@ -5812,7 +5812,6 @@ function TaskDateCell({
   onUpdate,
 }: TaskDateCellProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const isSubtask = Boolean(task.parent_task_guid)
   const date = task[field] ? dayjs(Number(task[field]!.timestamp)) : null
   const timestamp = task[field]?.timestamp
   const [showTimeEnabled, setShowTimeEnabled] = useState(Boolean(date && !date.startOf('day').isSame(date)))
@@ -5827,11 +5826,6 @@ function TaskDateCell({
   }, [timestamp])
 
   const handleDateChange = async (nextDate: dayjs.Dayjs | null) => {
-    if (field === 'start' && isSubtask) {
-      message.warning('子任务开始时间跟随父任务，不能单独修改')
-      return
-    }
-
     const patch: Partial<Task> = {}
     if (nextDate) {
       patch[field] = { timestamp: nextDate.valueOf().toString(), is_all_day: false }
@@ -5862,12 +5856,34 @@ function TaskDateCell({
       ].filter(Boolean).join(' ')}
       onClick={(e) => e.stopPropagation()}
     >
-      {field === 'start' && isSubtask ? (
+      <Popover
+        trigger="click"
+        placement="bottomLeft"
+        open={pickerOpen}
+        content={
+          <div style={{ width: 280 }}>
+            <DateValuePanel
+              value={date}
+              showTimeToggle={showTimeEnabled}
+              datePlaceholder={field === 'start' ? '开始日期' : '截止日期'}
+              timePlaceholder={field === 'start' ? '开始时间' : '截止时间'}
+              onChange={(value) => void handleDateChange(value)}
+              onShowTimeToggle={setShowTimeEnabled}
+              onClear={() => void handleDateChange(null)}
+              disabledDate={
+                field === 'due'
+                  ? (current) => current && current < dayjs().startOf('day')
+                  : undefined
+              }
+            />
+          </div>
+        }
+        onOpenChange={setPickerOpen}
+      >
         <Button
           type="text"
-          className="task-edit-trigger task-edit-date-trigger date-trigger-readonly"
+          className="task-edit-trigger task-edit-date-trigger"
           block
-          title="子任务开始时间跟随父任务，不能单独修改"
           onClick={(event) => event.stopPropagation()}
         >
           {date ? (
@@ -5876,45 +5892,7 @@ function TaskDateCell({
             <CalendarOutlined className="empty-date-icon" />
           )}
         </Button>
-      ) : (
-        <Popover
-          trigger="click"
-          placement="bottomLeft"
-          open={pickerOpen}
-          content={
-            <div style={{ width: 280 }}>
-              <DateValuePanel
-                value={date}
-                showTimeToggle={showTimeEnabled}
-                datePlaceholder={field === 'start' ? '开始日期' : '截止日期'}
-                timePlaceholder="截止日期"
-                onChange={(value) => void handleDateChange(value)}
-                onShowTimeToggle={setShowTimeEnabled}
-                onClear={() => void handleDateChange(null)}
-                disabledDate={
-                  field === 'due'
-                    ? (current) => current && current < dayjs().startOf('day')
-                    : undefined
-                }
-              />
-            </div>
-          }
-          onOpenChange={setPickerOpen}
-        >
-          <Button
-            type="text"
-            className="task-edit-trigger task-edit-date-trigger"
-            block
-            onClick={(event) => event.stopPropagation()}
-          >
-            {date ? (
-              renderOverflowTooltip(formatDateValueLabel(date), <span className="date-text">{formatDateValueLabel(date)}</span>)
-            ) : (
-              <CalendarOutlined className="empty-date-icon" />
-            )}
-          </Button>
-        </Popover>
-      )}
+      </Popover>
     </div>
   )
 }
