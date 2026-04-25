@@ -920,13 +920,14 @@ body.detail-panel-resizing {
 
 .detail-attachment-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
 }
 
 .detail-comment-preview-list,
 .comment-attachment-list--posted {
+  display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   gap: 8px;
@@ -1023,6 +1024,10 @@ body.detail-panel-resizing {
     border-color: #c9cdd4;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 
+    .attachment-action {
+      opacity: 1;
+    }
+
     .attachment-delete {
       opacity: 1;
     }
@@ -1078,7 +1083,8 @@ body.detail-panel-resizing {
     border-radius: 6px;
     color: #86909c;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s, color 0.2s;
 
     &:hover {
       background: #f2f3f5;
@@ -1475,8 +1481,8 @@ body.detail-panel-resizing {
 }
 
 .detail-description-image-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }

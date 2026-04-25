@@ -5222,6 +5222,7 @@ function CustomFieldCell({
       >
         <Input
           size="middle"
+          className="task-edit-input"
           value={textValue}
           placeholder="输入文本"
           autoFocus
@@ -5241,6 +5242,7 @@ function CustomFieldCell({
       >
         <Input
           size="middle"
+          className="task-edit-input"
           value={numberValue}
           placeholder="输入数字"
           autoFocus

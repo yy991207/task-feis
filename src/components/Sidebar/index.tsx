@@ -66,6 +66,14 @@ import {
 } from '@/services/teamService'
 import { appConfig } from '@/config/appConfig'
 import EditableInput from '@/components/EditableInput'
+import {
+  EMPTY_GROUP_PLACEHOLDER_PREFIX,
+  applyTasklistDrop,
+  encodeGroupKey,
+  encodeTasklistKey,
+  getProjectGroupId,
+  getRelativeDropPosition,
+} from './tasklistDrag'
 import './index.less'
 
 const { Title, Text } = Typography
@@ -94,10 +102,6 @@ interface SidebarProps {
 
 type CreatingTarget = 'root' | string
 
-const encodeTasklistKey = (guid: string) => `tl:${guid}`
-const encodeGroupKey = (id: string) => `grp:${id}`
-const EMPTY_GROUP_PLACEHOLDER_PREFIX = 'grp-empty:'
-
 const buildEmptyGroupPlaceholderNode = (groupId: string): DataNode => ({
   key: `${EMPTY_GROUP_PLACEHOLDER_PREFIX}${groupId}`,
   title: <div className="empty-group-drop-hint">可拖拽清单加入该分组</div>,
@@ -109,25 +113,11 @@ const buildEmptyGroupPlaceholderNode = (groupId: string): DataNode => ({
 function buildSidebarDragNodeClassName(
   nodeKey: string,
   draggingTasklistKey: string | null,
-  dropIndicatorState: {
-    key: string
-    dropPosition: -1 | 0 | 1 | null
-  } | null,
   baseClassName?: string,
 ): string {
   const classNames = [baseClassName]
   if (draggingTasklistKey === nodeKey) {
     classNames.push('dragging')
-  }
-  if (dropIndicatorState?.key === nodeKey) {
-    classNames.push('drop-target')
-    if (dropIndicatorState.dropPosition === -1) {
-      classNames.push('drop-target-gap-top')
-    } else if (dropIndicatorState.dropPosition === 1) {
-      classNames.push('drop-target-gap-bottom')
-    } else {
-      classNames.push('drop-target-inner')
-    }
   }
   return classNames.filter(Boolean).join(' ')
 }
@@ -150,11 +140,6 @@ function generateDefaultTasklistName(projects: Project[]): string {
   }, 0)
 
   return `任务清单 ${maxIndex + 1}`
-}
-
-function getProjectGroupId(project: Project): string {
-  // 新接口返回 user_group_id；保留 group_id 作为旧数据兼容，避免切换期间侧栏丢分组。
-  return project.user_group_id || project.group_id
 }
 
 export default function Sidebar({
@@ -182,10 +167,6 @@ export default function Sidebar({
   const [shareSubmitting, setShareSubmitting] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(['root'])
   const [draggingTasklistKey, setDraggingTasklistKey] = useState<string | null>(null)
-  const [dropIndicatorState, setDropIndicatorState] = useState<{
-    key: string
-    dropPosition: -1 | 0 | 1 | null
-  } | null>(null)
   const shareRequestIdRef = useRef(0)
 
   useEffect(() => {
@@ -744,7 +725,6 @@ export default function Sidebar({
       className: buildSidebarDragNodeClassName(
         encodeTasklistKey(proj.project_id),
         draggingTasklistKey,
-        dropIndicatorState,
       ),
     }))
 
@@ -756,7 +736,6 @@ export default function Sidebar({
       className: buildSidebarDragNodeClassName(
         'root',
         draggingTasklistKey,
-        dropIndicatorState,
         'tree-section',
       ),
     }
@@ -774,7 +753,6 @@ export default function Sidebar({
             className: buildSidebarDragNodeClassName(
               encodeTasklistKey(proj.project_id),
               draggingTasklistKey,
-              dropIndicatorState,
             ),
           }))
         : [buildEmptyGroupPlaceholderNode(group.group_id)]
@@ -787,7 +765,6 @@ export default function Sidebar({
         className: buildSidebarDragNodeClassName(
           encodeGroupKey(group.group_id),
           draggingTasklistKey,
-          dropIndicatorState,
           'tree-section',
         ),
         icon: ({ expanded }: { expanded?: boolean }) =>
@@ -813,7 +790,6 @@ export default function Sidebar({
             className: buildSidebarDragNodeClassName(
               encodeGroupKey(draftGroupUid),
               draggingTasklistKey,
-              dropIndicatorState,
               'tree-section',
             ),
           },
@@ -834,7 +810,6 @@ export default function Sidebar({
     openedProjectMenuId,
     activeKey,
     draggingTasklistKey,
-    dropIndicatorState,
   ])
 
   const selectableTreeKeySet = useMemo(() => {
@@ -924,74 +899,33 @@ export default function Sidebar({
       return
     }
 
-    // Tasklist node drag → determine target group
     if (!dragKey.startsWith('tl:')) return
     const projectId = dragKey.slice(3)
     const dropKey = String(info.node.key)
-    const currentProject = projects.find((p) => p.project_id === projectId)
-    if (!currentProject) return
 
-    let targetGroupId: string | null = null
+    const dropPosition = getRelativeDropPosition(
+      info.dropPosition,
+      'pos' in info.node ? String(info.node.pos) : undefined,
+    )
+    const dropResult = applyTasklistDrop({
+      projects,
+      projectId,
+      dropKey,
+      dropPosition,
+      defaultGroupId: defaultGroup?.group_id,
+    })
+    if (!dropResult) return
 
-    if (dropKey.startsWith('grp:')) {
-      // Dropped onto a group node (whether gap or into)
-      targetGroupId = dropKey.slice(4)
-    } else if (dropKey.startsWith(EMPTY_GROUP_PLACEHOLDER_PREFIX)) {
-      // Dropped onto空分组占位提示行时，仍然落到该分组。
-      targetGroupId = dropKey.slice(EMPTY_GROUP_PLACEHOLDER_PREFIX.length)
-    } else if (dropKey === 'root') {
-      // Dropped onto the root "任务清单" section → default group
-      targetGroupId = defaultGroup?.group_id ?? null
-    } else if (dropKey.startsWith('tl:')) {
-      // Dropped next to another tasklist → use that tasklist's group
-      const droppedProjectId = dropKey.slice(3)
-      const ownerProject = projects.find((p) => p.project_id === droppedProjectId)
-      targetGroupId = ownerProject ? getProjectGroupId(ownerProject) : defaultGroup?.group_id ?? null
-    }
-
-    if (!targetGroupId) return
-
-    // If the target group is the same as current, we treat it as local-only reorder.
-    // (Backend has no project sort_order endpoint, so order isn't persisted.)
-    if (getProjectGroupId(currentProject) === targetGroupId) {
-      // reorder: rebuild projects array so the dragged one lands at the drop position
-      const sameGroup = projects.filter((p) => getProjectGroupId(p) === targetGroupId)
-      const others = projects.filter((p) => getProjectGroupId(p) !== targetGroupId)
-      const fromIndex = sameGroup.findIndex((p) => p.project_id === projectId)
-      if (fromIndex === -1) return
-
-      let toIndex: number
-      if (dropKey.startsWith('tl:')) {
-        const droppedProjectId = dropKey.slice(3)
-        const dropIndex = sameGroup.findIndex((p) => p.project_id === droppedProjectId)
-        if (dropIndex === -1) return
-        toIndex = info.dropPosition === -1 ? dropIndex : dropIndex + 1
-      } else {
-        // Dropped onto group/root gap → append to end
-        toIndex = sameGroup.length
-      }
-
-      if (fromIndex < toIndex) toIndex -= 1
-      if (toIndex === fromIndex) return
-
-      const reordered = [...sameGroup]
-      const [moved] = reordered.splice(fromIndex, 1)
-      reordered.splice(toIndex, 0, moved)
-      setProjects([...others, ...reordered])
+    // 后端暂时没有清单排序接口，所以同组拖拽只更新本地顺序；跨组拖拽先乐观更新 UI，再调用移动接口。
+    if (!dropResult.changedGroup) {
+      setProjects(dropResult.projects)
       return
     }
 
-    // Different group → optimistic update + API call
     const prevProjects = projects
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.project_id === projectId
-          ? { ...p, group_id: targetGroupId!, user_group_id: targetGroupId! }
-          : p,
-      ),
-    )
+    setProjects(dropResult.projects)
 
-    moveProjectToGroup(projectId, targetGroupId).catch((err: unknown) => {
+    moveProjectToGroup(projectId, dropResult.targetGroupId).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : '操作失败'
       message.error(msg)
       setProjects(prevProjects)
@@ -1075,49 +1009,11 @@ export default function Sidebar({
             }
             return false
           }}
-          dropIndicatorRender={(props) => {
-            if (!dropIndicatorState || props.dropPosition === 0) {
-              return null
-            }
-            const placement =
-              props.dropPosition === -1
-                ? 'drag-drop-indicator gap-top'
-                : props.dropPosition === 1
-                  ? 'drag-drop-indicator gap-bottom'
-                  : ''
-            return (
-              <div
-                style={{
-                  left: -props.dropLevelOffset * props.indent + 8,
-                  right: 10,
-                }}
-                className={placement}
-              />
-            )
-          }}
           onDragStart={(info) => {
             setDraggingTasklistKey(String(info.node.key))
-            setDropIndicatorState(null)
-          }}
-          onDragOver={(info) => {
-            const nodeKey = String(info.node.key)
-            const nativeEvent = info.event.nativeEvent as DragEvent
-            const dropPosition =
-              typeof nativeEvent.offsetY === 'number'
-                ? nativeEvent.offsetY < 10
-                  ? -1
-                  : nativeEvent.offsetY > 24
-                    ? 1
-                    : 0
-                : 0
-            setDropIndicatorState({
-              key: nodeKey,
-              dropPosition,
-            })
           }}
           onDragEnd={() => {
             setDraggingTasklistKey(null)
-            setDropIndicatorState(null)
           }}
           onDrop={handleDrop}
           switcherIcon={({ expanded }) =>

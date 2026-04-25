@@ -61,11 +61,43 @@ async function testStylesTargetAntdControlsDirectly() {
   assert.doesNotMatch(style, /\.inline-create-field-shell \{/)
 }
 
+async function testTypedCustomFieldEditorsReuseRoundedTaskInput() {
+  const source = await readSource('src/components/TaskTable/index.tsx')
+  const style = await readSource('src/components/TaskTable/index.less')
+
+  const textEditorStart = source.indexOf("if (field.type === 'text') {")
+  const textEditorEnd = source.indexOf("if (field.type === 'number') {", textEditorStart)
+  const textEditorSource =
+    textEditorStart >= 0 && textEditorEnd >= 0
+      ? source.slice(textEditorStart, textEditorEnd)
+      : source
+
+  const numberEditorStart = source.indexOf("if (field.type === 'number') {")
+  const numberEditorEnd = source.indexOf("if (field.type === 'datetime') {", numberEditorStart)
+  const numberEditorSource =
+    numberEditorStart >= 0 && numberEditorEnd >= 0
+      ? source.slice(numberEditorStart, numberEditorEnd)
+      : source
+
+  const customFieldEditorStyleStart = style.indexOf('.custom-field-editor {')
+  const customFieldEditorStyleEnd = style.indexOf('.custom-field-editor-select {', customFieldEditorStyleStart)
+  const customFieldEditorStyle =
+    customFieldEditorStyleStart >= 0 && customFieldEditorStyleEnd >= 0
+      ? style.slice(customFieldEditorStyleStart, customFieldEditorStyleEnd)
+      : style
+
+  assert.match(textEditorSource, /<Input[\s\S]*className="task-edit-input"/)
+  assert.match(numberEditorSource, /<Input[\s\S]*className="task-edit-input"/)
+  assert.doesNotMatch(customFieldEditorStyle, /\.ant-input,\s*\.ant-picker,\s*\.ant-select-selector \{[\s\S]*border-radius: 0 !important;/)
+  assert.match(customFieldEditorStyle, /\.ant-input,\s*\.ant-picker,\s*\.ant-select-selector \{[\s\S]*border-radius: 8px !important;/)
+}
+
 async function main() {
   await testNewTaskEntryUsesBlockContainer()
   await testInlineCreateUsesAntdComposition()
   await testExistingTaskEditingUsesSameAntdShell()
   await testStylesTargetAntdControlsDirectly()
+  await testTypedCustomFieldEditorsReuseRoundedTaskInput()
   console.log('task table inline create style check ok')
 }
 
