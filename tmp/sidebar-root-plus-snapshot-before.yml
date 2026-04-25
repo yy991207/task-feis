@@ -1,0 +1,146 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - button "unordered-list" [ref=e9] [cursor=pointer]:
+          - img "unordered-list" [ref=e11]:
+            - img [ref=e12]
+        - heading "任务" [level=5] [ref=e14]
+        - generic [ref=e15]:
+          - button "user-switch" [ref=e16] [cursor=pointer]:
+            - img "user-switch" [ref=e18]
+          - button "bell" [ref=e22] [cursor=pointer]:
+            - img "bell" [ref=e24]
+      - menu [ref=e27]:
+        - menuitem "user 我负责的" [ref=e28] [cursor=pointer]:
+          - img "user" [ref=e29]:
+            - img [ref=e30]
+          - generic [ref=e32]: 我负责的
+        - menuitem "eye 我关注的" [ref=e33] [cursor=pointer]:
+          - img "eye" [ref=e34]:
+            - img [ref=e35]
+          - generic [ref=e37]: 我关注的
+        - menuitem "history 动态" [ref=e38] [cursor=pointer]:
+          - img "history" [ref=e39]:
+            - img [ref=e40]
+          - generic [ref=e42]: 动态
+      - separator [ref=e43]
+      - menu [ref=e44]:
+        - text: 快速访问
+        - group [ref=e45]:
+          - menuitem "file-text 全部任务" [ref=e46] [cursor=pointer]:
+            - img "file-text" [ref=e47]
+            - generic [ref=e50]: 全部任务
+          - menuitem "ordered-list 我创建的" [ref=e51] [cursor=pointer]:
+            - img "ordered-list" [ref=e52]
+            - generic [ref=e55]: 我创建的
+          - menuitem "appstore 我分配的" [ref=e56] [cursor=pointer]:
+            - img "appstore" [ref=e57]
+            - generic [ref=e60]: 我分配的
+          - menuitem "star 已完成" [ref=e61] [cursor=pointer]:
+            - img "star" [ref=e62]
+            - generic [ref=e65]: 已完成
+      - separator [ref=e66]
+      - tree [ref=e69]:
+        - generic [ref=e72]:
+          - treeitem "caret-down 任务清单 plus" [expanded] [ref=e204]:
+            - img "caret-down" [ref=e206] [cursor=pointer]
+            - generic [ref=e76] [cursor=pointer]
+          - treeitem "drag file-done Q2 市场活动主题 ellipsis" [ref=e209]:
+            - img "drag" [ref=e211]
+            - generic [ref=e216] [cursor=pointer]
+          - treeitem "caret-down 新分组 ellipsis plus" [expanded] [ref=e88]:
+            - img "caret-down" [ref=e90] [cursor=pointer]
+            - generic [ref=e95] [cursor=pointer]
+          - treeitem "drag file-done 任务清单 1334 ellipsis" [ref=e229]:
+            - img "drag" [ref=e231]
+            - generic [ref=e236] [cursor=pointer]
+          - treeitem "caret-down 接口测试分组-1777108525428-已改名 ellipsis plus" [expanded] [ref=e117]:
+            - img "caret-down" [ref=e119] [cursor=pointer]
+            - generic [ref=e124] [cursor=pointer]
+          - treeitem "可拖拽清单加入该分组" [ref=e142]:
+            - generic [ref=e145] [cursor=pointer]: 可拖拽清单加入该分组
+      - button "plus 新建清单分组" [ref=e147] [cursor=pointer]:
+        - img "plus" [ref=e149]:
+          - img [ref=e150]
+        - generic [ref=e153]: 新建清单分组
+  - main [ref=e155]:
+    - generic [ref=e156]:
+      - heading "我负责的" [level=5] [ref=e160]
+      - generic [ref=e162]:
+        - button "filter 全部任务" [ref=e165] [cursor=pointer]:
+          - img "filter" [ref=e167]:
+            - img [ref=e168]
+          - generic [ref=e170]: 全部任务
+        - button "filter 筛选" [ref=e172] [cursor=pointer]:
+          - img "filter" [ref=e174]:
+            - img [ref=e175]
+          - generic [ref=e177]: 筛选
+        - button "sort-ascending 排序 · 截止时间" [ref=e179] [cursor=pointer]:
+          - img "sort-ascending" [ref=e181]:
+            - img [ref=e182]
+          - generic [ref=e184]: 排序 · 截止时间
+        - button "setting 字段配置" [ref=e186] [cursor=pointer]:
+          - img "setting" [ref=e188]:
+            - img [ref=e189]
+          - generic [ref=e191]: 字段配置
+      - table [ref=e255]:
+        - rowgroup [ref=e262]:
+          - row "font-size 任务标题 拖拽调整字段宽度 clock-circle 开始时间 打开字段菜单 拖拽调整字段宽度 calendar 截止时间 打开字段菜单 拖拽调整字段宽度 user 创建人 打开字段菜单 拖拽调整字段宽度 创建时间 打开字段菜单 拖拽调整字段宽度" [ref=e263]:
+            - columnheader "font-size 任务标题 拖拽调整字段宽度" [ref=e264]
+            - columnheader "clock-circle 开始时间 打开字段菜单 拖拽调整字段宽度" [ref=e272]
+            - columnheader "calendar 截止时间 打开字段菜单 拖拽调整字段宽度" [ref=e283]
+            - columnheader "user 创建人 打开字段菜单 拖拽调整字段宽度" [ref=e293]
+            - columnheader "创建时间 打开字段菜单 拖拽调整字段宽度" [ref=e303]
+            - columnheader [ref=e309]
+        - rowgroup [ref=e310]:
+          - generic [ref=e311]:
+            - img [ref=e312]
+            - generic [ref=e315]: 任务标题
+          - generic [ref=e316]:
+            - generic [ref=e318]
+            - button
+          - generic [ref=e324]:
+            - generic [ref=e326]
+            - button
+          - generic [ref=e331]:
+            - generic [ref=e333]
+            - button
+          - generic [ref=e338]:
+            - generic [ref=e340]: 创建时间
+            - button
+          - row "caret-down 默认分组 4" [ref=e341]:
+            - cell "caret-down 默认分组 4" [ref=e342]
+            - cell [ref=e349]
+            - cell [ref=e350]
+            - cell [ref=e351]
+            - cell [ref=e352]
+            - cell [ref=e353]
+          - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月24日 15:01" [ref=e354] [cursor=pointer]:
+            - cell "撰写活动文案" [ref=e355]
+            - cell "4月25日 17:00" [ref=e367]
+            - cell "5月1日 02:00" [ref=e371]
+            - cell "管理员" [ref=e375]
+            - cell "4月24日 15:01" [ref=e378]
+            - cell [ref=e379]
+          - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月24日 15:01" [ref=e380] [cursor=pointer]:
+            - cell "撰写活动文案" [ref=e381]
+            - cell "4月25日 17:00" [ref=e393]
+            - cell "5月1日 02:00" [ref=e397]
+            - cell "管理员" [ref=e401]
+            - cell "4月24日 15:01" [ref=e404]
+            - cell [ref=e405]
+          - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月25日 15:57" [ref=e406] [cursor=pointer]:
+            - cell "撰写活动文案" [ref=e407]
+            - cell "4月25日 17:00" [ref=e419]
+            - cell "5月1日 02:00" [ref=e423]
+            - cell "管理员" [ref=e427]
+            - cell "4月25日 15:57" [ref=e430]
+            - cell [ref=e431]
+          - row "撰写活动文案 4月25日 17:00 5月1日 02:00 管理员 4月25日 15:57" [ref=e432] [cursor=pointer]:
+            - cell "撰写活动文案" [ref=e433]
+            - cell "4月25日 17:00" [ref=e445]
+            - cell "5月1日 02:00" [ref=e449]
+            - cell "管理员" [ref=e453]
+            - cell "4月25日 15:57" [ref=e456]
+            - cell [ref=e457]

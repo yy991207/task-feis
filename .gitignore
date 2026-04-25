@@ -25,3 +25,9 @@ dist-ssr
 config.yaml
 tests/
 doc/*
+.playwright-mcp/
+scripts/
+.tmp/
+.claude/
+doc/
+docs/
