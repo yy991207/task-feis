@@ -78,6 +78,10 @@ if (!componentSource.includes('sidebar-drag-preview')) {
   failures.push(`${componentFile}: 需要为侧栏拖拽预览提供单独的预览节点，避免把整行区域一起截图进拖拽对象。`)
 }
 
+if (!componentSource.includes('preview.style.width = `${sourceTitle.offsetWidth}px`')) {
+  failures.push(`${componentFile}: 拖拽预览宽度应与清单对象本体一致，不能继续随名称长短变化。`)
+}
+
 if (styleSource.includes('.ant-tree-treenode.dragging > .ant-tree-node-content-wrapper {\n    background: #eff0f1 !important;')) {
   failures.push(`${styleFile}: 拖拽源节点不应继续使用灰色背景。`)
 }
@@ -112,7 +116,7 @@ const requiredStyleSnippets = [
   '.sidebar-drag-preview__label',
   'border: 1px solid rgba(51, 112, 255, 0.18);',
   '0 8px 24px rgba(31, 35, 41, 0.12)',
-  'min-width: 120px;',
+  'width: 100%;',
   '.ant-tree-treenode.drag-over > .ant-tree-node-content-wrapper',
   '.sidebar-drop-indicator',
   'height: 2px;',

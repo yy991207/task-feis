@@ -827,6 +827,7 @@ export default function Sidebar({
 
     const preview = document.createElement('div')
     preview.className = 'sidebar-drag-preview'
+    preview.style.width = `${sourceTitle.offsetWidth}px`
 
     const icon = sourceTitle.querySelector('.tasklist-icon')?.cloneNode(true)
     if (icon) {
