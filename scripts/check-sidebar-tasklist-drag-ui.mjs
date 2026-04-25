@@ -78,12 +78,20 @@ if (!componentSource.includes('sidebar-drag-preview')) {
   failures.push(`${componentFile}: 需要为侧栏拖拽预览提供单独的预览节点，避免把整行区域一起截图进拖拽对象。`)
 }
 
-if (componentSource.includes('buildEmptyGroupPlaceholderNode') && componentSource.includes('isLeaf: true')) {
-  failures.push(`${componentFile}: 空分组占位节点不能继续是 isLeaf: true，否则 rc-tree 不会把它稳定当成可接收清单的容器目标。`)
+if (!componentSource.includes('handleEmptyGroupDragOver')) {
+  failures.push(`${componentFile}: 空分组占位需要单独的原生 onDragOver 处理，否则非 draggable 节点收不到 rc-tree 的拖拽落点事件。`)
 }
 
-if (!componentSource.includes('switcherIcon: () => false')) {
-  failures.push(`${componentFile}: 空分组占位节点需要隐藏展开箭头，但底层仍要按可接收拖拽的容器节点处理。`)
+if (!componentSource.includes('handleEmptyGroupDrop')) {
+  failures.push(`${componentFile}: 空分组占位需要单独的原生 onDrop 处理，才能真正把清单拖进空分组。`)
+}
+
+if (!componentSource.includes('emptyGroupDropTargetId')) {
+  failures.push(`${componentFile}: 空分组占位需要单独记录拖拽悬停态，给用户明确的可放置反馈。`)
+}
+
+if (!componentSource.includes("empty-group-placeholder drop-target")) {
+  failures.push(`${componentFile}: 空分组占位在拖拽悬停时需要挂上 drop-target 类，复用当前高亮样式。`)
 }
 
 if (!componentSource.includes('preview.style.width = `${sourceTitle.offsetWidth}px`')) {

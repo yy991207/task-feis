@@ -20,6 +20,7 @@ import ActivityView from '@/components/ActivityView'
 import PlaceholderView from '@/components/PlaceholderView'
 import TaskDetailPanel from '@/components/TaskDetailPanel'
 import TeamsManagerView from '@/components/TeamsManagerView'
+import TasklistOverview from '@/components/TasklistOverview'
 import { getViewConfig } from '@/config/viewConfig'
 import type { Section } from '@/types/task'
 import './TaskList.less'
@@ -46,6 +47,8 @@ export default function TaskListPage() {
   const [activeNav, setActiveNav] = useState<NavKey>('my-assigned')
   const [tasks, setTasks] = useState<Task[]>([])
   const [tasklists, setTasklists] = useState<Tasklist[]>([])
+  const [projectItems, setProjectItems] = useState<Project[]>([])
+  const [involvedProjectIds, setInvolvedProjectIds] = useState<string[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(312)
@@ -118,6 +121,8 @@ export default function TaskListPage() {
         return
       }
       let tls = projects.map(projectToTasklist)
+      let nextProjectItems = projects
+      let nextInvolvedProjectIds = involvedProjectIds
 
       // Load sections for the active tasklist so drag-and-drop has real section_id
       if (typeof activeNav === 'object' && activeNav.type === 'tasklist') {
@@ -175,23 +180,42 @@ export default function TaskListPage() {
           case 'activity':
             params.creator_id = currentUserId
             break
+          case 'tasklists-root':
+            break
         }
-        try {
-          const { items } = await listTasks(params)
-          let filtered = items
-          if (activeNav === 'my-assigned-quick') {
-            filtered = items.filter((t) => {
-              // “我分配的”只展示我创建且已经分配负责人的任务；这里要同时兼容新旧负责人字段。
-              const assignedUserIds = [
-                ...(t.assignee_ids ?? []),
-                ...(t.assignee_id ? [t.assignee_id] : []),
-              ].filter(Boolean)
-              return assignedUserIds.length > 0
+        if (activeNav === 'tasklists-root') {
+          try {
+            // 清单接口当前没有直接返回“我参与的清单”字段，这里复用“我参与的任务”反推清单集合，
+            // 这样能保证总览页覆盖全部清单，同时把“我参与的”tab 算准。
+            const { items } = await listTasks({
+              involved_user_id: currentUserId,
+              page_size: 100,
             })
+            nextInvolvedProjectIds = Array.from(
+              new Set(items.map((item) => item.project_id).filter(Boolean)),
+            )
+          } catch {
+            nextInvolvedProjectIds = []
           }
-          nextTasks = filtered.map((t) => apiTaskToTask(t))
-        } catch {
           nextTasks = []
+        } else {
+          try {
+            const { items } = await listTasks(params)
+            let filtered = items
+            if (activeNav === 'my-assigned-quick') {
+              filtered = items.filter((t) => {
+                // “我分配的”只展示我创建且已经分配负责人的任务；这里要同时兼容新旧负责人字段。
+                const assignedUserIds = [
+                  ...(t.assignee_ids ?? []),
+                  ...(t.assignee_id ? [t.assignee_id] : []),
+                ].filter(Boolean)
+                return assignedUserIds.length > 0
+              })
+            }
+            nextTasks = filtered.map((t) => apiTaskToTask(t))
+          } catch {
+            nextTasks = []
+          }
         }
       } else if (activeNav.type === 'tasklist') {
         try {
@@ -211,6 +235,8 @@ export default function TaskListPage() {
         return
       }
 
+      setProjectItems(nextProjectItems)
+      setInvolvedProjectIds(nextInvolvedProjectIds)
       setTasklists(tls)
       setTasks(nextTasks)
       setLoading(false)
@@ -363,6 +389,19 @@ export default function TaskListPage() {
 
     if (activeNav === 'settings') {
       return <TeamsManagerView />
+    }
+
+    if (activeNav === 'tasklists-root') {
+      return (
+        <TasklistOverview
+          projects={projectItems}
+          involvedProjectIds={involvedProjectIds}
+          onOpenTasklist={(projectId) => {
+            setActiveNav({ type: 'tasklist', guid: projectId })
+            setSelectedTask(null)
+          }}
+        />
+      )
     }
 
     // 其他视图都用 TaskTable，基于 viewConfig 差异化渲染

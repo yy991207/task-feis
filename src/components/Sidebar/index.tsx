@@ -55,11 +55,9 @@ import {
 import EditableInput from '@/components/EditableInput'
 import NameOverflowPreview from '@/components/NameOverflowPreview'
 import {
-  EMPTY_GROUP_PLACEHOLDER_PREFIX,
   applyTasklistDrop,
   encodeGroupKey,
   encodeTasklistKey,
-  getProjectGroupId,
   getRelativeDropPosition,
 } from './tasklistDrag'
 import './index.less'
@@ -71,6 +69,7 @@ export type NavKey =
   | 'my-followed'
   | 'activity'
   | 'from-project'
+  | 'tasklists-root'
   | 'all-tasks'
   | 'my-created'
   | 'my-assigned-quick'
@@ -89,6 +88,18 @@ interface SidebarProps {
 }
 
 type CreatingTarget = 'root' | string
+
+const EMPTY_GROUP_PLACEHOLDER_PREFIX = 'grp-empty:'
+
+function getProjectGroupId(project: Project, groups: ProjectGroup[]): string | null {
+  if (project.user_group_id) {
+    return project.user_group_id
+  }
+  if (project.group_id && groups.some((group) => group.group_id === project.group_id)) {
+    return project.group_id
+  }
+  return null
+}
 
 const buildEmptyGroupPlaceholderNode = (groupId: string): DataNode => ({
   key: `${EMPTY_GROUP_PLACEHOLDER_PREFIX}${groupId}`,
@@ -220,7 +231,7 @@ export default function Sidebar({
     )
 
     try {
-      const groupId = target !== 'root' ? target : undefined
+      const groupId = target === 'root' ? defaultGroup?.group_id : target
       const defaultName = generateDefaultTasklistName(projects)
       const project = await createProject(defaultName, groupId)
       setProjects((prev) => [...prev, project])
@@ -401,15 +412,19 @@ export default function Sidebar({
   const projectsByGroup = useMemo(() => {
     const map: Record<string, Project[]> = {}
     for (const p of projects) {
-      const gid = getProjectGroupId(p)
+      const gid = getProjectGroupId(p, groups)
+      if (!gid) continue
       if (!map[gid]) map[gid] = []
       map[gid].push(p)
     }
     return map
-  }, [projects])
+  }, [groups, projects])
 
   const ungroupedProjects = useMemo(
-    () => defaultGroup ? (projectsByGroup[defaultGroup.group_id] || []) : projects.filter((p) => !groups.some((g) => g.group_id === getProjectGroupId(p))),
+    () =>
+      defaultGroup
+        ? (projectsByGroup[defaultGroup.group_id] || [])
+        : projects.filter((p) => !getProjectGroupId(p, groups)),
     [projects, groups, defaultGroup, projectsByGroup],
   )
 
@@ -608,7 +623,7 @@ export default function Sidebar({
       key: 'root',
       title: renderRootTitle(),
       children: rootChildren,
-      selectable: false,
+      selectable: true,
       className: buildSidebarDragNodeClassName(
         'root',
         draggingTasklistKey,
@@ -707,6 +722,9 @@ export default function Sidebar({
   }, [treeData])
 
   const selectedKeys = useMemo<React.Key[]>(() => {
+    if (activeKey === 'tasklists-root') {
+      return ['root']
+    }
     if (typeof activeKey === 'object' && activeKey.type === 'tasklist') {
       const nextKey = encodeTasklistKey(activeKey.guid)
       // Tree 内部会对受控 selectedKeys 做滚动定位，节点尚未渲染出来时要先拦住不存在的 key。
@@ -717,6 +735,10 @@ export default function Sidebar({
 
   const handleSelect: TreeProps['onSelect'] = (_keys, info) => {
     const key = String(info.node.key)
+    if (key === 'root') {
+      onNavigate('tasklists-root')
+      return
+    }
     if (key.startsWith('tl:')) {
       onNavigate({ type: 'tasklist', guid: key.slice(3) })
     }
@@ -724,6 +746,36 @@ export default function Sidebar({
 
   const handleExpand: TreeProps['onExpand'] = (keys) => {
     setExpandedKeys(keys)
+  }
+
+  const applySidebarTasklistDrop = (
+    projectId: string,
+    dropKey: string,
+    dropPosition: -1 | 0 | 1,
+  ) => {
+    const dropResult = applyTasklistDrop({
+      projects,
+      projectId,
+      dropKey,
+      dropPosition,
+      defaultGroupId: defaultGroup?.group_id,
+    })
+    if (!dropResult) return
+
+    // 后端暂时没有清单排序接口，所以同组拖拽只更新本地顺序；跨组拖拽先乐观更新 UI，再调用移动接口。
+    if (!dropResult.changedGroup) {
+      setProjects(dropResult.projects)
+      return
+    }
+
+    const prevProjects = projects
+    setProjects(dropResult.projects)
+
+    moveProjectToGroup(projectId, dropResult.targetGroupId).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : '操作失败'
+      message.error(msg)
+      setProjects(prevProjects)
+    })
   }
 
   const handleDrop: TreeProps['onDrop'] = (info) => {
@@ -783,29 +835,7 @@ export default function Sidebar({
       info.dropPosition,
       'pos' in info.node ? String(info.node.pos) : undefined,
     )
-    const dropResult = applyTasklistDrop({
-      projects,
-      projectId,
-      dropKey,
-      dropPosition,
-      defaultGroupId: defaultGroup?.group_id,
-    })
-    if (!dropResult) return
-
-    // 后端暂时没有清单排序接口，所以同组拖拽只更新本地顺序；跨组拖拽先乐观更新 UI，再调用移动接口。
-    if (!dropResult.changedGroup) {
-      setProjects(dropResult.projects)
-      return
-    }
-
-    const prevProjects = projects
-    setProjects(dropResult.projects)
-
-    moveProjectToGroup(projectId, dropResult.targetGroupId).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : '操作失败'
-      message.error(msg)
-      setProjects(prevProjects)
-    })
+    applySidebarTasklistDrop(projectId, dropKey, dropPosition)
   }
 
   const clearDragPreview = () => {
@@ -900,7 +930,7 @@ export default function Sidebar({
             icon: <DragOutlined className="tasklist-drag-handle" />,
             nodeDraggable: (node) => {
               const k = String(node.key)
-              return k.startsWith('tl:')
+              return k.startsWith('tl:') || k.startsWith('grp:')
             },
           }}
           allowDrop={({ dragNode, dropNode, dropPosition }) => {
