@@ -94,10 +94,6 @@ export default function DateValuePanel({
 
   const handleToggleChange = (checked: boolean) => {
     onShowTimeToggle(checked)
-    if (!value) {
-      return
-    }
-    onChange(applyDateValueDetail(value, checked, value))
   }
 
   return (
