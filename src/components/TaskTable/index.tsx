@@ -143,6 +143,13 @@ import {
   type ApiCustomField,
   type CustomFieldType as ApiCustomFieldType,
 } from '@/services/customFieldService'
+import type { UserFieldConfig } from '@/services/userFieldConfigService'
+import {
+  findTaskCustomFieldDisplayValue,
+  findTaskCustomFieldValue,
+  type TaskTableFieldConfig,
+  userFieldConfigToApiCustomField,
+} from '@/utils/taskCenterFieldConfig'
 import './index.less'
 
 const { Title } = Typography
@@ -320,7 +327,10 @@ const systemFieldIdToColumnKeyMap: Partial<Record<string, ExtendedColumnKey>> = 
 
 const toCustomFieldColumnKey = (guid: string): CustomFieldColumnKey => `custom:${guid}`
 
-function mergeRawCustomFieldList(fields: ApiCustomField[], field: ApiCustomField): ApiCustomField[] {
+function mergeRawCustomFieldList(
+  fields: TaskTableFieldConfig[],
+  field: TaskTableFieldConfig,
+): TaskTableFieldConfig[] {
   const nextFields = fields.some((item) => item.field_id === field.field_id)
     ? fields.map((item) => (item.field_id === field.field_id ? field : item))
     : [...fields, field]
@@ -631,10 +641,13 @@ function isFilterConditionValueEmpty(condition: FilterCondition, field: FilterFi
 
 function getTaskMemberLabels(task: Task, role: 'assignee' | 'follower', users: User[]): string[] {
   if (role === 'follower') {
-    const followerIds = new Set([
-      ...(task.participant_ids ?? []),
-      ...task.members.filter((member) => member.role === 'follower').map((member) => member.id),
-    ])
+    const followerIds = new Set(
+      (task.follower_ids && task.follower_ids.length > 0)
+        ? task.follower_ids
+        : task.members
+          .filter((member) => member.role === 'follower')
+          .map((member) => member.id),
+    )
     return Array.from(followerIds).map((id) => users.find((user) => user.id === id)?.name ?? id)
   }
 
@@ -662,14 +675,14 @@ function getTaskDateValue(task: Task, fieldKey: string): dayjs.Dayjs | null {
 
 function getTaskCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]): string[] {
   if (field.type === 'button') {
-    const displayValue = task.custom_fields_display?.[field.guid]
+    const displayValue = findTaskCustomFieldDisplayValue(task, field)
     if (typeof displayValue === 'string' && displayValue.trim()) {
       return [displayValue.trim()]
     }
     return []
   }
 
-  const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
+  const fieldValue = findTaskCustomFieldValue(task, field)
   if (!fieldValue) {
     return []
   }
@@ -866,6 +879,7 @@ interface TaskTableProps {
   tasks: Task[]
   sections?: Section[]
   tasklist?: Tasklist
+  externalFieldConfigs?: UserFieldConfig[]
   selectedTaskGuid?: string
   loading?: boolean
   statusFilter?: StatusFilterKey
@@ -1207,10 +1221,13 @@ function buildTaskAssigneeUsers(task: Task, users: User[]): User[] {
 }
 
 function buildTaskFollowerUsers(task: Task, users: User[]): User[] {
-  const followerIds = Array.from(new Set([
-    ...(task.participant_ids ?? []),
-    ...task.members.filter((member) => member.role === 'follower').map((member) => member.id),
-  ]))
+  const followerIds = Array.from(new Set(
+    (task.follower_ids && task.follower_ids.length > 0)
+      ? task.follower_ids
+      : task.members
+        .filter((member) => member.role === 'follower')
+        .map((member) => member.id),
+  ))
 
   return followerIds.map((id) => {
     const matchedUser = users.find((user) => user.id === id)
@@ -1297,6 +1314,7 @@ export default function TaskTable({
   tasks,
   sections,
   tasklist,
+  externalFieldConfigs,
   selectedTaskGuid,
   loading = false,
   statusFilter: controlledStatusFilter,
@@ -1520,7 +1538,7 @@ export default function TaskTable({
     options?: Array<{ key: string; label: string; color?: string | null }>
   } | null>(null)
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
-  const [rawCustomFields, setRawCustomFields] = useState<ApiCustomField[]>([])
+  const [rawCustomFields, setRawCustomFields] = useState<TaskTableFieldConfig[]>([])
   const isTasklistView = Boolean(tasklist)
   // 这轮只限制“创建”相关入口，现有编辑链路先保持不变，避免把权限改动扩大成整套重构。
   const canCreateInTasklist = canCurrentUserCreateInTasklist(tasklist, currentUser.id)
@@ -1529,7 +1547,7 @@ export default function TaskTable({
   void creatingCustomField
   void setCreatingCustomField
 
-  const apiToCustomFieldDef = (f: ApiCustomField): CustomFieldDef => ({
+  const apiToCustomFieldDef = (f: TaskTableFieldConfig): CustomFieldDef => ({
     guid: f.field_id,
     name: f.name,
     type:
@@ -1541,6 +1559,7 @@ export default function TaskTable({
         ? 'datetime'
         : (f.field_type as CustomFieldDef['type']),
     render_hint: f.render_hint ?? null,
+    alias_field_ids: f.alias_field_ids ?? [f.field_id],
     options: (f.options ?? []).map((o) => ({
       guid: o.id ?? o.label,
       name: o.label,
@@ -1560,7 +1579,7 @@ export default function TaskTable({
     return fallbackLabel
   }
 
-  function resolveRawFieldColumnKey(field: ApiCustomField): ExtendedColumnKey | null {
+  function resolveRawFieldColumnKey(field: TaskTableFieldConfig): ExtendedColumnKey | null {
     const mappedSystemColumnKey = systemFieldIdToColumnKeyMap[field.field_id]
     if (mappedSystemColumnKey) {
       return mappedSystemColumnKey
@@ -1572,7 +1591,7 @@ export default function TaskTable({
   }
 
   const buildVisibleColumnKeys = useCallback(
-    (fields: ApiCustomField[]) => {
+    (fields: TaskTableFieldConfig[]) => {
       const nextKeys = new Set<ExtendedColumnKey>()
       nextKeys.add('title')
       fields
@@ -1580,7 +1599,7 @@ export default function TaskTable({
           field,
           columnKey: resolveRawFieldColumnKey(field),
         }))
-      .filter((item): item is { field: ApiCustomField; columnKey: ExtendedColumnKey } =>
+      .filter((item): item is { field: TaskTableFieldConfig; columnKey: ExtendedColumnKey } =>
           item.columnKey !== null && item.field.is_visible !== false,
         )
         .sort((a, b) => a.field.sort_order - b.field.sort_order)
@@ -1591,7 +1610,7 @@ export default function TaskTable({
   )
 
   const applyCustomFieldList = (
-    fields: ApiCustomField[],
+    fields: TaskTableFieldConfig[],
     options?: { extraVisibleColumnKey?: ExtendedColumnKey | null },
   ) => {
     setRawCustomFields(fields)
@@ -1650,8 +1669,21 @@ export default function TaskTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasklist?.guid])
 
+  useEffect(() => {
+    if (tasklist) {
+      return
+    }
+    if (!externalFieldConfigs || externalFieldConfigs.length === 0) {
+      setRawCustomFields([])
+      setVisibleColumnKeys(config.columns)
+      return
+    }
+    applyCustomFieldList(externalFieldConfigs.map(userFieldConfigToApiCustomField))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.columns, externalFieldConfigs, tasklist])
+
   const reloadCustomFields = async (options?: {
-    fallbackField?: ApiCustomField
+    fallbackField?: TaskTableFieldConfig
     extraVisibleColumnKey?: ExtendedColumnKey | null
   }) => {
     if (!tasklist) return
@@ -2752,21 +2784,27 @@ export default function TaskTable({
       }),
   )
   const persistedFieldOptionMap = new Map<ExtendedColumnKey, FieldOption>()
+  const configuredColumnLabelMap = new Map<ExtendedColumnKey, string>()
   rawCustomFields.forEach((field) => {
     const columnKey = resolveRawFieldColumnKey(field)
-    if (!columnKey || columnKey === 'title') {
+    if (!columnKey) {
+      return
+    }
+    configuredColumnLabelMap.set(columnKey, field.name || getFieldOptionLabel(columnKey, field.name))
+    if (columnKey === 'title') {
       return
     }
     persistedFieldOptionMap.set(columnKey, {
       key: columnKey,
       fieldId: field.field_id,
-      label: getFieldOptionLabel(columnKey, field.name),
+      label: field.name || getFieldOptionLabel(columnKey, field.name),
       isVisible: visibleColumnKeys.includes(columnKey),
       sortOrder: field.sort_order,
     })
   })
   const persistedFieldOptions = [...persistedFieldOptionMap.values()]
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const isReadOnlyExternalFieldConfig = !isTasklistView && rawCustomFields.length > 0
   const localOnlyFieldOptions: FieldOption[] = [
     ...allConfigurableColumns,
     ...extraFieldColumns,
@@ -2781,9 +2819,13 @@ export default function TaskTable({
     }))
   const allFieldOptions: FieldOption[] = [
     ...persistedFieldOptions,
-    ...localOnlyFieldOptions,
+    ...(isReadOnlyExternalFieldConfig ? [] : localOnlyFieldOptions),
   ]
   const orderedVisibleColumnKeys = visibleColumnKeys.filter((key) => key !== 'title')
+  const getConfiguredColumnLabel = (
+    columnKey: ExtendedColumnKey,
+    fallbackLabel: string,
+  ) => configuredColumnLabelMap.get(columnKey) ?? fallbackLabel
 
   const getColumnDefaultWidth = (columnKey: ResizableColumnKey) =>
     DEFAULT_COLUMN_WIDTHS[columnKey] ??
@@ -2961,7 +3003,7 @@ export default function TaskTable({
     }
   }
 
-  const handleToggleCustomFieldVisibility = async (field: ApiCustomField) => {
+  const handleToggleCustomFieldVisibility = async (field: TaskTableFieldConfig) => {
     if (!tasklist) {
       return
     }
@@ -3467,7 +3509,7 @@ export default function TaskTable({
       <div
         key={field.key}
         className="field-config-row-v2"
-        draggable={Boolean(field.fieldId)}
+        draggable={Boolean(field.fieldId) && !isReadOnlyExternalFieldConfig}
         onDragStart={(event) => {
           if (!field.fieldId) return
           event.dataTransfer.setData('application/x-custom-field', field.fieldId)
@@ -3490,7 +3532,7 @@ export default function TaskTable({
         </span>
         <span className="field-config-row-icon">{getFieldIcon(field.key)}</span>
         <span className="field-config-row-label">{field.label}</span>
-        {cfRaw && !isSystemBuiltInField && (
+        {!isReadOnlyExternalFieldConfig && cfRaw && !isSystemBuiltInField && (
           <Button
             type="text"
             size="small"
@@ -3502,16 +3544,18 @@ export default function TaskTable({
             }}
           />
         )}
-        <Button
-          type="text"
-          size="small"
-          className="field-config-row-visibility"
-          icon={field.isVisible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-          onClick={(e) => {
-            e.stopPropagation()
-            handleToggleField(field)
-          }}
-        />
+        {!isReadOnlyExternalFieldConfig && (
+          <Button
+            type="text"
+            size="small"
+            className="field-config-row-visibility"
+            icon={field.isVisible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleToggleField(field)
+            }}
+          />
+        )}
       </div>
     )
   }
@@ -3582,6 +3626,16 @@ export default function TaskTable({
     columnKey: Exclude<ExtendedColumnKey, 'title'>,
     title: React.ReactNode,
   ): React.ReactNode {
+    if (isReadOnlyExternalFieldConfig) {
+      return (
+        <span className="table-column-title-dropdown" onClick={(event) => event.stopPropagation()}>
+          <span className="table-column-title-label">
+            {title}
+          </span>
+        </span>
+      )
+    }
+
     const orderedKeys: Exclude<ExtendedColumnKey, 'title'>[] = visibleColumnKeys.filter(
       (key): key is Exclude<ExtendedColumnKey, 'title'> => key !== 'title',
     )
@@ -4138,7 +4192,7 @@ export default function TaskTable({
       title: (
         <span className="table-column-title table-column-title-main">
           <FontSizeOutlined />
-          <span>任务标题</span>
+          <span>{getConfiguredColumnLabel('title', '任务标题')}</span>
         </span>
       ),
       width: 407,
@@ -4196,6 +4250,7 @@ export default function TaskTable({
               field={field}
               task={record}
               users={users}
+              readOnly={!isTasklistView}
               onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
               onStatusChange={(task, nextStatus) => void handleTaskStatusFieldChange(task, nextStatus)}
             />
@@ -4208,7 +4263,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'priority',
         dataIndex: 'priority',
-        title: renderAdjustableColumnTitle('priority', <span>优先级</span>),
+        title: renderAdjustableColumnTitle(
+          'priority',
+          <span>{getConfiguredColumnLabel('priority', '优先级')}</span>,
+        ),
         render: (_value, record) =>
           isInlineCreateRow(record) ? (
             renderInlineCreatePriorityCell(record.section.guid)
@@ -4232,7 +4290,7 @@ export default function TaskTable({
           'assignee',
           <span className="table-column-title">
             <UserOutlined />
-            <span>负责人</span>
+            <span>{getConfiguredColumnLabel('assignee', '负责人')}</span>
           </span>,
         ),
         render: (_value, record) =>
@@ -4258,7 +4316,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'estimate',
         dataIndex: 'estimate',
-        title: renderAdjustableColumnTitle('estimate', <span>预估工时</span>),
+        title: renderAdjustableColumnTitle(
+          'estimate',
+          <span>{getConfiguredColumnLabel('estimate', '预估工时')}</span>,
+        ),
         render: (_value, record) =>
           isInlineCreateRow(record) ? (
             <div className="cell cell-estimate task-edit-cell">
@@ -4279,7 +4340,7 @@ export default function TaskTable({
           'start',
           <span className="table-column-title">
             <ClockCircleOutlined />
-            <span>开始时间</span>
+            <span>{getConfiguredColumnLabel('start', '开始时间')}</span>
           </span>,
         ),
         render: (_value, record) =>
@@ -4306,7 +4367,7 @@ export default function TaskTable({
           'due',
           <span className="table-column-title">
             <CalendarOutlined />
-            <span>截止时间</span>
+            <span>{getConfiguredColumnLabel('due', '截止时间')}</span>
           </span>,
         ),
         render: (_value, record) =>
@@ -4333,7 +4394,7 @@ export default function TaskTable({
           'creator',
           <span className="table-column-title">
             <UserOutlined />
-            <span>创建人</span>
+            <span>{getConfiguredColumnLabel('creator', '创建人')}</span>
           </span>,
         ),
         render: (_value, record) => {
@@ -4374,7 +4435,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'created',
         dataIndex: 'created_at',
-        title: renderAdjustableColumnTitle('created', <span>创建时间</span>),
+        title: renderAdjustableColumnTitle(
+          'created',
+          <span>{getConfiguredColumnLabel('created', '创建时间')}</span>,
+        ),
         render: (value: string, record) =>
           isInlineCreateRow(record) ? (
             <div className="cell cell-created task-edit-cell" />
@@ -4389,7 +4453,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'subtaskProgress',
         dataIndex: 'subtask_count',
-        title: renderAdjustableColumnTitle('subtaskProgress', <span>子任务进度</span>),
+        title: renderAdjustableColumnTitle(
+          'subtaskProgress',
+          <span>{getConfiguredColumnLabel('subtaskProgress', '子任务进度')}</span>,
+        ),
         render: (value: number, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText(value > 0 ? `0 / ${value}` : '-')
@@ -4402,7 +4469,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'taskSource',
         dataIndex: 'source',
-        title: renderAdjustableColumnTitle('taskSource', <span>任务来源</span>),
+        title: renderAdjustableColumnTitle(
+          'taskSource',
+          <span>{getConfiguredColumnLabel('taskSource', '任务来源')}</span>,
+        ),
         render: (_value, record) =>
           isTaskTableTaskRow(record) ? renderOverflowText('任务') : null,
       }, 'taskSource'))
@@ -4413,7 +4483,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'assigner',
         dataIndex: 'creator',
-        title: renderAdjustableColumnTitle('assigner', <span>分配人</span>),
+        title: renderAdjustableColumnTitle(
+          'assigner',
+          <span>{getConfiguredColumnLabel('assigner', '分配人')}</span>,
+        ),
         render: (_value, record) => {
           if (!isTaskTableTaskRow(record)) {
             return null
@@ -4429,7 +4502,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'participants',
         dataIndex: 'participant_ids',
-        title: renderAdjustableColumnTitle('participants', <span>参与人</span>),
+        title: renderAdjustableColumnTitle(
+          'participants',
+          <span>{getConfiguredColumnLabel('participants', '参与人')}</span>,
+        ),
         render: (_value, record) => {
           if (!isTaskTableTaskRow(record)) {
             return null
@@ -4476,7 +4552,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'followers',
         dataIndex: 'members',
-        title: renderAdjustableColumnTitle('followers', <span>关注人</span>),
+        title: renderAdjustableColumnTitle(
+          'followers',
+          <span>{getConfiguredColumnLabel('followers', '关注人')}</span>,
+        ),
         render: (_value, record) => {
           if (!isTaskTableTaskRow(record)) {
             return null
@@ -4541,7 +4620,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'tags',
         dataIndex: 'tags',
-        title: renderAdjustableColumnTitle('tags', <span>标签</span>),
+        title: renderAdjustableColumnTitle(
+          'tags',
+          <span>{getConfiguredColumnLabel('tags', '标签')}</span>,
+        ),
         render: (_value, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText(record.tags.length > 0 ? record.tags.join('、') : '-')
@@ -4554,7 +4636,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'description',
         dataIndex: 'description',
-        title: renderAdjustableColumnTitle('description', <span>描述</span>),
+        title: renderAdjustableColumnTitle(
+          'description',
+          <span>{getConfiguredColumnLabel('description', '描述')}</span>,
+        ),
         render: (value: string, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText(value?.replace(/<[^>]+>/g, '').trim() || '-')
@@ -4567,7 +4652,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'completed',
         dataIndex: 'completed_at',
-        title: renderAdjustableColumnTitle('completed', <span>完成时间</span>),
+        title: renderAdjustableColumnTitle(
+          'completed',
+          <span>{getConfiguredColumnLabel('completed', '完成时间')}</span>,
+        ),
         render: (value: string, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText(value && value !== '0' ? dayjs(Number(value)).format('M月D日 HH:mm') : '-')
@@ -4580,7 +4668,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'updated',
         dataIndex: 'updated_at',
-        title: renderAdjustableColumnTitle('updated', <span>更新时间</span>),
+        title: renderAdjustableColumnTitle(
+          'updated',
+          <span>{getConfiguredColumnLabel('updated', '更新时间')}</span>,
+        ),
         render: (value: string, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText(dayjs(Number(value)).format('M月D日 HH:mm'))
@@ -4593,7 +4684,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'taskId',
         dataIndex: 'task_id',
-        title: renderAdjustableColumnTitle('taskId', <span>任务 ID</span>),
+        title: renderAdjustableColumnTitle(
+          'taskId',
+          <span>{getConfiguredColumnLabel('taskId', '任务 ID')}</span>,
+        ),
         render: (value: string, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText(value)
@@ -4606,7 +4700,10 @@ export default function TaskTable({
       taskColumns.push(withResizableHeader({
         key: 'sourceCategory',
         dataIndex: 'sourceCategory',
-        title: renderAdjustableColumnTitle('sourceCategory', <span>来源类别</span>),
+        title: renderAdjustableColumnTitle(
+          'sourceCategory',
+          <span>{getConfiguredColumnLabel('sourceCategory', '来源类别')}</span>,
+        ),
         render: (_value, record) =>
           isTaskTableTaskRow(record) ? (
             renderOverflowText('任务列表')
@@ -5129,6 +5226,7 @@ interface CustomFieldCellProps {
   field: CustomFieldDef
   task: Task
   users: User[]
+  readOnly?: boolean
   onChange: (value: CustomFieldValue) => void
   onStatusChange: (task: Task, nextStatus: Task['status']) => void
 }
@@ -5137,11 +5235,12 @@ function CustomFieldCell({
   field,
   task,
   users,
+  readOnly = false,
   onChange,
   onStatusChange,
 }: CustomFieldCellProps) {
   const [editing, setEditing] = useState(false)
-  const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
+  const fieldValue = findTaskCustomFieldValue(task, field)
   const textValue = fieldValue?.text_value ?? ''
   const numberValue = fieldValue?.number_value ?? ''
   const dateValue = fieldValue?.datetime_value
@@ -5162,6 +5261,9 @@ function CustomFieldCell({
   }
 
   const enterEditing = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (readOnly) {
+      return
+    }
     event.stopPropagation()
     setEditing(true)
   }
@@ -5188,7 +5290,7 @@ function CustomFieldCell({
 
   if (field.type === 'button') {
     // render_hint=button 走任务字段显示值，只做前端按钮态展示；旧 button 字段继续兼容原有链接模式。
-    const displayValue = task.custom_fields_display?.[field.guid]
+    const displayValue = findTaskCustomFieldDisplayValue(task, field)
     const buttonValue = typeof displayValue === 'string' && displayValue.trim()
       ? displayValue.trim()
       : ''
@@ -5222,7 +5324,7 @@ function CustomFieldCell({
     )
   }
 
-  if (!editing) {
+  if (readOnly || !editing) {
     if (field.type === 'single_select' && hasValue) {
       return renderCellShell(renderReadTrigger(renderSelectFieldTags(field, selectedSingleValues)))
     }
@@ -5993,14 +6095,14 @@ function formatCustomFieldValue(task: Task, field: CustomFieldDef, users: User[]
   }
 
   if (field.type === 'button') {
-    const displayValue = task.custom_fields_display?.[field.guid]
+    const displayValue = findTaskCustomFieldDisplayValue(task, field)
     if (typeof displayValue === 'string' && displayValue.trim()) {
       return displayValue.trim()
     }
     return field.options?.[0]?.name ?? field.name ?? '-'
   }
 
-  const fieldValue = task.custom_fields.find((item) => item.guid === field.guid)
+  const fieldValue = findTaskCustomFieldValue(task, field)
   if (!fieldValue) {
     return '-'
   }

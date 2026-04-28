@@ -10,6 +10,10 @@ import { appConfig } from '@/config/appConfig'
 import { listProjects } from '@/services/projectService'
 import { listSections } from '@/services/sectionService'
 import {
+  listUserFieldConfig,
+  type UserFieldConfig,
+} from '@/services/userFieldConfigService'
+import {
   listTasks,
   getTask,
   apiTaskToTask,
@@ -49,6 +53,7 @@ export default function TaskListPage() {
   const [tasklists, setTasklists] = useState<Tasklist[]>([])
   const [projectItems, setProjectItems] = useState<Project[]>([])
   const [involvedProjectIds, setInvolvedProjectIds] = useState<string[]>([])
+  const [userFieldConfigs, setUserFieldConfigs] = useState<UserFieldConfig[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(312)
@@ -123,6 +128,7 @@ export default function TaskListPage() {
       let tls = projects.map(projectToTasklist)
       const nextProjectItems = projects
       let nextInvolvedProjectIds: string[] = []
+      let nextUserFieldConfigs: UserFieldConfig[] = []
 
       // Load sections for the active tasklist so drag-and-drop has real section_id
       if (typeof activeNav === 'object' && activeNav.type === 'tasklist') {
@@ -161,6 +167,7 @@ export default function TaskListPage() {
       commonParams.order = 'desc'
       if (typeof activeNav === 'string') {
         const params: Parameters<typeof listTasks>[0] = { ...commonParams }
+        const shouldLoadUserFieldConfig = activeNav === 'my-followed'
         switch (activeNav) {
           case 'my-assigned':
             params.assignee_id = currentUserId
@@ -200,7 +207,14 @@ export default function TaskListPage() {
           nextTasks = []
         } else {
           try {
-            const { items } = await listTasks(params)
+            const fieldConfigPromise = shouldLoadUserFieldConfig
+              ? listUserFieldConfig(currentUserId).catch(() => [])
+              : Promise.resolve([])
+            const [{ items }, fieldConfigs] = await Promise.all([
+              listTasks(params),
+              fieldConfigPromise,
+            ])
+            nextUserFieldConfigs = fieldConfigs
             let filtered = items
             if (activeNav === 'my-assigned-quick') {
               filtered = items.filter((t) => {
@@ -237,6 +251,7 @@ export default function TaskListPage() {
 
       setProjectItems(nextProjectItems)
       setInvolvedProjectIds(nextInvolvedProjectIds)
+      setUserFieldConfigs(nextUserFieldConfigs)
       setTasklists(tls)
       setTasks(nextTasks)
       setLoading(false)
@@ -417,6 +432,7 @@ export default function TaskListPage() {
         tasks={tasks}
         sections={activeTasklist?.sections}
         tasklist={activeTasklist}
+        externalFieldConfigs={activeNav === 'my-followed' ? userFieldConfigs : undefined}
         selectedTaskGuid={selectedTask?.guid}
         loading={loading}
         statusFilter={statusFilter}

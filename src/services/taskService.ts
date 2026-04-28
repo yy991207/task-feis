@@ -265,6 +265,7 @@ export function apiTaskToTask(api: ApiTask, projectId?: string): Task {
     comment_count: api.comment_count,
     subtask_count: api.subtask_count,
     participant_ids: [...api.participant_ids],
+    follower_ids: [...api.follower_ids],
     members,
     tasklists: [{ tasklist_guid: tlGuid, section_guid: api.section_id }],
     dependencies: [],

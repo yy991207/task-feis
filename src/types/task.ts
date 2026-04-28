@@ -87,6 +87,7 @@ export interface CustomFieldDef {
   name: string
   type: CustomFieldType
   render_hint?: string | null
+  alias_field_ids?: string[]
   options?: SelectOption[]
 }
 
@@ -126,6 +127,7 @@ export interface Task {
   comment_count: number
   subtask_count: number
   participant_ids?: string[]
+  follower_ids?: string[]
   members: Member[]
   tasklists: TasklistRef[]
   dependencies: Dependency[]
