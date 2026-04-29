@@ -859,8 +859,8 @@ export default function Sidebar({
     setProjects(dropResult.projects)
 
     try {
+      // 分组内拖拽排序成功后先保留本地顺序，避免立刻重拉清单时被旧排序快照覆盖回去。
       await moveProjectToGroup(projectId, dropResult.targetGroupId, dropResult.sortOrder)
-      await refreshProjectsFromApi()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '操作失败'
       message.error(msg)

@@ -135,7 +135,10 @@ import {
   getTaskCompletionSummary,
   getTaskCompletionTriggerState,
 } from '@/utils/taskCompletion'
-import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
+import {
+  canCurrentUserCreateInTasklist,
+  canCurrentUserManageTasklist,
+} from '@/utils/tasklistPermission'
 import {
   listCustomFields,
   updateCustomField,
@@ -903,6 +906,7 @@ interface TaskTableProps {
 interface AssigneePickerProps {
   pickerKey: string
   open: boolean
+  disabled?: boolean
   task?: Task
   value?: string[]
   users: User[]
@@ -918,6 +922,7 @@ interface AssigneePickerProps {
 
 function AssigneePicker({
   open,
+  disabled = false,
   task,
   value,
   users,
@@ -958,13 +963,14 @@ function AssigneePicker({
   const handlePopoverOpenChange = (open: boolean) => {
     onOpenChange?.(open)
   }
+  const triggerButtonClassName = `assignee-cell ${triggerClassName ?? ''} ${disabled ? 'is-readonly' : ''}`.trim()
 
   return (
     <Popover
-      trigger="click"
+      trigger={disabled ? [] : ['click']}
       placement="bottomLeft"
       overlayClassName="task-assignee-popover"
-      open={open}
+      open={disabled ? false : open}
       destroyOnHidden
       onOpenChange={handlePopoverOpenChange}
       content={
@@ -1017,7 +1023,7 @@ function AssigneePicker({
     >
       <Button
         type="text"
-        className={triggerClassName ? `assignee-cell ${triggerClassName}` : 'assignee-cell'}
+        className={triggerButtonClassName}
         onMouseDown={onInteract}
         onClick={(event) => event.stopPropagation()}
       >
@@ -1540,7 +1546,9 @@ export default function TaskTable({
   const [editorField, setEditorField] = useState<ApiCustomField | null>(null)
   const [rawCustomFields, setRawCustomFields] = useState<TaskTableFieldConfig[]>([])
   const isTasklistView = Boolean(tasklist)
-  // 这轮只限制“创建”相关入口，现有编辑链路先保持不变，避免把权限改动扩大成整套重构。
+  const canManageTasklist = tasklist
+    ? canCurrentUserManageTasklist(tasklist, currentUser.id)
+    : true
   const canCreateInTasklist = canCurrentUserCreateInTasklist(tasklist, currentUser.id)
   const projectIdForView = tasklist?.guid ?? ''
   const [customFieldsReadyProjectId, setCustomFieldsReadyProjectId] = useState<string>('')
@@ -2009,6 +2017,10 @@ export default function TaskTable({
     action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
   ) => {
     e.stopPropagation()
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     const nextAction = action ?? getTaskCompletionActions(task, teamMembers, tasklist)[0]
     if (!nextAction) {
       return
@@ -2407,6 +2419,10 @@ export default function TaskTable({
   }
 
   const handleRenameSection = async (sectionGuid: string) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     const name = editingSectionName.trim()
     setEditingSectionGuid(null)
     if (!name) return
@@ -2434,6 +2450,10 @@ export default function TaskTable({
   }
 
   const handleDeleteSection = async (sectionGuid: string) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (!tasklist) return
     const target = sectionSource.find((s) => s.guid === sectionGuid)
     if (!target) return
@@ -2509,12 +2529,18 @@ export default function TaskTable({
   }
 
   const handleSectionDragStart = (e: React.DragEvent, sectionGuid: string) => {
+    if (!canManageTasklist) {
+      return
+    }
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('application/x-section', sectionGuid)
     setDraggingSectionGuid(sectionGuid)
   }
 
   const handleTaskDragStart = (e: React.DragEvent, taskGuid: string) => {
+    if (!canManageTasklist) {
+      return
+    }
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('application/x-task', taskGuid)
     setDraggingTaskGuid(taskGuid)
@@ -2542,6 +2568,11 @@ export default function TaskTable({
   }
 
   const handleSectionDrop = async (e: React.DragEvent, targetSectionGuid: string) => {
+    if (!canManageTasklist) {
+      clearDragState()
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     e.preventDefault()
     const srcSection = e.dataTransfer.getData('application/x-section')
     const srcTask = e.dataTransfer.getData('application/x-task')
@@ -2724,6 +2755,10 @@ export default function TaskTable({
   }, [projectIdForView, isTasklistView])
 
   const handleSaveView = useCallback(async () => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (!isTasklistView || !projectIdForView || viewSaving) return
     const filters = buildViewFilters()
     setViewSaving(true)
@@ -2764,7 +2799,7 @@ export default function TaskTable({
     } finally {
       setViewSaving(false)
     }
-  }, [isTasklistView, projectIdForView, viewSaving, buildViewFilters, currentView])
+  }, [canManageTasklist, isTasklistView, projectIdForView, viewSaving, buildViewFilters, currentView])
   // ---- end 清单视图 ----
 
   const shouldShowViewLoading = isTasklistView && projectIdForView !== '' && (
@@ -2857,6 +2892,10 @@ export default function TaskTable({
   })
 
   const persistVisibleColumnOrder = async (nextVisibleKeys: ExtendedColumnKey[]) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     const sortableFields = [...rawCustomFields]
       .filter((field) => {
         const columnKey = resolveRawFieldColumnKey(field)
@@ -2983,6 +3022,10 @@ export default function TaskTable({
   }
 
   const handleHideVisibleColumn = async (columnKey: ExtendedColumnKey) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (!tasklist) {
       return
     }
@@ -3004,6 +3047,10 @@ export default function TaskTable({
   }
 
   const handleToggleCustomFieldVisibility = async (field: TaskTableFieldConfig) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (!tasklist) {
       return
     }
@@ -3027,6 +3074,10 @@ export default function TaskTable({
   }
 
   const handleCustomFieldSort = async (dragFieldId: string, dropFieldId: string) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (dragFieldId === dropFieldId) {
       return
     }
@@ -3078,6 +3129,10 @@ export default function TaskTable({
 
   const handleRenameTasklist = async (rawName: string) => {
     setEditingTitle(false)
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (!tasklist) return
     const nextName = rawName.trim() || tasklist.name
     if (nextName === tasklist.name) return
@@ -3097,6 +3152,10 @@ export default function TaskTable({
   }
 
   const handleSetParentTaskAction = async (task: Task, parentTaskId: string) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     if (task.parent_task_guid === parentTaskId) {
       setParentPickerTask(null)
       return
@@ -3399,6 +3458,10 @@ export default function TaskTable({
   const [headerAddOpen, setHeaderAddOpen] = useState(false)
 
   const handleFieldConfigOpenChange = (open: boolean) => {
+    if (open && !canManageTasklist) {
+      message.warning('只有清单创建者才能修改当前清单任务配置')
+      return
+    }
     setFieldConfigOpen(open)
     if (!open) {
       setCustomFieldTypeMenuOpen(false)
@@ -3953,6 +4016,10 @@ export default function TaskTable({
 
   const handleCustomFieldValueChange = useCallback(
     async (task: Task, field: CustomFieldDef, value: CustomFieldValue) => {
+      if (!canManageTasklist) {
+        message.warning('只有清单创建者才能修改当前清单任务配置')
+        return
+      }
       const nextCustomFields = [
         ...task.custom_fields.filter((item) => item.guid !== field.guid),
         value,
@@ -3986,11 +4053,15 @@ export default function TaskTable({
         message.error(getActionErrorMessage(err, '更新自定义字段失败'))
       }
     },
-    [handleTaskUpdate],
+    [canManageTasklist, handleTaskUpdate],
   )
 
   const handleTaskStatusFieldChange = useCallback(
     async (task: Task, nextStatus: Task['status']) => {
+      if (!canManageTasklist) {
+        message.warning('只有清单创建者才能修改当前清单任务配置')
+        return
+      }
       const optimistic = { ...task, status: nextStatus }
       handleTaskUpdate(optimistic)
       updateSubtaskInCache(optimistic)
@@ -4007,7 +4078,7 @@ export default function TaskTable({
         message.error(getActionErrorMessage(err, '更新状态失败'))
       }
     },
-    [handleTaskUpdate, tasklist?.guid],
+    [canManageTasklist, handleTaskUpdate, tasklist?.guid],
   )
 
   function isTaskTableTaskRow(record: TaskTableDisplayRow): record is TaskTableTaskRow {
@@ -4087,6 +4158,9 @@ export default function TaskTable({
       <span
         className="section-name"
         onDoubleClick={(e) => {
+          if (!canManageTasklist) {
+            return
+          }
           e.stopPropagation()
           setEditingSectionGuid(section.guid)
           setEditingSectionName(section.name)
@@ -4111,7 +4185,7 @@ export default function TaskTable({
           : ''
       }`}
       onClick={() => toggleSection(section.guid)}
-      draggable={isTasklistView && !section.guid.startsWith('__')}
+      draggable={canManageTasklist && isTasklistView && !section.guid.startsWith('__')}
       onDragStart={(e) => handleSectionDragStart(e, section.guid)}
       onDragOver={(e) => handleSectionDragOver(e, section.guid)}
       onDragLeave={handleSectionDragLeave}
@@ -4140,7 +4214,7 @@ export default function TaskTable({
       <Tag color="default" className="section-count-tag">
         {sectionTasks.length}
       </Tag>
-      {canCreateInTasklist && isTasklistView && isSectionGroupMode && (
+      {canManageTasklist && isTasklistView && isSectionGroupMode && (
         <div className="section-actions" onClick={(e) => e.stopPropagation()}>
           <Button
             size="small"
@@ -4218,6 +4292,7 @@ export default function TaskTable({
         return (
           <TaskTitleCell
             task={record}
+            readOnly={!canManageTasklist}
             depth={record.tableDepth}
             expanded={expandedTaskGuids.has(record.guid)}
             loadedSubtaskCount={(subtasksByGuid[record.guid] ?? []).length}
@@ -4250,7 +4325,7 @@ export default function TaskTable({
               field={field}
               task={record}
               users={users}
-              readOnly={!isTasklistView}
+              readOnly={!canManageTasklist || !isTasklistView}
               onChange={(value) => void handleCustomFieldValueChange(record, field, value)}
               onStatusChange={(task, nextStatus) => void handleTaskStatusFieldChange(task, nextStatus)}
             />
@@ -4273,6 +4348,7 @@ export default function TaskTable({
           ) : isTaskTableTaskRow(record) ? (
             <TaskPriorityCell
               task={record}
+              readOnly={!canManageTasklist}
               isEditingRow={editingTaskGuid === record.guid}
               onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
               onUpdate={handleTaskUpdate}
@@ -4299,6 +4375,7 @@ export default function TaskTable({
           ) : isTaskTableTaskRow(record) ? (
             <TaskAssigneeCell
               task={record}
+              readOnly={!canManageTasklist}
               users={users}
               isTasklistView={isTasklistView}
               activeAssigneePickerKey={activeAssigneePickerKey}
@@ -4349,6 +4426,7 @@ export default function TaskTable({
           ) : isTaskTableTaskRow(record) ? (
             <TaskDateCell
               task={record}
+              readOnly={!canManageTasklist}
               field="start"
               isEditingRow={editingTaskGuid === record.guid}
               onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
@@ -4376,6 +4454,7 @@ export default function TaskTable({
           ) : isTaskTableTaskRow(record) ? (
             <TaskDateCell
               task={record}
+              readOnly={!canManageTasklist}
               field="due"
               isEditingRow={editingTaskGuid === record.guid}
               onEditingChange={(editing) => setTaskEditing(record.guid, editing)}
@@ -4712,7 +4791,7 @@ export default function TaskTable({
     }
   })
 
-  if (isTasklistView) {
+  if (canManageTasklist && isTasklistView) {
     taskColumns.push({
       key: 'quickAddCustomField',
       dataIndex: '__quickAddCustomField',
@@ -4842,7 +4921,7 @@ export default function TaskTable({
       }
       onRow={(record) => {
         if (record.rowKind === 'section') {
-          if (!isSectionGroupMode || record.section.guid.startsWith('__')) {
+          if (!canManageTasklist || !isSectionGroupMode || record.section.guid.startsWith('__')) {
             return {}
           }
           return {
@@ -4867,14 +4946,14 @@ export default function TaskTable({
         }
 
         return {
-          draggable: isTasklistView && record.tableDepth === 0,
+          draggable: canManageTasklist && isTasklistView && record.tableDepth === 0,
           onClick: () => onTaskClick(record),
           onDragStart:
-            isTasklistView && record.tableDepth === 0
+            canManageTasklist && isTasklistView && record.tableDepth === 0
               ? (event) => handleTaskDragStart(event, record.guid)
               : undefined,
           onDragEnd:
-            isTasklistView && record.tableDepth === 0 ? clearDragState : undefined,
+            canManageTasklist && isTasklistView && record.tableDepth === 0 ? clearDragState : undefined,
         }
       }}
       locale={{
@@ -4889,7 +4968,7 @@ export default function TaskTable({
         <div className="table-header-bar">
           <div className="table-title-row">
             <div className="table-title-meta">
-              {isTasklistView && editingTitle ? (
+              {canManageTasklist && isTasklistView && editingTitle ? (
                 <div className="table-title-editor">
                   <EditableInput
                     placeholder="输入清单名称"
@@ -4902,8 +4981,8 @@ export default function TaskTable({
               ) : (
                 <Title
                   level={5}
-                  className={`table-title${isTasklistView ? ' editable' : ''}`}
-                  onDoubleClick={isTasklistView ? () => setEditingTitle(true) : undefined}
+                  className={`table-title${canManageTasklist && isTasklistView ? ' editable' : ''}`}
+                  onDoubleClick={canManageTasklist && isTasklistView ? () => setEditingTitle(true) : undefined}
                 >
                   {isTasklistView ? (
                     <NameOverflowPreview
@@ -4954,12 +5033,14 @@ export default function TaskTable({
                   分组: {groupLabelMap[groupMode] ?? '无分组'}
                 </Button>
               </Popover>
-              <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
-                <Button size="small" type="text" className="toolbar-trigger-btn" icon={<SettingOutlined />}>
-                  字段配置
-                </Button>
-              </Popover>
-              {isTasklistView && (
+              {canManageTasklist && (
+                <Popover trigger={['click']} placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
+                  <Button size="small" type="text" className="toolbar-trigger-btn" icon={<SettingOutlined />}>
+                    字段配置
+                  </Button>
+                </Popover>
+              )}
+              {canManageTasklist && isTasklistView && (
                 <Button
                   size="small"
                   type="text"
@@ -5016,7 +5097,7 @@ export default function TaskTable({
                   子任务
                 </Button>
               )}
-              {config.toolbar.showFieldConfig && (
+              {canManageTasklist && config.toolbar.showFieldConfig && (
                 <Popover trigger="click" placement="bottomLeft" overlayClassName="field-config-popover" open={fieldConfigOpen} onOpenChange={handleFieldConfigOpenChange} content={fieldConfigPanel}>
                   <Button size="small" type="text" icon={<SettingOutlined />}>
                     字段配置
@@ -5109,6 +5190,7 @@ export default function TaskTable({
 
 interface TaskTitleCellProps {
   task: Task
+  readOnly?: boolean
   depth?: number
   expanded?: boolean
   loadedSubtaskCount?: number
@@ -5198,6 +5280,7 @@ function TaskTitleEditBox({
 
 interface TaskPriorityCellProps {
   task: Task
+  readOnly?: boolean
   isEditingRow: boolean
   onEditingChange: (editing: boolean) => void
   onUpdate: (task: Task) => void
@@ -5205,6 +5288,7 @@ interface TaskPriorityCellProps {
 
 interface TaskAssigneeCellProps {
   task: Task
+  readOnly?: boolean
   users: User[]
   isTasklistView: boolean
   activeAssigneePickerKey: string | null
@@ -5216,6 +5300,7 @@ interface TaskAssigneeCellProps {
 
 interface TaskDateCellProps {
   task: Task
+  readOnly?: boolean
   field: 'start' | 'due'
   isEditingRow: boolean
   onEditingChange: (editing: boolean) => void
@@ -5274,7 +5359,7 @@ function CustomFieldCell({
 
   const renderReadTrigger = (content: React.ReactNode) => (
     <div
-      className="custom-field-trigger task-edit-field-trigger"
+      className={`custom-field-trigger task-edit-field-trigger ${readOnly ? 'is-readonly' : ''}`.trim()}
       data-has-value={hasValue ? 'true' : 'false'}
       onClick={enterEditing}
     >
@@ -5305,7 +5390,7 @@ function CustomFieldCell({
           type="text"
           size="small"
           className="custom-field-button-trigger"
-          aria-label={field.name || '去完成'}
+          aria-label={field.name || '进入实训'}
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -5318,7 +5403,7 @@ function CustomFieldCell({
             }
           }}
         >
-          去完成
+          进入实训
         </Button>
       </div>,
     )
@@ -5515,6 +5600,7 @@ function CustomFieldCell({
 
 function TaskTitleCell({
   task,
+  readOnly = false,
   depth = 0,
   expanded = false,
   loadedSubtaskCount,
@@ -5546,6 +5632,9 @@ function TaskTitleCell({
   }, [editingName, onEditingChange])
 
   const handleRenameSummary = async (rawName: string) => {
+    if (readOnly) {
+      return
+    }
     setEditingName(false)
     const nextName = rawName.trim() || task.summary
     if (nextName === task.summary) return
@@ -5572,9 +5661,13 @@ function TaskTitleCell({
         <div className="cell cell-checkbox" onClick={(e) => e.stopPropagation()}>
           {statusActions.length > 1 && primaryStatusAction ? (
             <Dropdown
-              trigger={['click']}
-              open={statusMenuOpen}
-              onOpenChange={setStatusMenuOpen}
+              trigger={readOnly ? [] : ['click']}
+              open={readOnly ? false : statusMenuOpen}
+              onOpenChange={(open) => {
+                if (!readOnly) {
+                  setStatusMenuOpen(open)
+                }
+              }}
               menu={{
                 items: statusActions.map((action) => ({
                   key: action.key,
@@ -5600,8 +5693,12 @@ function TaskTitleCell({
                 >
                   <Checkbox
                     checked={statusTriggerState.checked}
+                    disabled={readOnly}
                     onClick={(e) => {
                       e.stopPropagation()
+                      if (readOnly) {
+                        return
+                      }
                       setStatusMenuOpen((open) => !open)
                     }}
                     onChange={() => undefined}
@@ -5618,7 +5715,14 @@ function TaskTitleCell({
             >
               <Checkbox
                 checked={statusTriggerState.checked}
-                onClick={(e) => onToggleStatus(e, task, primaryStatusAction)}
+                disabled={readOnly}
+                onClick={(e) => {
+                  if (readOnly) {
+                    e.stopPropagation()
+                    return
+                  }
+                  onToggleStatus(e, task, primaryStatusAction)
+                }}
               />
             </Tooltip>
           )}
@@ -5671,6 +5775,9 @@ function TaskTitleCell({
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation()
+                  if (readOnly) {
+                    return
+                  }
                   setEditingTitleValue(task.summary)
                   setEditingName(true)
                 }}
@@ -5718,6 +5825,7 @@ function TaskTitleCell({
 
 function TaskPriorityCell({
   task,
+  readOnly = false,
   isEditingRow,
   onEditingChange,
   onUpdate,
@@ -5730,6 +5838,9 @@ function TaskPriorityCell({
   }, [onEditingChange, priorityMenuOpen])
 
   const handlePriorityChange = async (nextPriority: Priority) => {
+    if (readOnly) {
+      return
+    }
     if (nextPriority === task.priority) return
     const prev = task
     onUpdate({ ...task, priority: nextPriority })
@@ -5756,9 +5867,13 @@ function TaskPriorityCell({
       onClick={(e) => e.stopPropagation()}
     >
       <Dropdown
-        trigger={['click']}
-        open={priorityMenuOpen}
-        onOpenChange={setPriorityMenuOpen}
+        trigger={readOnly ? [] : ['click']}
+        open={readOnly ? false : priorityMenuOpen}
+        onOpenChange={(open) => {
+          if (!readOnly) {
+            setPriorityMenuOpen(open)
+          }
+        }}
         menu={{
           selectable: true,
           selectedKeys: [String(task.priority)],
@@ -5775,7 +5890,12 @@ function TaskPriorityCell({
           },
         }}
       >
-        <Button type="text" className="task-edit-trigger" block onClick={(event) => event.stopPropagation()}>
+        <Button
+          type="text"
+          className={`task-edit-trigger ${readOnly ? 'is-readonly' : ''}`.trim()}
+          block
+          onClick={(event) => event.stopPropagation()}
+        >
           {showPriority ? (
             renderOverflowTooltip(
               PriorityLabel[task.priority],
@@ -5785,7 +5905,7 @@ function TaskPriorityCell({
                 style={{
                   color: PriorityColor[task.priority],
                   backgroundColor: `${PriorityColor[task.priority]}1a`,
-                  cursor: 'pointer',
+                  cursor: readOnly ? 'default' : 'pointer',
                 }}
               >
                 <FlagFilled />
@@ -5795,7 +5915,7 @@ function TaskPriorityCell({
           ) : (
             <span
               className="priority-placeholder"
-              style={{ cursor: 'pointer', display: 'inline-block', minWidth: 24 }}
+              style={{ cursor: readOnly ? 'default' : 'pointer', display: 'inline-block', minWidth: 24 }}
             >
               -
             </span>
@@ -5808,6 +5928,7 @@ function TaskPriorityCell({
 
 function TaskAssigneeCell({
   task,
+  readOnly = false,
   users,
   isTasklistView,
   activeAssigneePickerKey,
@@ -5826,6 +5947,9 @@ function TaskAssigneeCell({
   }, [isPickerOpen, onEditingChange])
 
   const handleAssigneeChange = async (values: string[]) => {
+    if (readOnly) {
+      return
+    }
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
     const currentAssigneeIds = Array.from(new Set(assigneeIds))
     const isSameSelection =
@@ -5862,6 +5986,9 @@ function TaskAssigneeCell({
   }
 
   const handleCompletionModeChange = async (mode: 'any' | 'all') => {
+    if (readOnly) {
+      return
+    }
     if (task.completion_mode === mode) {
       return
     }
@@ -5890,6 +6017,7 @@ function TaskAssigneeCell({
       <AssigneePicker
         pickerKey={assigneePickerKey}
         open={isPickerOpen}
+        disabled={readOnly}
         task={task}
         value={assigneeIds}
         users={users}
@@ -5909,6 +6037,7 @@ function TaskAssigneeCell({
 
 function TaskDateCell({
   task,
+  readOnly = false,
   field,
   isEditingRow,
   onEditingChange,
@@ -5929,6 +6058,9 @@ function TaskDateCell({
   }, [timestamp])
 
   const handleDateChange = async (nextDate: dayjs.Dayjs | null) => {
+    if (readOnly) {
+      return
+    }
     const patch: Partial<Task> = {}
     if (nextDate) {
       patch[field] = { timestamp: nextDate.valueOf().toString(), is_all_day: false }
@@ -5960,9 +6092,9 @@ function TaskDateCell({
       onClick={(e) => e.stopPropagation()}
     >
       <Popover
-        trigger="click"
+        trigger={readOnly ? [] : ['click']}
         placement="bottomLeft"
-        open={pickerOpen}
+        open={readOnly ? false : pickerOpen}
         content={
           <div style={{ width: 280 }}>
             <DateValuePanel
@@ -5981,11 +6113,15 @@ function TaskDateCell({
             />
           </div>
         }
-        onOpenChange={setPickerOpen}
+        onOpenChange={(open) => {
+          if (!readOnly) {
+            setPickerOpen(open)
+          }
+        }}
       >
         <Button
           type="text"
-          className="task-edit-trigger task-edit-date-trigger"
+          className={`task-edit-trigger task-edit-date-trigger ${readOnly ? 'is-readonly' : ''}`.trim()}
           block
           onClick={(event) => event.stopPropagation()}
         >

@@ -97,7 +97,10 @@ import {
   getTaskCompletionSummary,
   getTaskCompletionTriggerState,
 } from '@/utils/taskCompletion'
-import { canCurrentUserCreateInTasklist } from '@/utils/tasklistPermission'
+import {
+  canCurrentUserCreateInTasklist,
+  canCurrentUserManageTasklist,
+} from '@/utils/tasklistPermission'
 import './index.less'
 
 const PARENT_TASK_CHAIN_MAX_DEPTH = 5
@@ -774,6 +777,7 @@ export default function TaskDetailPanel({
     return matchedKeyword && !alreadyAdded
   })
   const primarySectionGuid = currentSection?.guid ?? tasklistSectionSource[0]?.guid ?? ''
+  const canManageTasklist = canCurrentUserManageTasklist(primaryTasklist, appConfig.user_id)
   // 详情里的子任务仍然属于当前清单，这里复用任务表同一条创建权限，避免入口不一致。
   const canCreateInTasklist = canCurrentUserCreateInTasklist(primaryTasklist, appConfig.user_id)
   const historyActivityGroups = groupTaskActivitiesByDate(historyActivities)
@@ -794,6 +798,14 @@ export default function TaskDetailPanel({
       attachment_count: attachmentCountRef.current,
       comment_count: commentCountRef.current,
     })
+  }
+  const ensureCanManageTasklist = () => {
+    // 非清单创建人只能在详情页评论，其他任务和清单配置都要拦住。
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改任务配置')
+      return false
+    }
+    return true
   }
   const resolveHistoryUserLabel = (userId: string): string => {
     if (!userId) {
@@ -1184,6 +1196,10 @@ export default function TaskDetailPanel({
     patch: Partial<Task>,
     options?: { descriptionMentions?: string[] },
   ) => {
+    if (!canManageTasklist) {
+      message.warning('只有清单创建者才能修改任务配置')
+      return
+    }
     const apiPatch: Record<string, unknown> = {}
     if (patch.summary !== undefined) apiPatch.title = patch.summary
     if (patch.description !== undefined) apiPatch.description = patch.description
@@ -1242,6 +1258,9 @@ export default function TaskDetailPanel({
   }
 
   const handleAssigneeChange = async (values: string[]) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
     const defaultParticipantIds = buildDefaultParticipantIds(task.creator.id, nextAssigneeIds)
     try {
@@ -1259,6 +1278,9 @@ export default function TaskDetailPanel({
   }
 
   const handleCompletionModeChange = async (mode: 'any' | 'all') => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     if (task.completion_mode === mode) {
       return
     }
@@ -1273,6 +1295,9 @@ export default function TaskDetailPanel({
   }
 
   const handleSubtaskCompletionModeChange = async (subtask: Task, mode: 'any' | 'all') => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     if (subtask.completion_mode === mode) {
       return
     }
@@ -1288,6 +1313,9 @@ export default function TaskDetailPanel({
   }
 
   const handleFollowersChange = async (nextFollowerIds: string[]) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     const nextUniqueFollowerIds = Array.from(new Set(nextFollowerIds.filter(Boolean)))
     const currentFollowerIds = followedUserIds
     const toAdd = nextUniqueFollowerIds.filter((id) => !currentFollowerIds.includes(id))
@@ -1313,6 +1341,9 @@ export default function TaskDetailPanel({
   const handleToggleTaskStatus = async (
     action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
   ) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     const nextAction = action ?? taskStatusActions[0]
     if (!nextAction) {
       return
@@ -1379,7 +1410,7 @@ export default function TaskDetailPanel({
       <Button
         type="text"
         htmlType="button"
-        className="followers-summary"
+        className={`followers-summary ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
       >
         {followedUsers.length > 0 ? (
           followedUsers.length === 1 ? (
@@ -1417,7 +1448,9 @@ export default function TaskDetailPanel({
         {followedUsers.length > 1 ? (
           <span className="followers-text">{`${followedUsers.length} 人关注`}</span>
         ) : null}
-        <span className="followers-summary-action">管理</span>
+        {canManageTasklist ? (
+          <span className="followers-summary-action">管理</span>
+        ) : null}
       </Button>
     </div>
   )
@@ -1426,6 +1459,9 @@ export default function TaskDetailPanel({
     field: 'start' | 'due',
     value: dayjs.Dayjs | null,
   ) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     if (field === 'start' && isSubtask) {
       message.warning('子任务开始时间跟随父任务，不能单独修改')
       return
@@ -1491,6 +1527,9 @@ export default function TaskDetailPanel({
   }
 
   const handleAddSubtask = async () => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     if (!canCreateInTasklist) {
       message.warning('只有清单创建者才能创建任务')
       return
@@ -1605,6 +1644,9 @@ export default function TaskDetailPanel({
     subtask: Task,
     action?: { key: string; label: string; status: 'done' | 'todo'; scope?: 'self' | 'all' },
   ) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     const nextAction = action ?? getTaskCompletionActions(subtask, teamMembers, primaryTasklist)[0]
     if (!nextAction) {
       return
@@ -1657,11 +1699,17 @@ export default function TaskDetailPanel({
   }
 
   const handleStartSubtaskTitleEdit = (subtask: Task) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     setEditingSubtaskGuid(subtask.guid)
     setEditingSubtaskTitle(subtask.summary)
   }
 
   const handleSubtaskTitleSubmit = async (subtask: Task) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     const nextSummary = editingSubtaskTitle.trim()
     if (!nextSummary) {
       message.warning('子任务名称不能为空')
@@ -1696,6 +1744,9 @@ export default function TaskDetailPanel({
   }
 
   const handleSubtaskDueChange = async (subtask: Task, value: dayjs.Dayjs | null) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     try {
       const apiTask = await updateTaskApi(subtask.guid, {
         due_date: value ? value.toISOString() : null,
@@ -1720,6 +1771,9 @@ export default function TaskDetailPanel({
   }
 
   const handleSubtaskAssigneeChange = async (subtask: Task, values: string[]) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     const nextAssigneeIds = Array.from(new Set(values.filter(Boolean)))
     const defaultParticipantIds = buildDefaultParticipantIds(subtask.creator.id, nextAssigneeIds)
     const nextCompletionMode = subtask.completion_mode ?? 'any'
@@ -1739,6 +1793,9 @@ export default function TaskDetailPanel({
   }
 
   const handleAttachmentUpload = async (file: File) => {
+    if (!ensureCanManageTasklist()) {
+      return null
+    }
     setAttachmentUploading(true)
     try {
       const created = await uploadAttachment(task.guid, file)
@@ -1779,6 +1836,9 @@ export default function TaskDetailPanel({
   }
 
   const handleAttachmentDelete = async (attachmentId: string) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     try {
       await deleteAttachment(attachmentId)
       const nextAttachmentCount = Math.max(0, attachmentCountRef.current - 1)
@@ -1791,6 +1851,9 @@ export default function TaskDetailPanel({
   }
 
   const handleDescriptionAttachmentDelete = async (attachmentId: string, nextValue?: string) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     try {
       await deleteAttachment(attachmentId)
       const nextAttachmentCount = Math.max(0, attachmentCountRef.current - 1)
@@ -1822,6 +1885,9 @@ export default function TaskDetailPanel({
   }
 
   const handleAddTaskToSection = async (sectionGuid: string) => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     if (!currentTasklist) {
       return
     }
@@ -1860,6 +1926,9 @@ export default function TaskDetailPanel({
   }
 
   const handleRenameTasklistSubmit = async () => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     if (!currentTasklist) return
     const nextName = tasklistRenameValue.trim()
     if (!nextName || nextName === currentTasklist.name) {
@@ -1998,12 +2067,18 @@ export default function TaskDetailPanel({
   }
 
   const handleStartEditComment = (c: ApiComment) => {
+    if (!canManageTasklist) {
+      return
+    }
     setEditingCommentId(c.comment_id)
     setEditingCommentValue(c.content)
     setEditingCommentMentions(c.mentions ?? [])
   }
 
   const handleDeleteComment = async (commentId: string) => {
+    if (!canManageTasklist) {
+      return
+    }
     try {
       await deleteComment(task.guid, commentId)
       const nextCommentCount = Math.max(0, commentCountRef.current - 1)
@@ -2038,6 +2113,9 @@ export default function TaskDetailPanel({
   }
 
   const handleDeleteTask = async () => {
+    if (!ensureCanManageTasklist()) {
+      return
+    }
     await deleteTaskApi(task.guid)
     onTaskDeleted?.(task.guid)
     if (!onTaskDeleted) {
@@ -2048,10 +2126,12 @@ export default function TaskDetailPanel({
   }
 
   const moreMenu = {
-    items: [
-      { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
-      { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
-    ],
+    items: canManageTasklist
+      ? [
+          { key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' },
+          { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
+        ]
+      : [{ key: 'history', icon: <HistoryOutlined />, label: '查看历史记录' }],
     onClick: ({ key }: { key: string }) => {
       if (key === 'history') {
         setHistoryOpen(true)
@@ -2219,10 +2299,14 @@ export default function TaskDetailPanel({
           <div className={`detail-title-row ${taskStatusTriggerState.checked ? 'is-done' : ''}`}>
             {taskStatusActions.length > 1 && primaryTaskStatusAction ? (
               <Dropdown
-                trigger={['click']}
+                trigger={canManageTasklist ? ['click'] : []}
                 placement="bottomLeft"
-                open={taskStatusMenuOpen}
-                onOpenChange={setTaskStatusMenuOpen}
+                open={canManageTasklist ? taskStatusMenuOpen : false}
+                onOpenChange={(open) => {
+                  if (canManageTasklist) {
+                    setTaskStatusMenuOpen(open)
+                  }
+                }}
                 menu={{
                   items: taskStatusActions.map((action) => ({
                     key: action.key,
@@ -2245,13 +2329,17 @@ export default function TaskDetailPanel({
                     color="#000"
                     styles={{ container: { color: '#fff' } }}
                   >
-                    <Checkbox
-                      className="detail-title-checkbox"
-                      checked={taskStatusTriggerState.checked}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setTaskStatusMenuOpen((open) => !open)
-                      }}
+                  <Checkbox
+                    className="detail-title-checkbox"
+                    checked={taskStatusTriggerState.checked}
+                    disabled={!canManageTasklist}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (!canManageTasklist) {
+                        return
+                      }
+                      setTaskStatusMenuOpen((open) => !open)
+                    }}
                       onChange={() => undefined}
                     />
                   </Tooltip>
@@ -2267,8 +2355,12 @@ export default function TaskDetailPanel({
                 <Checkbox
                   className="detail-title-checkbox"
                   checked={taskStatusTriggerState.checked}
+                  disabled={!canManageTasklist}
                   onClick={(e) => {
                     e.stopPropagation()
+                    if (!canManageTasklist) {
+                      return
+                    }
                     void handleToggleTaskStatus(primaryTaskStatusAction)
                   }}
                   onChange={() => undefined}
@@ -2312,8 +2404,8 @@ export default function TaskDetailPanel({
             ) : (
               <button
                 type="button"
-                className="detail-title-button"
-                onDoubleClick={() => setTitleEditing(true)}
+                className={`detail-title-button ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
+                onDoubleClick={() => canManageTasklist && setTitleEditing(true)}
               >
                 <NameOverflowPreview
                   name={task.summary}
@@ -2331,9 +2423,10 @@ export default function TaskDetailPanel({
               <UserOutlined className="field-icon" />
             </Tooltip>
             <Popover
-              trigger="click"
+              trigger={canManageTasklist ? ['click'] : []}
               placement="bottomLeft"
               overlayClassName="detail-assignee-popover"
+              open={canManageTasklist ? undefined : false}
               content={
                 <div className="detail-popover-panel detail-popover-panel-assignee">
                   <UserSearchSelect
@@ -2378,7 +2471,7 @@ export default function TaskDetailPanel({
                 </div>
               }
             >
-              <div className="field-content field-clickable">
+              <div className={`field-content field-clickable ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}>
               {assignees.length > 0 ? (
                 assignees.length === 1 ? (
                   (() => {
@@ -2457,10 +2550,14 @@ export default function TaskDetailPanel({
             </Tooltip>
             <div className="field-content">
               <Popover
-                open={followersPopoverOpen}
-                onOpenChange={setFollowersPopoverOpen}
+                open={canManageTasklist ? followersPopoverOpen : false}
+                onOpenChange={(open) => {
+                  if (canManageTasklist) {
+                    setFollowersPopoverOpen(open)
+                  }
+                }}
                 placement="bottomLeft"
-                trigger="click"
+                trigger={canManageTasklist ? ['click'] : []}
                 content={followerPopoverContent}
               >
                 {followersEntry}
@@ -2475,8 +2572,9 @@ export default function TaskDetailPanel({
             </Tooltip>
             <div className="field-content">
               <Popover
-                trigger="click"
+                trigger={canManageTasklist ? ['click'] : []}
                 placement="bottomLeft"
+                open={canManageTasklist ? undefined : false}
                 content={
                   <div style={{ width: 280 }} onMouseDown={(e) => e.preventDefault()}>
                     <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 13 }}>开始时间</div>
@@ -2511,7 +2609,7 @@ export default function TaskDetailPanel({
                   </div>
                 }
               >
-                <span className="date-range-text">
+                <span className={`date-range-text ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}>
                   {task.start && task.due
                     ? `${formatDateValueLabel(dayjs(Number(task.start.timestamp)))} – ${formatDateValueLabel(dayjs(Number(task.due.timestamp)))}`
                     : task.start
@@ -2532,8 +2630,8 @@ export default function TaskDetailPanel({
                   <UnorderedListOutlined className="field-icon" />
                 </Tooltip>
                 <div className="field-content">
-                  <span className="tasklist-info">
-                    {tasklistRenaming ? (
+                    <span className="tasklist-info">
+                    {canManageTasklist && tasklistRenaming ? (
                       <Input
                         size="small"
                         autoFocus
@@ -2548,17 +2646,21 @@ export default function TaskDetailPanel({
                         name={currentTasklist.name}
                         previewClassName="detail-tasklist-name-preview"
                       >
-                        <span className="tasklist-name">
+                        <span className={`tasklist-name ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}>
                           {currentTasklist.name}
                         </span>
                       </NameOverflowPreview>
                     )}
                     <span className="tasklist-divider">|</span>
                     <Popover
-                      trigger="click"
+                      trigger={canManageTasklist ? ['click'] : []}
                       placement="bottomLeft"
-                      open={sectionPopoverOpen}
-                      onOpenChange={setSectionPopoverOpen}
+                      open={canManageTasklist ? sectionPopoverOpen : false}
+                      onOpenChange={(open) => {
+                        if (canManageTasklist) {
+                          setSectionPopoverOpen(open)
+                        }
+                      }}
                       content={
                         <div className="detail-popover-panel tasklist-section-panel">
                           <Input
@@ -2589,7 +2691,7 @@ export default function TaskDetailPanel({
                         </div>
                       }
                     >
-                      <span className="tasklist-section-trigger">
+                      <span className={`tasklist-section-trigger ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}>
                         {detailTasklistSectionsLoading
                           ? '分组加载中'
                           : currentTasklistRefs.length > 0
@@ -2622,6 +2724,7 @@ export default function TaskDetailPanel({
                 <TaskRichInput
                   mode="description"
                   value={descriptionDraft}
+                  disabled={!canManageTasklist}
                   users={commentInputUsers}
                   placeholder="输入任务描述"
                   className="detail-description-editor"
@@ -2664,9 +2767,9 @@ export default function TaskDetailPanel({
                 />
               ) : (
                 <div
-                  role="button"
-                  tabIndex={0}
-                  className={`detail-description-view ${!descriptionDraft.trim() ? 'is-empty' : ''}`}
+                  role={canManageTasklist ? 'button' : undefined}
+                  tabIndex={canManageTasklist ? 0 : -1}
+                  className={`detail-description-view ${!descriptionDraft.trim() ? 'is-empty' : ''} ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
                   onClick={(event) => {
                     const target = event.target
                     if (target instanceof Element) {
@@ -2684,10 +2787,12 @@ export default function TaskDetailPanel({
                         }
                       }
                     }
-                    setDescriptionEditing(true)
+                    if (canManageTasklist) {
+                      setDescriptionEditing(true)
+                    }
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
+                    if (canManageTasklist && (event.key === 'Enter' || event.key === ' ')) {
                       event.preventDefault()
                       setDescriptionEditing(true)
                     }
@@ -2778,7 +2883,7 @@ export default function TaskDetailPanel({
                   >
                     {subtaskStatusActions.length > 1 && primarySubtaskStatusAction ? (
                       <Dropdown
-                        trigger={['click']}
+                        trigger={canManageTasklist ? ['click'] : []}
                         placement="bottomLeft"
                         menu={{
                           items: subtaskStatusActions.map((action) => ({
@@ -2802,8 +2907,10 @@ export default function TaskDetailPanel({
                             styles={{ container: { color: '#fff' } }}
                           >
                             <span
-                              className={`subtask-check ${subtaskStatusTriggerState.checked ? 'checked' : ''}`}
-                              onClick={(e) => e.stopPropagation()}
+                              className={`subtask-check ${subtaskStatusTriggerState.checked ? 'checked' : ''} ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                              }}
                             >
                               {subtaskStatusTriggerState.checked && <CheckOutlined />}
                             </span>
@@ -2818,9 +2925,12 @@ export default function TaskDetailPanel({
                         styles={{ container: { color: '#fff' } }}
                       >
                         <span
-                          className={`subtask-check ${subtaskStatusTriggerState.checked ? 'checked' : ''}`}
+                          className={`subtask-check ${subtaskStatusTriggerState.checked ? 'checked' : ''} ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (!canManageTasklist) {
+                              return
+                            }
                             void handleToggleSubtaskStatus(subtask, primarySubtaskStatusAction)
                           }}
                         >
@@ -2867,8 +2977,8 @@ export default function TaskDetailPanel({
                       ) : (
                         <button
                           type="button"
-                          className="subtask-title-btn"
-                          onDoubleClick={() => handleStartSubtaskTitleEdit(subtask)}
+                          className={`subtask-title-btn ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
+                          onDoubleClick={() => canManageTasklist && handleStartSubtaskTitleEdit(subtask)}
                         >
                           <NameOverflowPreview
                             name={subtask.summary}
@@ -2883,12 +2993,14 @@ export default function TaskDetailPanel({
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Popover
-                          trigger="click"
+                          trigger={canManageTasklist ? ['click'] : []}
                           placement="bottomLeft"
-                          open={activeSubtaskDueGuid === subtask.guid}
-                          onOpenChange={(open) =>
-                            setActiveSubtaskDueGuid(open ? subtask.guid : null)
-                          }
+                          open={canManageTasklist ? activeSubtaskDueGuid === subtask.guid : false}
+                          onOpenChange={(open) => {
+                            if (canManageTasklist) {
+                              setActiveSubtaskDueGuid(open ? subtask.guid : null)
+                            }
+                          }}
                           content={
                             <div style={{ width: 280 }} onMouseDown={(e) => e.preventDefault()}>
                               <DateValuePanel
@@ -2915,7 +3027,7 @@ export default function TaskDetailPanel({
                             <Button
                               type="text"
                               size="small"
-                              className="subtask-meta-trigger subtask-date-trigger"
+                              className={`subtask-meta-trigger subtask-date-trigger ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
                             >
                               {startDate
                                 ? `${formatDateValueLabel(startDate)} – ${formatDateValueLabel(dueDate)}`
@@ -2926,20 +3038,22 @@ export default function TaskDetailPanel({
                               <Button
                                 type="text"
                                 size="small"
-                                className="subtask-meta-trigger subtask-date-trigger"
+                                className={`subtask-meta-trigger subtask-date-trigger ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
                                 icon={<DateIconOutlined />}
                               />
                             </Tooltip>
                           )}
                         </Popover>
                         <Popover
-                          trigger="click"
+                          trigger={canManageTasklist ? ['click'] : []}
                           placement="bottomLeft"
                           overlayClassName="detail-subtask-assignee-popover"
-                          open={activeSubtaskAssigneeGuid === subtask.guid}
-                          onOpenChange={(open) =>
-                            setActiveSubtaskAssigneeGuid(open ? subtask.guid : null)
-                          }
+                          open={canManageTasklist ? activeSubtaskAssigneeGuid === subtask.guid : false}
+                          onOpenChange={(open) => {
+                            if (canManageTasklist) {
+                              setActiveSubtaskAssigneeGuid(open ? subtask.guid : null)
+                            }
+                          }}
                           content={
                             <div className="detail-popover-panel detail-popover-panel-assignee detail-popover-panel-subtask-assignee">
                               <UserSearchSelect
@@ -2996,7 +3110,7 @@ export default function TaskDetailPanel({
                           <Button
                             type="text"
                             size="small"
-                            className="subtask-meta-trigger subtask-assignee-trigger"
+                            className={`subtask-meta-trigger subtask-assignee-trigger ${!canManageTasklist ? 'is-readonly' : ''}`.trim()}
                             aria-label="设置子任务负责人"
                           >
                             {assigneeUsers.length > 0 ? (
@@ -3224,18 +3338,20 @@ export default function TaskDetailPanel({
               <PaperClipOutlined className="field-icon" />
             </Tooltip>
             <div className="field-content">
-              <Upload
-                multiple
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  void handleAttachmentUpload(file as File)
-                  return false
-                }}
-              >
-                <Button type="link" size="small" style={{ padding: 0 }}>
-                  {attachmentUploading ? '上传中...' : '添加附件'}
-                </Button>
-              </Upload>
+              {canManageTasklist ? (
+                <Upload
+                  multiple
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    void handleAttachmentUpload(file as File)
+                    return false
+                  }}
+                >
+                  <Button type="link" size="small" style={{ padding: 0 }}>
+                    {attachmentUploading ? '上传中...' : '添加附件'}
+                  </Button>
+                </Upload>
+              ) : null}
             </div>
           </div>
           {attachments.length > 0 && (
@@ -3273,16 +3389,18 @@ export default function TaskDetailPanel({
                           />
                         </Tooltip>
                       </div>
-                      <Popconfirm
-                        title="确定删除该附件？"
-                        okText="删除"
-                        cancelText="取消"
-                        onConfirm={() => handleAttachmentDelete(att.attachment_id)}
-                      >
-                        <Tooltip title="删除附件">
-                          <DeleteOutlined className="attachment-delete" />
-                        </Tooltip>
-                      </Popconfirm>
+                      {canManageTasklist ? (
+                        <Popconfirm
+                          title="确定删除该附件？"
+                          okText="删除"
+                          cancelText="取消"
+                          onConfirm={() => handleAttachmentDelete(att.attachment_id)}
+                        >
+                          <Tooltip title="删除附件">
+                            <DeleteOutlined className="attachment-delete" />
+                          </Tooltip>
+                        </Popconfirm>
+                      ) : null}
                     </div>
                   )
                 })}
@@ -3340,7 +3458,7 @@ export default function TaskDetailPanel({
                           评论
                         </Button>
                       </Tooltip>
-                      {isMine && !isEditing && (
+                      {canManageTasklist && isMine && !isEditing && (
                         <Dropdown
                           trigger={['click']}
                           placement="bottomLeft"
@@ -3376,7 +3494,7 @@ export default function TaskDetailPanel({
                       )}
                       </div>
                     </div>
-                    {isEditing ? (
+                    {canManageTasklist && isEditing ? (
                       <div className="comment-edit-wrap">
                         <TaskRichInput
                           mode="comment-edit"

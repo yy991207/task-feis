@@ -391,6 +391,14 @@ body.detail-panel-resizing {
       outline-offset: 2px;
     }
 
+    &.is-readonly {
+      cursor: default;
+
+      &:hover {
+        background: transparent;
+      }
+    }
+
     .detail-title {
       display: block;
       padding: 2px 4px;
@@ -449,6 +457,14 @@ body.detail-panel-resizing {
 
     &:hover {
       background: #f5f6f7;
+    }
+
+    &.is-readonly {
+      cursor: default;
+
+      &:hover {
+        background: transparent;
+      }
     }
   }
 
@@ -520,6 +536,14 @@ body.detail-panel-resizing {
   &:hover {
     background: #f5f6f7;
   }
+
+  &.is-readonly {
+    cursor: default;
+
+    &:hover {
+      background: transparent;
+    }
+  }
 }
 
 /* ── Tasklist ── */
@@ -540,6 +564,10 @@ body.detail-panel-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+
+  &.is-readonly {
+    cursor: default;
+  }
 }
 
 .tasklist-count {
@@ -561,6 +589,14 @@ body.detail-panel-resizing {
 
   &:hover {
     color: #3370ff;
+  }
+
+  &.is-readonly {
+    cursor: default;
+
+    &:hover {
+      color: #1f2329;
+    }
   }
 }
 
@@ -911,6 +947,18 @@ body.detail-panel-resizing {
         color: #245bdb;
       }
     }
+
+    &.is-readonly {
+      cursor: default;
+
+      &:hover {
+        background: #f7f8fb;
+
+        .followers-text {
+          color: #1f2329;
+        }
+      }
+    }
   }
 
   .followers-summary-action {
@@ -1192,6 +1240,18 @@ body.detail-panel-resizing {
       border-color: #3370ff;
     }
 
+    &.is-readonly {
+      cursor: default;
+
+      &:hover {
+        border-color: #c9cdd4;
+      }
+
+      &.checked {
+        border-color: #3370ff;
+      }
+    }
+
     &.subtask-check--draft {
       margin-top: 0;
       width: 18px;
@@ -1231,6 +1291,10 @@ body.detail-panel-resizing {
     cursor: pointer;
     text-align: left;
     color: inherit;
+
+    &.is-readonly {
+      cursor: default;
+    }
   }
 
   .subtask-title-editor {
@@ -1273,6 +1337,16 @@ body.detail-panel-resizing {
     &:focus {
       color: #1f2329;
       background: transparent;
+    }
+
+    &.is-readonly {
+      cursor: default;
+
+      &:hover,
+      &:focus {
+        color: #4e5969;
+        background: transparent;
+      }
     }
 
     .ant-avatar {
@@ -1517,6 +1591,10 @@ body.detail-panel-resizing {
 
   &:focus {
     outline: none;
+  }
+
+  &.is-readonly {
+    cursor: default;
   }
 }
 

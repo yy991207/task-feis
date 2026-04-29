@@ -22,9 +22,9 @@ export interface TasklistDropResult {
   sortOrder: number
 }
 
-export function getProjectGroupId(project: Project): string {
+export function getProjectGroupId(project: Project): string | null {
   // 新接口返回 user_group_id；保留 group_id 作为旧数据兼容，避免切换期间侧栏丢分组。
-  return project.user_group_id || project.group_id
+  return project.user_group_id || project.group_id || null
 }
 
 export function getRelativeDropPosition(

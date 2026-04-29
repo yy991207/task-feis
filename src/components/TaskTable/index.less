@@ -764,6 +764,10 @@
     .assignee-trigger {
       width: 100%;
       cursor: pointer;
+
+      &.is-readonly {
+        cursor: default;
+      }
     }
 
     .tasklist-assignee-group {
@@ -974,6 +978,14 @@
     &:hover {
       background: rgba(255, 255, 255, 0.56) !important;
     }
+
+    &.is-readonly {
+      cursor: default;
+
+      &:hover {
+        background: transparent !important;
+      }
+    }
   }
 
   .task-edit-date-trigger.ant-btn {
@@ -1014,6 +1026,14 @@
 
     &:hover {
       background: rgba(255, 255, 255, 0.56);
+    }
+
+    &.is-readonly {
+      cursor: default;
+
+      &:hover {
+        background: transparent;
+      }
     }
 
     &[data-has-value='true'] {

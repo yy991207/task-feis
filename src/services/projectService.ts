@@ -15,6 +15,13 @@ export interface ProjectSummary {
   [key: string]: unknown
 }
 
+function normalizeProjectSortOrder(project: Project): Project {
+  return {
+    ...project,
+    sort_order: project.sort_order ?? project.user_group_sort_order,
+  }
+}
+
 export function listProjects(params?: {
   status?: 'active' | 'archived'
   user_group_id?: string
@@ -24,7 +31,10 @@ export function listProjects(params?: {
   })
   if (params?.status) qs.set('status', params.status)
   if (params?.user_group_id) qs.set('user_group_id', params.user_group_id)
-  return request<Project[]>(`api/v1/task-center/projects?${qs}`)
+  // 清单拖拽排序后，刷新页必须直接拿后端最新排序，不能复用浏览器里的旧列表缓存。
+  return request<Project[]>(`api/v1/task-center/projects?${qs}`, {
+    cache: 'no-store',
+  }).then((projects) => projects.map(normalizeProjectSortOrder))
 }
 
 export function getProject(projectId: string): Promise<Project> {
